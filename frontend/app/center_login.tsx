@@ -30,7 +30,7 @@ export default function CenterLogin() {
                     setStatusMessage("Logged in sucessfully. Welcome!");
                     setTimeout( () =>{
                         router.replace('/home');
-                    }, 1400);
+                    }, 1300);
                 }
                 else {
                     setStatusMessage(response.error ||response.message);
@@ -48,15 +48,14 @@ export default function CenterLogin() {
                     <TextInput
                         value={centername}
                         onChangeText={setCentername}
-                        placeholder="Wildlife Center Name"
+                        placeholder="Enter Wildlife Center Name"
                         placeholderTextColor="#888"
                         style={styles.input}
                     />
-        
                     <TextInput
                         value={password}
                         onChangeText={setPassword}
-                        placeholder="Set Your Password"
+                        placeholder="Enter password your center's password"
                         placeholderTextColor="#888"
                         secureTextEntry
                         style={styles.input}
@@ -133,7 +132,14 @@ const styles = StyleSheet.create({
             fontSize: 18, 
             fontWeight: 'bold' 
         },
-        statusContainer: { marginTop: 5, padding: 3, borderWidth: 1, backgroundColor: '#eeeee4', borderRadius: 5, borderColor: '#eeeee4', alignItems: 'center' },
+        statusContainer: {
+             marginTop: 5, 
+             padding: 3, 
+             borderWidth: 1, 
+             backgroundColor: '#eeeee4', 
+             borderRadius: 5, 
+             borderColor: '#eeeee4', 
+             alignItems: 'center' },
         statusMessage: { fontSize: 14, textAlign: 'center',color: '#333'  },
 
 });

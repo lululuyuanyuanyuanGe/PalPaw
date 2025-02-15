@@ -11,9 +11,20 @@ export default function Welcome() {
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#eacf7c' }}>
-      <Text style={{ fontSize: 22, fontWeight: 'bold' }}>Welcome to join the Palpaw family! </Text>
-      <Button title="Login" containerStyle={{ marginVertical: 10, width: 200}} onPress={() => router.push('./center_login')} />
-      <Button title="Register" containerStyle={{ width: 200}} onPress={() => router.push('./center_register')} />
+      <Text style={{ fontSize: 22, fontWeight: 'bold', color: "#624607" }}>Welcome to Palpaw family! </Text>
+      <Button
+      title="Login" 
+      titleStyle={{ color: "#b97422" }}
+      buttonStyle={{ backgroundColor: "white"}}
+      containerStyle={{ marginVertical: 10, width: 200}} 
+      onPress={() => router.push('/center_login')} 
+      />
+      <Button 
+      title="Register" 
+      titleStyle={{ color: "#b97422" }}
+      buttonStyle={{ backgroundColor: "white" }}
+      containerStyle={{ width: 200}} 
+      onPress={() => router.push('/center_register')} />
     </View>
   );
 

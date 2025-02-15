@@ -104,7 +104,7 @@ export default {
         }
     },
 
-    //Pending
+    //Not used, to be deleted
     async recruitNotice(req, res) {
         try{
             const { centername, context} = req.body;

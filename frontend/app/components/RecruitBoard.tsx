@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
         padding: 20, 
         borderRadius: 12, 
         marginBottom: 10, 
-        width: '90%',
+        width: '100%',
         alignSelf: 'center',
         shadowColor: '#000', 
         shadowOpacity: 0.1, 
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
         fontSize: 18, 
         color: '#555', 
         marginTop: 8, 
-        textAlign: 'center'
+        textAlign: 'left'
     },
     timestamp: { 
         fontSize: 14, 

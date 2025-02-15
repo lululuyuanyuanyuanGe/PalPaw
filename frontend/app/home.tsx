@@ -6,7 +6,7 @@ import PopupNotice from './components/PopupNotice';
 import { TouchableOpacity } from 'react-native';
 //import NoticeBoard from './components/RecruitBoard';
 import RecruitBoard from './components/RecruitBoard';
-
+//TO-DO: Recruit Board 
 export default function Home() {
     const [statusMessage, setStatusMessage] = useState('');
     const router = useRouter();
@@ -42,7 +42,7 @@ export default function Home() {
             <TouchableOpacity style={styles.noticeButton} onPress={() => router.push('/center_notify')}>
             <Text style={styles.noticeButtonText}> Post Notice</Text>
             </TouchableOpacity>
-            <Button title="Log out" onPress={logout} color="#eacf7c" />
+            <Button title="Log out" onPress={logout} color="#b97422" />
             {statusMessage !== '' && (
                 <Text style={styles.statusMessage}>{statusMessage}</Text>
             )}
@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
          justifyContent: 'center', 
          alignItems: 'center', 
          backgroundColor: '#eeeee4', 
-         padding: 20 },
+         padding: 5 },
     header: { 
         fontSize: 24, 
         fontWeight: 'bold', 

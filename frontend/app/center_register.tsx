@@ -45,7 +45,7 @@ export default function CenterRegister() {
         <TextInput
             value={centername}
             onChangeText={setCentername}
-            placeholder="Wildlife Center Name"
+            placeholder="Register By Wildlife Center Name"
             placeholderTextColor="#888"
             style={styles.input}
         />
@@ -53,7 +53,7 @@ export default function CenterRegister() {
         <TextInput
             value={password}
             onChangeText={setPassword}
-            placeholder="Set Your Password"
+            placeholder="Set Center's Password"
             placeholderTextColor="#888"
             secureTextEntry
             style={styles.input}
@@ -91,11 +91,11 @@ const styles = StyleSheet.create({
         backgroundColor: '#eeeee4'
     },  
     header: { 
-    fontSize: 22, 
-    fontWeight: 'bold', 
-    marginBottom: 20, 
-    color: '#b97422', 
-    textAlign: 'center' 
+        fontSize: 22, 
+        fontWeight: 'bold', 
+        marginBottom: 20, 
+        color: '#b97422', 
+        textAlign: 'center' 
     },
     switchText: {
         marginTop: 15,
