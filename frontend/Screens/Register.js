@@ -1,8 +1,9 @@
 import React from "react";
-import { Formik } from "formik";
+import { ErrorMessage, Formik } from "formik";
 import { View, StatusBar, Alert } from "react-native";
 import { Octicons, Ionicons, Fontisto } from "@expo/vector-icons";
 import axios from "axios";
+import { useState } from 'react';
 
 import {
   StyledContainer,
@@ -29,25 +30,26 @@ import { Colors } from '../components/style';
 const { brand, darkLight, primary } = Colors;
 
 export const Register = ({ navigation }) => {
+  const [errorMessage, setErrorMessage] = useState("");
  
   const handleRegister = async (values) => {
     const { username, password } = values;
 
     try {
-      const response = await axios.post("http://<your-server-ip>:5001/register", {
+      const response = await axios.post("http://10.0.0.234:5001/register", {
         username,
         password,
       });
 
-      if (response.data.data === "username already exists!") {
-        Alert.alert("Error", "Username already exists!");
-      } else {
+      if (response.data.success) {
         Alert.alert("Success", "User registered successfully!");
         navigation.navigate("Login"); // Redirect to login page after successful registration
+      } else {
+        setErrorMessage(response.data.message || "Username already exists");
       }
     } catch (error) {
       console.error("Registration error:", error);
-      Alert.alert("Error", "Failed to register user.");
+      setErrorMessage("An error occurred. Please try again.");
     }
   };
 
@@ -61,7 +63,7 @@ export const Register = ({ navigation }) => {
 
         <Formik
           initialValues={{ username: "", password: "" }}
-          onSubmit={handleRegister} // Use handleRegister for form submission
+          onSubmit={handleRegister} 
         >
           {({ handleChange, handleBlur, handleSubmit, values }) => (
             <View>
@@ -87,7 +89,7 @@ export const Register = ({ navigation }) => {
                 isPassword={true}
               />
 
-              <MsgBox>...</MsgBox>
+              <MsgBox>{errorMessage}</MsgBox>
 
               <StyledButton onPress={handleSubmit}>
                 <Fontisto name="arrow-right" size={24} color="white" />

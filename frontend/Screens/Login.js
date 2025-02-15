@@ -3,6 +3,9 @@ import { Formik } from "formik";
 import { View, StatusBar } from "react-native";
 import { Octicons, Ionicons, Fontisto } from "@expo/vector-icons";
 import loginPic from "../assets/images/loginPic.jpg";
+import { useState } from 'react';
+import axios from 'axios';
+
 
 import {
   StyledContainer,
@@ -29,6 +32,8 @@ import { Colors } from '../components/style';
 const { brand, darkLight, primary } = Colors;
 
 export const Login = ({ navigation }) => {
+
+  const [errorMessage, setErrorMessage] = useState("");
 
   const handleLogin = async (values) => {
     const { username, password } = values;
@@ -60,10 +65,7 @@ export const Login = ({ navigation }) => {
 
         <Formik
           initialValues={{ username: "", password: "" }}
-          onSubmit={(values) => {
-            console.log(values);
-            navigation.navigate("Dashboard");
-          }}
+          onSubmit={handleLogin}
         >
           {({ handleChange, handleBlur, handleSubmit, values }) => (
             <View>
@@ -89,9 +91,9 @@ export const Login = ({ navigation }) => {
                 isPassword={true}
               />
 
-              <MsgBox>...</MsgBox>
+              <MsgBox>{errorMessage}</MsgBox>
 
-              <StyledButton onPress={handleSubmit}>
+              <StyledButton onPress={handleLogin}>
                 <Fontisto name="arrow-right" size={24} color="white" />
                 <ButtonText>Login</ButtonText>
               </StyledButton>
