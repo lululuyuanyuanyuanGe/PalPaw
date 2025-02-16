@@ -10,6 +10,7 @@ const UploadPic = ({
     onBackPress,
     onCameraPress,
     onGalleryPress,
+    onUploadPress,
     isLoading = false,
 }) => {
     return (
@@ -32,6 +33,11 @@ const UploadPic = ({
                                     color={colors.accent}
                                 />
                                 <StyledText small>Camera</StyledText>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.uploadBtn} onPress={onUploadPress}>
+                                <MaterialCommunityIcons name="upload" size={24} color="#ffffff" />
+                                <StyledText small style={{ color: "#ffffff" }}>Upload</StyledText>
                             </TouchableOpacity>
 
                             {/* Gallery Option */}

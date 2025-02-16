@@ -5,12 +5,15 @@ import { useNavigation } from "@react-navigation/native";
 
 import Avatar from "../components/Avatar";
 import UploadPic from "../components/UploadPic";
+import WebcamComponent from "../components/WebcamComponent"; // Import the WebcamComponent
+import { Platform } from 'react-native';
 
 
 export const Dashboard = () =>{
     const navigation = useNavigation();
     const [modalVisible, setModalVisible] = useState(false);
     const [image, setImage] = useState();
+    const [webcamVisible, setWebcamVisible] = useState(false);
     
     const showUploadModal = () => {
         console.log("Edit button pressed. Showing modal..."); // Debugging log
@@ -32,7 +35,21 @@ export const Dashboard = () =>{
                     await saveImage(result.assets[0].uri);
                 }
             }else{
-                await ImagePicker.requestCameraPermissionsAsync();
+                if (Platform.OS === 'web') {
+                    setModalVisible(false); 
+                    setWebcamVisible(true); 
+                    return;
+                }
+                const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+            
+                //await ImagePicker.requestCameraPermissionsAsync();
+
+                if (permissionResult.granted === false) {
+                    alert("Permission to access camera is required!");
+                    return;
+                }
+
+                
                 result = await ImagePicker.launchCameraAsync({
                     cameraType: ImagePicker.CameraType.front, 
                     allowsEditing: true, 
@@ -54,6 +71,7 @@ export const Dashboard = () =>{
         try {    
             setImage(image);
             setModalVisible(false);
+            setWebcamVisible(false);
         } catch (error) {
             console.error("Error picking an image:", error);
         }
@@ -70,8 +88,11 @@ export const Dashboard = () =>{
             onBackPress={() => setModalVisible(false)}
             onCameraPress={() => uploadImage("camera")}
             onGalleryPress={() => uploadImage("gallery")}
-            onRemovePress={() => setImage(null)}
-        />
+            onUploadPress={() => handleUpload()}
+            onRemovePress={() => setImage(null)}/>
+            {Platform.OS === 'web' && webcamVisible && (
+                <WebcamComponent onCapture={(imageSrc) => saveImage(imageSrc)} />
+            )}
     </View>
     );
 };
