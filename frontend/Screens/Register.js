@@ -41,6 +41,10 @@ export const Register = ({ navigation }) => {
         password,
       });
 
+      if(username == '' || password == ''){
+        setErrorMessage("Please fil out all fields");
+      }
+
       if (response.data.success) {
         Alert.alert("Success", "User registered successfully!");
         navigation.navigate("Login"); // Redirect to login page after successful registration

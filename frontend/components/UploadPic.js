@@ -18,7 +18,7 @@ const UploadPic = ({
                 {isLoading && <ActivityIndicator size={70} color={colors.tertiary} />}
 
                 {!isLoading && (
-                    <View style={[styles.modalView, { backgroundColor: "rgba(0,1,0,0.2)" }]}>
+                    <View style={[styles.modalView, { backgroundColor: "#ffffff" }]}>
                         <StyledText big style={{ marginBottom: 10 }}>
                             Profile Photo
                         </StyledText>
@@ -56,18 +56,20 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: "rgba(0,0,0,0)", 
+        backgroundColor:"rgba(0,0,0,0.1)"
     },
     modalView: {
         width: 300,
         padding: 20,
         borderRadius: 10,
         alignItems: "center",
+        backgroundColor:"#ffffff",
     },
     decisionRow: {
         flexDirection: "row",
         justifyContent: "space-between",
         width: "100%",
+        backgroundColor:"#ffffff",
         marginTop: 15,
     },
     optionBtn: {

@@ -16,22 +16,24 @@ export const Dashboard = () =>{
         console.log("Edit button pressed. Showing modal..."); // Debugging log
         setPicVisible(true); // Open modal
     };
-
+    
     const uploadImage = async (mode) => {
         try {
             let result = {};
             if(mode == "gallery"){
-                await ImagePicker.requestCameraPermissionsAsync();
-                result = await ImagePicker;
-                await ImagePicker.launchImageLibraryAsync({
-                    mediaTypes: ["images"],
+                await ImagePicker.requestMediaLibraryPermissionsAsync();
+                result = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes:'Images',
                     allowsEditing: true,
                     aspect:[1,1],
                     quality: 1,
                 });
+                if (!result.canceled) {
+                    await saveImage(result.assets[0].uri);
+                }
             }else{
                 await ImagePicker.requestCameraPermissionsAsync();
-                let result = await ImagePicker.launchCameraAsync({
+                result = await ImagePicker.launchCameraAsync({
                     cameraType: ImagePicker.CameraType.front, 
                     allowsEditing: true, 
                     aspect: [1, 1], 

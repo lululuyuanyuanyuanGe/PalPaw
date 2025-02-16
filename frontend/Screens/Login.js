@@ -93,7 +93,7 @@ export const Login = ({ navigation }) => {
 
               <MsgBox>{errorMessage}</MsgBox>
 
-              <StyledButton onPress={handleLogin}>
+              <StyledButton onPress={handleSubmit}>
                 <Fontisto name="arrow-right" size={24} color="white" />
                 <ButtonText>Login</ButtonText>
               </StyledButton>

@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Image, TouchableOpacity, StyleSheet } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import placeholder from "../assets/images/loginPic.jpg"
+import placeholder from "../assets/images/defaultAvatar.png"
 import { colors } from "./color.js";
 
 export const Avatar = ({ 
@@ -31,6 +31,7 @@ const styles = StyleSheet.create({
     container: {
         alignItems: "center",
         position: "relative",
+        backgroundColor: "#ffffff"
     },
     image: {
         borderRadius: 75,
