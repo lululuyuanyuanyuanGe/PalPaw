@@ -177,9 +177,9 @@ export default function MarketScreen() {
   // Display categories based on active tab
   const displayCategories = activeTab === 'supplies' ? supplyCategories : petCategories;
 
-  // Render supply item
+  // Render supply item - now with width set for 2 items per row
   const renderSupplyItem = ({ item }: { item: SupplyItem }) => (
-    <View className="bg-white rounded-xl shadow-sm overflow-hidden border border-pink-50 w-full mb-3">
+    <View className="bg-white rounded-xl shadow-sm overflow-hidden border border-pink-50 w-[48%] mb-4">
       <View className="relative">
         <Image 
           source={{ uri: item.image }} 
@@ -262,7 +262,7 @@ export default function MarketScreen() {
           {/* Header - No extra padding at top needed now */}
           <View className="bg-purple-500 px-4 pb-4 shadow-md border-b-4 border-pink-500">
             <View className="flex-row justify-between items-center mb-4">
-              <Text className="text-white text-xl font-bold">PetPals Market</Text>
+              <Text className="text-white text-xl font-bold">PalPaw Market</Text>
               <View className="relative">
                 <View className="h-10 w-10 bg-white rounded-full items-center justify-center flex-row">
                   <Feather name="shopping-bag" size={20} color="#A855F7" />
@@ -375,22 +375,30 @@ export default function MarketScreen() {
               {activeTab === 'supplies' ? 'Popular Supplies' : 'Pets Near You'}
             </Text>
             
+            {/* Supply items grid - Key prop added to force re-render when switching tabs */}
             {activeTab === 'supplies' ? (
               <FlatList
+                key="supplies-grid"
                 data={petSupplies}
                 renderItem={renderSupplyItem}
                 keyExtractor={(item) => item.id.toString()}
                 numColumns={2}
-                columnWrapperStyle={{ justifyContent: 'space-between' }}
+                columnWrapperStyle={{ 
+                  justifyContent: 'space-between',
+                  marginHorizontal: 2,
+                }}
+                contentContainerStyle={{
+                  paddingBottom: 20,
+                }}
                 showsVerticalScrollIndicator={false}
               />
             ) : (
               <FlatList
+                key="pets-list"
                 data={pets}
                 renderItem={renderPetItem}
                 keyExtractor={(item) => item.id.toString()}
-                numColumns={2}
-                columnWrapperStyle={{ justifyContent: 'space-between' }}
+                numColumns={1}
                 showsVerticalScrollIndicator={false}
               />
             )}

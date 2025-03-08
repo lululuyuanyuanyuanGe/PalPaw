@@ -1,6 +1,9 @@
+const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
-const { withNativeWind } = require('nativewind/metro');
+const { withNativeWind } = require("nativewind/metro");
 
-const config = getDefaultConfig(__dirname)
+const config = getDefaultConfig(__dirname);
 
-module.exports = withNativeWind(config, { input: 'X:/CSProjects/fullstack/PalPaw/PalPaw-F/global.css' })
+module.exports = withNativeWind(config, {
+  input: path.join(__dirname, "global.css"),
+});
