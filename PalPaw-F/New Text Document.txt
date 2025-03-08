@@ -1,0 +1,1 @@
+emulator -avd P8pro -accel auto

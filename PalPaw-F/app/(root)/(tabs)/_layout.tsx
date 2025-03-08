@@ -3,6 +3,7 @@ import React from 'react'
 import {Tabs} from 'expo-router'
 import icons from '@/constants/icons'
 
+
 const TabIcon = ({focused, icon, title}: {focused: boolean; icon:any; title:string}) => (
     <View className='flex-1 mt-2 flex flex-col items-center'>
         <Image source={icon} tintColor={focused ? '#0061ff': '#666876'} resizeMode="contain" className="size-6"/>
@@ -12,6 +13,8 @@ const TabIcon = ({focused, icon, title}: {focused: boolean; icon:any; title:stri
 
 const TabsLayout = () => {
   return (
+
+
     <Tabs
         screenOptions= {{
             tabBarShowLabel: false,
@@ -25,7 +28,7 @@ const TabsLayout = () => {
         }}
     >    
         <Tabs.Screen 
-            name="home" 
+            name="(homeDrawer)" 
             options={{
                 title: 'Home',
                 headerShown: false,
@@ -64,7 +67,6 @@ const TabsLayout = () => {
                 )
             }}/>
     </Tabs>
-    
   )
 }
 
