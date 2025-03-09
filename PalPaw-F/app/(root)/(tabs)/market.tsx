@@ -258,9 +258,10 @@ export default function MarketScreen() {
       
       {/* Wrap everything in SafeAreaView with proper edges */}
       <SafeAreaView className="flex-1 bg-purple-500" style={{ paddingTop: Constants.statusBarHeight }}>
-        <View className="flex-1 bg-blue-50">
-          {/* Header - No extra padding at top needed now */}
-          <View className="bg-purple-500 px-4 pb-4 shadow-md border-b-4 border-pink-500">
+        <View className="flex-1">
+          {/* Fixed Header - Always stays at the top */}
+          <View className="bg-purple-500 px-4 shadow-md z-10">
+            {/* Title and Cart Icon */}
             <View className="flex-row justify-between items-center mb-4">
               <Text className="text-white text-xl font-bold">PalPaw Market</Text>
               <View className="relative">
@@ -298,7 +299,7 @@ export default function MarketScreen() {
             </View>
             
             {/* Sub Tabs */}
-            <View className="flex-row bg-purple-400 rounded-full p-1">
+            <View className="flex-row bg-purple-400 rounded-full p-1 mb-4">
               <TouchableOpacity 
                 onPress={() => setActiveTab('supplies')}
                 className={`flex-1 py-2 rounded-full flex-row items-center justify-center ${
@@ -348,61 +349,76 @@ export default function MarketScreen() {
             </View>
           </View>
           
-          {/* Categories */}
-          <View className="px-4 pt-4">
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false} 
-              className="pb-2"
-            >
-              {displayCategories.map(category => (
-                <TouchableOpacity 
-                  key={category.id} 
-                  className="flex-none mr-3 items-center"
-                >
-                  <View className="w-16 h-16 bg-white rounded-full items-center justify-center shadow-sm border border-pink-100">
-                    <Text className="text-2xl">{category.icon}</Text>
-                  </View>
-                  <Text className="text-xs font-medium mt-1 text-gray-700">{category.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-          
-          {/* Main Content */}
-          <View className="flex-1 px-4 pt-4 pb-20">
-            <Text className="text-lg font-bold text-gray-800 mb-3">
-              {activeTab === 'supplies' ? 'Popular Supplies' : 'Pets Near You'}
-            </Text>
+          {/* Scrollable Content Area - Categories and products */}
+          <ScrollView 
+            className="flex-1 bg-blue-50"
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled={true}
+          >
+            {/* Pink Border Line - Part of scrollable content */}
+            <View className="h-1 bg-pink-500 w-full" />
             
-            {/* Supply items grid - Key prop added to force re-render when switching tabs */}
-            {activeTab === 'supplies' ? (
-              <FlatList
-                key="supplies-grid"
-                data={petSupplies}
-                renderItem={renderSupplyItem}
-                keyExtractor={(item) => item.id.toString()}
-                numColumns={2}
-                columnWrapperStyle={{ 
-                  justifyContent: 'space-between',
-                  marginHorizontal: 2,
-                }}
-                contentContainerStyle={{
-                  paddingBottom: 20,
-                }}
-                showsVerticalScrollIndicator={false}
-              />
-            ) : (
-              <FlatList
-                key="pets-list"
-                data={pets}
-                renderItem={renderPetItem}
-                keyExtractor={(item) => item.id.toString()}
-                numColumns={1}
-                showsVerticalScrollIndicator={false}
-              />
-            )}
-          </View>
+            {/* Categories */}
+            <View className="px-4 pt-4">
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                className="pb-2"
+                nestedScrollEnabled={true}
+              >
+                {displayCategories.map(category => (
+                  <TouchableOpacity 
+                    key={category.id} 
+                    className="flex-none mr-3 items-center"
+                  >
+                    <View className="w-16 h-16 bg-white rounded-full items-center justify-center shadow-sm border border-pink-100">
+                      <Text className="text-2xl">{category.icon}</Text>
+                    </View>
+                    <Text className="text-xs font-medium mt-1 text-gray-700">{category.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            
+            {/* Product Listings */}
+            <View className="px-4 pt-4 pb-20">
+              <Text className="text-lg font-bold text-gray-800 mb-3">
+                {activeTab === 'supplies' ? 'Popular Supplies' : 'Pets Near You'}
+              </Text>
+              
+              {/* Supply items or Pets list - Using original FlatList components */}
+              {activeTab === 'supplies' ? (
+                <FlatList
+                  key="supplies-grid"
+                  data={petSupplies}
+                  renderItem={renderSupplyItem}
+                  keyExtractor={(item) => item.id.toString()}
+                  numColumns={2}
+                  columnWrapperStyle={{ 
+                    justifyContent: 'space-between',
+                    marginHorizontal: 2,
+                  }}
+                  contentContainerStyle={{
+                    paddingBottom: 20,
+                  }}
+                  showsVerticalScrollIndicator={false}
+                  scrollEnabled={false} // Prevent scrolling within FlatList since parent ScrollView handles it
+                  nestedScrollEnabled={true}
+                />
+              ) : (
+                <FlatList
+                  key="pets-list"
+                  data={pets}
+                  renderItem={renderPetItem}
+                  keyExtractor={(item) => item.id.toString()}
+                  numColumns={1}
+                  showsVerticalScrollIndicator={false}
+                  scrollEnabled={false} // Prevent scrolling within FlatList since parent ScrollView handles it
+                  nestedScrollEnabled={true}
+                />
+              )}
+            </View>
+          </ScrollView>
         </View>
       </SafeAreaView>
     </>
