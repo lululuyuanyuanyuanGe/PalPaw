@@ -1,17 +1,59 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authService } from '@/utils/apiClient';
 
 const SearchDrawer = (props: any) => {
   const router = useRouter();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userData, setUserData] = useState<any>(null);
+
+  // Check for auth token on component mount and when the drawer is opened
+  useEffect(() => {
+    checkLoginStatus();
+  }, [props.state.index]); // Re-check when drawer is opened
+
+  // Function to check if user is logged in
+  const checkLoginStatus = async () => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      const userDataStr = await AsyncStorage.getItem('userData');
+      
+      if (token && userDataStr) {
+        setIsLoggedIn(true);
+        setUserData(JSON.parse(userDataStr));
+      } else {
+        setIsLoggedIn(false);
+        setUserData(null);
+      }
+    } catch (error) {
+      console.error('Error checking login status:', error);
+      setIsLoggedIn(false);
+    }
+  };
 
   // Handle login navigation
   const handleLogin = () => {
     // Use proper route format for Expo Router
     router.push('/(root)/(auth)/login');
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+      setIsLoggedIn(false);
+      setUserData(null);
+      
+      // Navigate back to home screen
+      router.push('/');
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
   };
 
   return (
@@ -68,28 +110,57 @@ const SearchDrawer = (props: any) => {
               }}
             >
               <View className="w-16 h-16 bg-purple-100 rounded-full items-center justify-center">
-                <Ionicons name="paw" size={34} color="#9333EA" />
+                {isLoggedIn && userData ? (
+                  <Text className="text-purple-700 font-bold text-lg">
+                    {userData.username && userData.username.substring(0, 1).toUpperCase()}
+                  </Text>
+                ) : (
+                  <Ionicons name="paw" size={34} color="#9333EA" />
+                )}
               </View>
             </View>
+            
+            {/* Display username if logged in */}
+            {isLoggedIn && userData && (
+              <Text className="text-white font-bold text-lg mt-2">
+                {userData.username}
+              </Text>
+            )}
           </View>
           
-          {/* Login button with shadow */}
-          <TouchableOpacity 
-            onPress={handleLogin}
-            className="bg-white rounded-full py-2.5 mx-6 shadow-sm"
-            style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.1,
-              shadowRadius: 3,
-              elevation: 2,
-            }}
-          >
-            <Text className="text-center font-bold text-purple-600">Log in</Text>
-          </TouchableOpacity>
+          {/* Login/Logout button with shadow */}
+          {isLoggedIn ? (
+            <TouchableOpacity 
+              onPress={handleLogout}
+              className="bg-white rounded-full py-2.5 mx-6 shadow-sm"
+              style={{
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 3,
+                elevation: 2,
+              }}
+            >
+              <Text className="text-center font-bold text-red-500">Log out</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              onPress={handleLogin}
+              className="bg-white rounded-full py-2.5 mx-6 shadow-sm"
+              style={{
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 3,
+                elevation: 2,
+              }}
+            >
+              <Text className="text-center font-bold text-purple-600">Log in</Text>
+            </TouchableOpacity>
+          )}
           
           <Text className="text-center text-white text-xs mt-3 mb-1 opacity-80">
-            Discover more features after logging in
+            {isLoggedIn ? 'Welcome back to PalPaw!' : 'Discover more features after logging in'}
           </Text>
         </LinearGradient>
       </View>

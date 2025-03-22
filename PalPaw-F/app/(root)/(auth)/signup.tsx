@@ -7,20 +7,27 @@ import {
   Image,
   ActivityIndicator,
   Alert,
-  StatusBar
+  StatusBar,
+  ScrollView
 } from "react-native";
 import { Feather, MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import images from "@/constants/images";
 import { router } from "expo-router";
-import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
+import { authService } from '@/utils/apiClient';
+
+// Import BASE_URL constant
+const BASE_URL = 'http://192.168.2.11:5001/api';
 
 const SignupScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
 
   // Set status bar style once on component mount
   useEffect(() => {
@@ -33,9 +40,20 @@ const SignupScreen: React.FC = () => {
     };
   }, []);
 
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const handleSignup = async () => {
-    if (!username || !password) {
-      Alert.alert("Signup Failed", "All fields are required.");
+    // Form validation
+    if (!username || !email || !password) {
+      Alert.alert("Signup Failed", "Username, email, and password are required.");
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      Alert.alert("Signup Failed", "Please enter a valid email address.");
       return;
     }
 
@@ -43,33 +61,82 @@ const SignupScreen: React.FC = () => {
       Alert.alert("Signup Failed", "Passwords do not match.");
       return;
     }
+
+    if (password.length < 6) {
+      Alert.alert("Signup Failed", "Password must be at least 6 characters long.");
+      return;
+    }
   
     setLoading(true);
-  
+    
     try {
-      const response = await axios.post("http://192.168.2.11:5001/api/auth/signup", {
-        username: username,
-        password: password,
-      });
-  
-      if (response.data.success) {
-        //  Store user token in AsyncStorage for persistent login
+      console.log("Starting registration process...");
+      const registrationData = {
+        username: username.trim(),
+        email: email.trim(),
+        password,
+        ...(firstName ? { firstName: firstName.trim() } : {}),
+        ...(lastName ? { lastName: lastName.trim() } : {})
+      };
+      
+      console.log("Registration data:", JSON.stringify(registrationData));
+      
+      // Use our improved authService that uses fetch directly
+      const response = await authService.register(registrationData);
+      
+      console.log("Registration successful:", JSON.stringify(response.data));
+      
+      if (response.data.token) {
+        // Store token and user info
         await AsyncStorage.setItem("authToken", response.data.token);
+        await AsyncStorage.setItem("userData", JSON.stringify(response.data.user));
   
-        Alert.alert("Signup Successful", "You can now log in.");
+        Alert.alert("Success", "Account created successfully");
         router.replace("/(root)/(tabs)/(profile)");
       } else {
-        Alert.alert("Signup Failed", response.data.message);
-        setLoading(false);
+        throw new Error("No token received");
       }
     } catch (error: any) {
-      Alert.alert("Signup Failed", error.response?.data?.message || "Something went wrong.");
+      console.error("Signup error details:", JSON.stringify(error, null, 2));
+      
+      let errorMessage = "Something went wrong. Please try again.";
+      
+      if (error.response) {
+        // Server responded with an error status code
+        const { status, data } = error.response;
+        console.log(`Server responded with status ${status}:`, data);
+        
+        if (status === 400) {
+          errorMessage = data?.message || "Invalid registration data";
+          
+          // Check for field-specific errors
+          if (data?.field) {
+            errorMessage = `${data.field === 'username' ? 'Username' : 'Email'} already exists.`;
+          }
+          if (data?.errors && data.errors.length > 0) {
+            errorMessage = data.errors.map((e: { field: string; message: string }) => `${e.field}: ${e.message}`).join(", ");
+          }
+        } else if (status === 500) {
+          errorMessage = data?.message || "Server error. Please try again later.";
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.log("No response received:", error.request);
+        errorMessage = "Unable to connect to the server. Please check your internet connection.";
+      } else {
+        // Something happened in setting up the request
+        console.log("Error setting up request:", error.message);
+        errorMessage = error.message || "Request error. Please try again.";
+      }
+      
+      Alert.alert("Signup Failed", errorMessage);
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View className="flex-1 bg-blue-50">
+    <ScrollView className="flex-1 bg-blue-50">
       {/* Top curved gradient header */}
       <View className="w-full overflow-hidden">
         <LinearGradient
@@ -133,6 +200,45 @@ const SignupScreen: React.FC = () => {
             keyboardType="default"
             value={username}
             onChangeText={setUsername}
+            autoCapitalize="none"
+          />
+        </View>
+
+        {/* Email Input */}
+        <View className="w-full bg-white flex-row items-center px-4 py-3.5 rounded-xl border border-purple-100 shadow-sm mb-4">
+          <Feather name="mail" size={20} color="#9333EA" />
+          <TextInput
+            placeholder="Email"
+            className="flex-1 ml-3 text-gray-700"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+          />
+        </View>
+
+        {/* First Name Input (Optional) */}
+        <View className="w-full bg-white flex-row items-center px-4 py-3.5 rounded-xl border border-purple-100 shadow-sm mb-4">
+          <Feather name="user-plus" size={20} color="#9333EA" />
+          <TextInput
+            placeholder="First Name (Optional)"
+            className="flex-1 ml-3 text-gray-700"
+            placeholderTextColor="#9CA3AF"
+            value={firstName}
+            onChangeText={setFirstName}
+          />
+        </View>
+
+        {/* Last Name Input (Optional) */}
+        <View className="w-full bg-white flex-row items-center px-4 py-3.5 rounded-xl border border-purple-100 shadow-sm mb-4">
+          <Feather name="users" size={20} color="#9333EA" />
+          <TextInput
+            placeholder="Last Name (Optional)"
+            className="flex-1 ml-3 text-gray-700"
+            placeholderTextColor="#9CA3AF"
+            value={lastName}
+            onChangeText={setLastName}
           />
         </View>
 
@@ -202,14 +308,14 @@ const SignupScreen: React.FC = () => {
         </View>
 
         {/* Login Link */}
-        <View className="flex-row mt-auto mb-8 justify-center">
+        <View className="flex-row mt-8 mb-8 justify-center">
           <Text className="text-gray-600">Already have an account? </Text>
           <TouchableOpacity onPress={() => router.replace("/(root)/(auth)/login")}>
             <Text className="text-purple-600 font-bold">Log In</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </ScrollView>
   );
 };
 

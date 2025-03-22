@@ -8,16 +8,30 @@ export interface Media {
   height?: number;
 }
 
+// Define location coordinates interface
+export interface LocationCoordinates {
+  latitude: number;
+  longitude: number;
+}
+
 export interface PostData {
   title: string;
   content: string;
   media: Media[];
   location?: string;
+  locationCoordinates?: LocationCoordinates;
   petTags?: string[];
   postType: 'pet' | 'market';
   price?: number;
   category?: string;
   shippingOptions?: string[];
+}
+
+// Pet tag category interface
+export interface PetTagCategory {
+  name: string;
+  tags: string[];
+  color: string;
 }
 
 // Base URL for the API
@@ -61,6 +75,12 @@ export const createPost = async (data: PostData): Promise<{ success: boolean; me
     if (data.location) formData.append('location', data.location);
     if (data.price) formData.append('price', data.price.toString());
     if (data.category) formData.append('category', data.category);
+    
+    // Add location coordinates if available
+    if (data.locationCoordinates) {
+      formData.append('latitude', data.locationCoordinates.latitude.toString());
+      formData.append('longitude', data.locationCoordinates.longitude.toString());
+    }
     
     // Add arrays as JSON strings
     if (data.petTags && data.petTags.length > 0) {
@@ -159,4 +179,45 @@ export const uploadMedia = async (media: Media): Promise<{ success: boolean; url
     console.error('Error uploading media:', error);
     return { success: false };
   }
+};
+
+/**
+ * Get pet tag suggestions organized by categories
+ * In a real app, this would fetch from the API
+ */
+export const getPetTagSuggestions = async (): Promise<PetTagCategory[]> => {
+  // This would be an API call in a real implementation
+  // For now we'll use mock data
+  
+  // Simulate API delay
+  await new Promise(resolve => setTimeout(resolve, 300));
+  
+  return [
+    {
+      name: 'Species',
+      tags: ['Dog', 'Cat', 'Bird', 'Fish', 'Rabbit', 'Hamster', 'Guinea Pig', 'Turtle'],
+      color: '#8B5CF6' // Purple
+    },
+    {
+      name: 'Breeds',
+      tags: ['Golden Retriever', 'Labrador', 'German Shepherd', 'Bulldog', 'Poodle', 
+             'Beagle', 'Siamese', 'Persian', 'Maine Coon', 'Bengal', 'Scottish Fold'],
+      color: '#EC4899' // Pink
+    },
+    {
+      name: 'Characteristics',
+      tags: ['Playful', 'Calm', 'Friendly', 'Energetic', 'Shy', 'Loyal', 'Intelligent', 'Protective'],
+      color: '#F59E0B' // Amber
+    },
+    {
+      name: 'Activities',
+      tags: ['Walking', 'Hiking', 'Swimming', 'Agility', 'Fetch', 'Training', 'Grooming', 'Cuddling'],
+      color: '#10B981' // Emerald
+    },
+    {
+      name: 'Age',
+      tags: ['Puppy', 'Kitten', 'Young', 'Adult', 'Senior'],
+      color: '#3B82F6' // Blue
+    }
+  ];
 }; 

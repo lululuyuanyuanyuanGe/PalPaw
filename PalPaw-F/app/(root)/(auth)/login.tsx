@@ -3,12 +3,12 @@ import { View, Text, TextInput, TouchableOpacity, Image, Alert, ActivityIndicato
 import { Feather, MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import images from "@/constants/images";
 import { useRouter } from "expo-router";
-import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
+import { authService } from '@/utils/apiClient';
 
 const LoginScreen: React.FC = () => {
-  const [username, setUsername] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -25,26 +25,58 @@ const LoginScreen: React.FC = () => {
   }, []);
 
   const handleLogin = async () => {
-    if (!username || !password) {
-      Alert.alert("Error", "Please enter both username and password");
+    if (!loginIdentifier || !password) {
+      Alert.alert("Login Failed", "Please enter your email/username and password.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const response = await axios.post("http://192.168.2.11:5001/api/auth/login", {
-        username,
-        password,
-      });
+      // Backend expects { login: "username_or_email", password: "password" }
+      const loginData = {
+        login: loginIdentifier.trim(),
+        password
+      };
 
-      const token = response.data.token;
-      await AsyncStorage.setItem("authToken", token); // Store token for future requests
+      console.log('Sending login data:', JSON.stringify(loginData));
       
-      Alert.alert("Success", "Login successful");
-      router.replace("/(root)/(tabs)/(profile)");
-    } catch (error : any) {
-      Alert.alert("Login Failed", error.response?.data?.message || "Something went wrong");
+      const response = await authService.login(loginData);
+      
+      console.log('Login successful:', JSON.stringify(response.data));
+
+      if (response.data && response.data.token) {
+        await AsyncStorage.setItem("authToken", response.data.token);
+        await AsyncStorage.setItem("userData", JSON.stringify(response.data.user));
+        
+        // Navigate to the main app
+        router.replace("/(root)/(tabs)/(profile)");
+      }
+    } catch (error: any) {
+      console.error('Login error details:', JSON.stringify(error, null, 2));
+      
+      let errorMessage = "Something went wrong. Please try again.";
+      
+      if (error.response) {
+        // Server responded with an error status code
+        const { status, data } = error.response;
+        console.log(`Server responded with status ${status}:`, data);
+        
+        if (status === 400 || status === 401) {
+          errorMessage = data?.message || "Invalid credentials";
+        } else if (status === 500) {
+          errorMessage = "Server error. Please try again later.";
+        }
+      } else if (error.request) {
+        // Request was made but no response was received
+        console.log("No response received:", error.request);
+        errorMessage = "Unable to connect to the server. Please check your internet connection.";
+      } else {
+        // Something happened in setting up the request
+        console.log("Error setting up request:", error.message);
+      }
+      
+      Alert.alert("Login Failed", errorMessage);
     } finally {
       setLoading(false);
     }
@@ -105,16 +137,17 @@ const LoginScreen: React.FC = () => {
       </View>
       
       <View className="flex-1 px-6 pt-8">
-        {/* Username Input */}
+        {/* Username/Email Input */}
         <View className="w-full bg-white flex-row items-center px-4 py-3.5 rounded-xl border border-purple-100 shadow-sm mb-4">
           <Feather name="user" size={20} color="#9333EA" />
           <TextInput
-            placeholder="Username"
+            placeholder="Username or Email"
             className="flex-1 ml-3 text-gray-700"
             placeholderTextColor="#9CA3AF"
             keyboardType="default"
-            value={username}
-            onChangeText={setUsername}
+            value={loginIdentifier}
+            onChangeText={setLoginIdentifier}
+            autoCapitalize="none"
           />
         </View>
 

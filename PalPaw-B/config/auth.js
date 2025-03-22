@@ -1,10 +1,10 @@
-const jwt = require("jsonwebtoken");
+import jwt from 'jsonwebtoken';
 
-const generateToken = (user) => {
+export const generateToken = (user) => {
   return jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
 };
 
-const verifyToken = (req, res, next) => {
+export const verifyToken = (req, res, next) => {
   const token = req.header("Authorization");
   if (!token) return res.status(401).json({ message: "Access Denied" });
 
@@ -16,5 +16,3 @@ const verifyToken = (req, res, next) => {
     res.status(400).json({ message: "Invalid Token" });
   }
 };
-
-module.exports = { generateToken, verifyToken };
