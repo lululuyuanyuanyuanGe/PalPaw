@@ -91,12 +91,13 @@ const SearchScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} className="flex-1 bg-blue-50">
-      <StatusBar backgroundColor="#A855F7" barStyle="light-content" />
+    <SafeAreaView style={styles.safeArea}>
+      {/* We need to make StatusBar transparent and set barStyle */}
+      <StatusBar backgroundColor="transparent" barStyle="light-content" translucent />
       
       {/* Header with cute animal app title - uses style for gradient-like effect */}
       <View style={styles.headerContainer}>
-        <Text className="text-white text-xl font-bold text-center mb-3">PalPaw</Text>
+        <Text className="text-white text-2xl font-bold text-center" style={styles.titleText}>PalPaw</Text>
         <View className="flex-row items-center">
           <View className="relative flex-1">
             <View className="absolute left-3 top-0 bottom-0 justify-center z-10">
@@ -128,7 +129,7 @@ const SearchScreen: React.FC = () => {
       </View>
 
       {/* Content area */}
-      <ScrollView className="p-4 flex-1">
+      <ScrollView className="p-4 flex-1 bg-blue-50">
         {/* Trending section */}
         <View className="mb-6">
           <View className="flex-row items-center mb-3">
@@ -290,11 +291,12 @@ const SearchScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    backgroundColor: '#A855F7', // Set the entire SafeAreaView background to purple
   },
   headerContainer: {
     backgroundColor: '#A855F7', // Main color
-    paddingVertical: 16,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 10, // Reduced top padding
+    paddingBottom: 16,
     paddingHorizontal: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -304,6 +306,14 @@ const styles = StyleSheet.create({
     // This doesn't create a gradient but adds a subtle shadow effect at the bottom
     borderBottomWidth: 3,
     borderBottomColor: '#EC4899',
+  },
+  titleText: {
+    fontSize: 26,
+    letterSpacing: 0.5,
+    marginBottom: 16,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   applyButton: {
     backgroundColor: '#A855F7',

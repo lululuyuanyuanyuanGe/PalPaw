@@ -133,8 +133,14 @@ const ProfileScreen = () => {
       {isButtonItem(item) ? (
         // "Create New" Button
         <TouchableOpacity 
+          onPress={() => {
+            if (activeTab === 'posts') {
+              router.push("/(root)/(createPosts)/createPosts");
+            } else {
+              router.push("/(root)/(createProducts)/createProducts");
+            }
+          }}
           className="h-40 rounded-xl overflow-hidden"
-          onPress={() => {}}
         >
           <LinearGradient
             colors={['#9333EA', '#C084FC']}
