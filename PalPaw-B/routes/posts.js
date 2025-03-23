@@ -1,14 +1,48 @@
 import express from 'express';
-import { createPost, getPosts, getPostById } from '../controllers/posts/postController.js';
+import { 
+  getAllPosts, 
+  getPostById, 
+  updatePost, 
+  deletePost, 
+  likePost 
+} from '../controllers/posts/postController.js';
 import { authenticate } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// Routes that require authentication
-router.post('/', authenticate, createPost);
+/**
+ * @route GET /api/posts
+ * @desc Get all posts with pagination
+ * @access Public
+ */
+router.get('/', getAllPosts);
 
-// Public routes (but will return more data if authenticated)
-router.get('/', getPosts);
+/**
+ * @route GET /api/posts/:id
+ * @desc Get a post by ID
+ * @access Public
+ */
 router.get('/:id', getPostById);
 
-export default router; 
+/**
+ * @route PUT /api/posts/:id
+ * @desc Update a post
+ * @access Private
+ */
+router.put('/:id', authenticate, updatePost);
+
+/**
+ * @route DELETE /api/posts/:id
+ * @desc Delete a post (soft delete)
+ * @access Private
+ */
+router.delete('/:id', authenticate, deletePost);
+
+/**
+ * @route POST /api/posts/:id/like
+ * @desc Like a post
+ * @access Private
+ */
+router.post('/:id/like', authenticate, likePost);
+
+export default router;

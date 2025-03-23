@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { AntDesign, Feather, MaterialIcons, Ionicons, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 
 // Define colors directly since we don't have access to constants/Colors
 const colors = {
@@ -16,11 +18,64 @@ interface MenuItem {
   icon: JSX.Element;
   label: string;
   badge?: number;
+  onPress?: () => void;
+}
+
+interface User {
+  username: string;
+  email: string;
+  avatar?: string;
 }
 
 export default function ProfileDrawer() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [user, setUser] = useState<User | null>(null);
+  const router = useRouter();
+
+  // Check authentication status when component mounts
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = await AsyncStorage.getItem('authToken');
+        const userDataStr = await AsyncStorage.getItem('userData');
+        
+        if (token && userDataStr) {
+          setIsAuthenticated(true);
+          const userData = JSON.parse(userDataStr);
+          setUser({
+            username: userData.username || 'User',
+            email: userData.email || 'user@example.com',
+            avatar: userData.avatar
+          });
+        } else {
+          setIsAuthenticated(false);
+          setUser(null);
+        }
+      } catch (error) {
+        console.error("Error checking authentication in drawer:", error);
+        setIsAuthenticated(false);
+        setUser(null);
+      }
+    };
+    
+    checkAuth();
+  }, []);
+
   // Get status bar height for proper spacing
   const statusBarHeight = Constants.statusBarHeight || 0;
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.removeItem('authToken');
+      await AsyncStorage.removeItem('userData');
+      setIsAuthenticated(false);
+      setUser(null);
+      router.replace("/");
+    } catch (error) {
+      console.error("Error logging out:", error);
+    }
+  };
 
   // Menu items data
   const menuItems: MenuItem[] = [
@@ -74,6 +129,21 @@ export default function ProfileDrawer() {
     }
   ];
 
+  // If not authenticated, return empty drawer
+  if (!isAuthenticated || !user) {
+    return (
+      <View style={styles.emptyContainer}>
+        <TouchableOpacity 
+          style={styles.loginButton}
+          onPress={() => router.push('/(root)/(auth)/login')}
+        >
+          <Text style={styles.loginButtonText}>Log In to Access Profile</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Regular drawer UI for authenticated users
   return (
     <View style={styles.container}>
       {/* User profile section */}
@@ -84,12 +154,17 @@ export default function ProfileDrawer() {
         style={[styles.profileHeader, { paddingTop: statusBarHeight + 20 }]}
       >
         <Image 
-          source={require('../../assets/images/loginPic.jpg')} 
+          source={user.avatar 
+            ? { uri: `http://192.168.2.11:5001${user.avatar}` } 
+            : require('../../assets/images/loginPic.jpg')} 
           style={styles.profileImage} 
         />
-        <Text style={styles.profileName}>Alfredo_Yu</Text>
-        <Text style={styles.profileEmail}>alfredo_yu@example.com</Text>
-        <TouchableOpacity style={styles.editButton}>
+        <Text style={styles.profileName}>{user.username}</Text>
+        <Text style={styles.profileEmail}>{user.email}</Text>
+        <TouchableOpacity 
+          style={styles.editButton}
+          onPress={() => router.push('/(root)/(tabs)/(profile)')}
+        >
           <Text style={styles.editButtonText}>Edit Profile</Text>
         </TouchableOpacity>
       </LinearGradient>
@@ -97,7 +172,11 @@ export default function ProfileDrawer() {
       {/* Menu items */}
       <ScrollView style={styles.menuList}>
         {menuItems.map((item) => (
-          <TouchableOpacity key={item.id} style={styles.menuItem}>
+          <TouchableOpacity 
+            key={item.id} 
+            style={styles.menuItem}
+            onPress={item.onPress}
+          >
             <View style={styles.menuItemLeft}>
               {item.icon}
               <Text style={styles.menuItemLabel}>{item.label}</Text>
@@ -112,7 +191,10 @@ export default function ProfileDrawer() {
       </ScrollView>
 
       {/* Logout button */}
-      <TouchableOpacity style={styles.logoutButton}>
+      <TouchableOpacity 
+        style={styles.logoutButton}
+        onPress={handleLogout}
+      >
         <Feather name="log-out" size={24} color={colors.primary} />
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
@@ -124,6 +206,26 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  emptyContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loginButton: {
+    backgroundColor: '#A45EE5',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    width: '80%',
+    alignItems: 'center',
+  },
+  loginButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   profileHeader: {
     padding: 20,

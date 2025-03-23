@@ -12,21 +12,31 @@ import {
   FlatList,
   Alert,
   Switch,
-  Modal
+  Modal,
+  BackHandler
 } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
-import { Ionicons, MaterialCommunityIcons, Feather, FontAwesome } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { createProduct, Media as ServiceMedia, ProductData, getProductCategories } from './productService';
+import { createProduct, getProductCategories } from './productService';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { 
+  Media, 
+  ProductDraft, 
+  ProductData, 
+  Category, 
+  ServiceMedia,
+  getCategoryIcon, 
+  getCategoryColor,
+  CategoryModal,
+  RestoreDraftModal,
+  SuccessModal,
+  ErrorModal
+} from './modal';
 
-interface Media {
-  uri: string;
-  type: 'image' | 'video';
-  width?: number;
-  height?: number;
-}
+const PRODUCT_DRAFT_KEY = 'product_draft';
 
 const CreateProductScreen: React.FC = () => {
   const router = useRouter();
@@ -40,71 +50,175 @@ const CreateProductScreen: React.FC = () => {
   const [condition, setCondition] = useState<string>('New');
   const [quantity, setQuantity] = useState('1');
   const [freeShipping, setFreeShipping] = useState(false);
-  const [categories, setCategories] = useState<{id: string; name: string}[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [isDraftRestored, setIsDraftRestored] = useState(false);
+  const [restoreModalVisible, setRestoreModalVisible] = useState(false);
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorTitle, setErrorTitle] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const videoRef = useRef<Video>(null);
 
-  // Function to get icon name based on category
-  const getCategoryIcon = (categoryName: string): any => {
-    const iconMap: {[key: string]: any} = {
-      'Pet Food': 'food-variant',
-      'Pet Toys': 'toy-brick',
-      'Pet Beds': 'bed',
-      'Pet Clothing': 'tshirt-crew',
-      'Health & Wellness': 'medical-bag',
-      'Grooming': 'content-cut',
-      'Training': 'whistle',
-      'Carriers & Travel': 'bag-suitcase',
-      'Accessories': 'dog-side'
-    };
-    
-    return iconMap[categoryName] || 'paw';
+  // Helper function to check if form has any data entered
+  const hasFormData = () => {
+    return (
+      name.trim() !== '' || 
+      description.trim() !== '' || 
+      price !== '' || 
+      media.length > 0 ||
+      category !== '' ||
+      condition !== 'New' ||
+      quantity !== '1' ||
+      freeShipping !== false
+    );
   };
 
-  // Get color based on category
-  const getCategoryColor = (categoryName: string): string => {
-    const colorMap: {[key: string]: string} = {
-      'Pet Food': '#8B5CF6',     // Violet-500
-      'Pet Toys': '#A855F7',     // Purple-500
-      'Pet Beds': '#D946EF',     // Fuchsia-500
-      'Pet Clothing': '#EC4899', // Pink-500
-      'Health & Wellness': '#06B6D4', // Cyan-500
-      'Grooming': '#14B8A6',     // Teal-500
-      'Training': '#F59E0B',     // Amber-500
-      'Carriers & Travel': '#10B981', // Emerald-500
-      'Accessories': '#6366F1'   // Indigo-500
-    };
-    
-    return colorMap[categoryName] || '#9333EA';
+  // Helper function for showing error modal
+  const showErrorModal = (title: string, message: string) => {
+    setErrorTitle(title);
+    setErrorMessage(message);
+    setErrorModalVisible(true);
   };
 
-  // Load categories when component mounts
+  // Save current form data as draft
+  const saveDraft = async () => {
+    if (!hasFormData()) return;
+    
+    setDraftSaving(true);
+    try {
+      const draft: ProductDraft = {
+        name,
+        description,
+        price,
+        media,
+        category,
+        condition,
+        quantity: parseInt(quantity, 10),
+        shippingOptions: freeShipping ? ['Free Shipping'] : [],
+        lastUpdated: Date.now()
+      };
+      
+      await AsyncStorage.setItem(PRODUCT_DRAFT_KEY, JSON.stringify(draft));
+      setHasDraft(true);
+      console.log('Product draft saved');
+    } catch (error) {
+      console.error('Error saving product draft:', error);
+    } finally {
+      setDraftSaving(false);
+    }
+  };
+
+  // Load draft data from AsyncStorage
+  const loadDraft = async () => {
+    try {
+      const draftStr = await AsyncStorage.getItem(PRODUCT_DRAFT_KEY);
+      if (draftStr) {
+        const draft: ProductDraft = JSON.parse(draftStr);
+        setName(draft.name || '');
+        setDescription(draft.description || '');
+        setPrice(draft.price || '');
+        setMedia(draft.media || []);
+        setCategory(draft.category || '');
+        setCondition(draft.condition || 'New');
+        setQuantity(draft.quantity?.toString() || '1');
+        setFreeShipping(draft.shippingOptions?.includes('Free Shipping') || false);
+        setHasDraft(true);
+        setIsDraftRestored(true);
+        console.log('Product draft loaded');
+      }
+    } catch (error) {
+      console.error('Error loading product draft:', error);
+    }
+  };
+
+  // Clear saved draft
+  const clearDraft = async () => {
+    try {
+      await AsyncStorage.removeItem(PRODUCT_DRAFT_KEY);
+      setHasDraft(false);
+      console.log('Product draft cleared');
+    } catch (error) {
+      console.error('Error clearing product draft:', error);
+    }
+  };
+
+  // Auto-save draft on form changes
   useEffect(() => {
-    const loadCategories = async () => {
-      setLoadingCategories(true);
-      try {
-        // For better UX, we'll create 9 predefined categories with unique icons
-        const predefinedCategories = [
-          { id: '1', name: 'Pet Food' },
-          { id: '2', name: 'Pet Toys' },
-          { id: '3', name: 'Pet Beds' },
-          { id: '4', name: 'Pet Clothing' },
-          { id: '5', name: 'Health & Wellness' },
-          { id: '6', name: 'Grooming' },
-          { id: '7', name: 'Training' },
-          { id: '8', name: 'Carriers & Travel' },
-          { id: '9', name: 'Accessories' }
-        ];
-        setCategories(predefinedCategories);
-      } catch (error) {
-        console.error('Error loading categories:', error);
-      } finally {
-        setLoadingCategories(false);
+    if (isDraftRestored) {
+      const timer = setTimeout(() => {
+        saveDraft();
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [name, description, price, media, category, condition, quantity, freeShipping, isDraftRestored]);
+
+  // Check for existing draft and load categories on mount
+  useEffect(() => {
+    const loadInitialData = async () => {
+      const draftExists = await AsyncStorage.getItem(PRODUCT_DRAFT_KEY);
+      setHasDraft(!!draftExists);
+      
+      // Load categories
+      loadCategories();
+      
+      // If draft exists, show restore prompt
+      if (draftExists) {
+        setRestoreModalVisible(true);
       }
     };
     
-    loadCategories();
+    loadInitialData();
   }, []);
+
+  // Handle back button press and prompt to save draft
+  useEffect(() => {
+    const handleBackPress = () => {
+      if (hasFormData() && !draftSaving) {
+        // Auto-save draft without asking
+        saveDraft().then(() => {
+          router.back();
+        });
+        return true; // Prevent default back action
+      }
+      return false; // Allow default back action
+    };
+
+    // Android hardware back button handling
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+
+    return () => {
+      backHandler.remove();
+    };
+  }, [name, description, price, media, category, condition, quantity, freeShipping, draftSaving]);
+
+  // Load categories
+  const loadCategories = async () => {
+    setLoadingCategories(true);
+    try {
+      // For better UX, we'll create 9 predefined categories with unique icons
+      const predefinedCategories = [
+        { id: '1', name: 'Pet Food' },
+        { id: '2', name: 'Pet Toys' },
+        { id: '3', name: 'Pet Beds' },
+        { id: '4', name: 'Pet Clothing' },
+        { id: '5', name: 'Health & Wellness' },
+        { id: '6', name: 'Grooming' },
+        { id: '7', name: 'Training' },
+        { id: '8', name: 'Carriers & Travel' },
+        { id: '9', name: 'Accessories' }
+      ];
+      setCategories(predefinedCategories);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
 
   // Pick media from gallery
   const pickMedia = async (type: 'image' | 'video' | 'both') => {
@@ -134,12 +248,12 @@ const CreateProductScreen: React.FC = () => {
     }
   };
 
-  // Take photo with camera
+  // Take photo with camera - update to use custom error modal
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'We need camera permissions to take photos.');
+      showErrorModal('Permission Denied', 'We need camera permissions to take photos.');
       return;
     }
 
@@ -168,21 +282,21 @@ const CreateProductScreen: React.FC = () => {
     setMedia(newMedia);
   };
 
-  // Handle product submission
+  // Handle product submission - update to use custom error modal
   const handleSubmit = async () => {
     // Validate fields
     if (name.trim().length === 0) {
-      Alert.alert('Missing Information', 'Please add a product name');
+      showErrorModal('Missing Information', 'Please add a product name');
       return;
     }
 
     if (media.length === 0) {
-      Alert.alert('Missing Media', 'Please add at least one image');
+      showErrorModal('Missing Media', 'Please add at least one image');
       return;
     }
     
     if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
-      Alert.alert('Invalid Price', 'Please enter a valid price');
+      showErrorModal('Invalid Price', 'Please enter a valid price');
       return;
     }
 
@@ -207,29 +321,36 @@ const CreateProductScreen: React.FC = () => {
       setLoading(false);
       
       if (result.success) {
-        Alert.alert('Success', result.message, [
-          { text: 'OK', onPress: () => {
-            // Clear form
-            setName('');
-            setDescription('');
-            setPrice('');
-            setMedia([]);
-            setCategory('');
-            setCondition('New');
-            setQuantity('1');
-            setFreeShipping(false);
-            // Navigate back
-            router.back();
-          }}
-        ]);
+        // Clear the draft after successful submission
+        await clearDraft();
+        
+        // Show custom success modal instead of default alert
+        setSuccessMessage(result.message || 'Product listed successfully!');
+        setSuccessModalVisible(true);
       } else {
-        Alert.alert('Error', result.message);
+        showErrorModal('Error', result.message);
       }
     } catch (error) {
       setLoading(false);
-      Alert.alert('Error', 'Failed to create product. Please try again.');
+      showErrorModal('Error', 'Failed to create product. Please try again.');
       console.error(error);
     }
+  };
+
+  // Handle successful modal close
+  const handleSuccessModalClose = () => {
+    setSuccessModalVisible(false);
+    // Clear form
+    setName('');
+    setDescription('');
+    setPrice('');
+    setMedia([]);
+    setCategory('');
+    setCondition('New');
+    setQuantity('1');
+    setFreeShipping(false);
+    // Navigate back
+    router.back();
   };
 
   // Render media preview
@@ -263,21 +384,45 @@ const CreateProductScreen: React.FC = () => {
       <ScrollView className="flex-1" bounces={false} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View className="flex-row items-center justify-between px-4 pt-12 pb-4 border-b border-gray-100">
-          <TouchableOpacity onPress={() => router.back()} className="p-2">
+          <TouchableOpacity 
+            onPress={() => {
+              if (hasFormData() && !draftSaving) {
+                // Auto-save draft without asking
+                saveDraft().then(() => {
+                  router.back();
+                });
+              } else {
+                router.back();
+              }
+            }} 
+            className="p-2"
+          >
             <Ionicons name="arrow-back" size={24} color="#333" />
           </TouchableOpacity>
-          <Text className="text-lg font-rubik-medium text-gray-800">Add Product</Text>
-          <TouchableOpacity 
-            onPress={handleSubmit}
-            disabled={loading} 
-            className={`py-2 px-4 rounded-full ${loading ? 'bg-gray-300' : 'bg-purple-500'}`}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="white" />
-            ) : (
-              <Text className="text-white font-rubik-medium">List Item</Text>
+          <Text className="text-lg font-rubik-medium text-gray-800">
+            {hasDraft ? "Edit Draft Product" : "Add Product"}
+          </Text>
+          <View className="flex-row">
+            {hasDraft && (
+              <TouchableOpacity 
+                onPress={clearDraft}
+                className="mr-2 p-2"
+              >
+                <Feather name="trash-2" size={22} color="#EF4444" />
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={handleSubmit}
+              disabled={loading} 
+              className={`py-2 px-4 rounded-full ${loading ? 'bg-gray-300' : 'bg-purple-500'}`}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text className="text-white font-rubik-medium">List Item</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View className="p-4">
@@ -374,23 +519,13 @@ const CreateProductScreen: React.FC = () => {
             <Text className="text-gray-700 font-rubik-medium mb-3">Add Product Images *</Text>
             <View className="flex-row justify-around">
               <TouchableOpacity 
-                onPress={() => pickMedia('image')}
+                onPress={() => pickMedia('both')}
                 className="items-center"
               >
                 <View className="bg-green-100 rounded-full p-3 mb-1">
-                  <Ionicons name="image" size={24} color="#10B981" />
+                  <Ionicons name="images" size={24} color="#10B981" />
                 </View>
                 <Text className="text-xs text-gray-600 font-rubik">Gallery</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                onPress={() => pickMedia('video')}
-                className="items-center"
-              >
-                <View className="bg-blue-100 rounded-full p-3 mb-1">
-                  <Ionicons name="videocam" size={24} color="#3B82F6" />
-                </View>
-                <Text className="text-xs text-gray-600 font-rubik">Video</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
@@ -513,114 +648,41 @@ const CreateProductScreen: React.FC = () => {
         </View>
       </ScrollView>
       
-      {/* Category Modal */}
-      <Modal
+      {/* Modals */}
+      <CategoryModal
         visible={categoryModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setCategoryModalVisible(false)}
-      >
-        <View className="flex-1 bg-white">
-          {/* Modal Header */}
-          <LinearGradient
-            colors={['#9333EA', '#A855F7', '#C084FC']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            className="px-4 pt-12 pb-4 border-b border-gray-100"
-          >
-            <View className="flex-row items-center justify-between">
-              <TouchableOpacity 
-                onPress={() => setCategoryModalVisible(false)}
-                className="bg-white p-2 rounded-full shadow-sm"
-              >
-                <Ionicons name="close" size={22} color="#9333EA" />
-              </TouchableOpacity>
-              <View className="flex-row items-center">
-                <MaterialCommunityIcons name="paw" size={22} color="white" style={{ marginRight: 8 }} />
-                <Text className="text-lg font-rubik-medium text-white">Pet Categories</Text>
-              </View>
-              <TouchableOpacity 
-                onPress={() => setCategoryModalVisible(false)}
-                className="bg-white px-3 py-1 rounded-full shadow-sm"
-              >
-                <Text className="text-purple-700 font-rubik-medium">Done</Text>
-              </TouchableOpacity>
-            </View>
-          </LinearGradient>
-          
-          <ScrollView className="flex-1 bg-white">
-            <View className="p-4 bg-purple-50">
-              <View className="flex-row items-center mb-3">
-                <Ionicons name="information-circle-outline" size={18} color="#9333EA" style={{ marginRight: 6 }} />
-                <Text className="text-purple-900 text-sm font-rubik">Select one category for your pet product:</Text>
-              </View>
-            </View>
-            
-            {loadingCategories ? (
-              <View className="py-10 items-center">
-                <ActivityIndicator size="large" color="#9333EA" />
-                <Text className="text-gray-500 mt-3 font-rubik">Loading categories...</Text>
-              </View>
-            ) : (
-              <View className="px-2 py-4">                
-                <View className="flex-row flex-wrap">
-                  {categories.map((cat) => (
-                    <TouchableOpacity 
-                      key={cat.id}
-                      className="w-1/3 px-2 mb-4"
-                      onPress={() => {
-                        setCategory(cat.name);
-                        setCategoryModalVisible(false);
-                      }}
-                    >
-                      <View 
-                        className={`items-center justify-center py-4 px-2 rounded-xl ${
-                          category === cat.name 
-                            ? 'shadow-md border border-purple-200' 
-                            : 'border border-gray-100'
-                        }`}
-                        style={{ 
-                          backgroundColor: category === cat.name 
-                            ? `${getCategoryColor(cat.name)}15` // 15 is hex for 8% opacity
-                            : '#FFFFFF',
-                        }}
-                      >
-                        <View 
-                          className="rounded-full p-3 mb-3 shadow-sm"
-                          style={{ 
-                            backgroundColor: `${getCategoryColor(cat.name)}15`,
-                          }}
-                        >
-                          <MaterialCommunityIcons 
-                            name={getCategoryIcon(cat.name)}
-                            size={28} 
-                            color={getCategoryColor(cat.name)}
-                          />
-                        </View>
-                        <Text 
-                          className={`font-rubik text-center text-xs ${
-                            category === cat.name 
-                              ? 'font-rubik-medium' 
-                              : ''
-                          }`}
-                          style={{ 
-                            color: category === cat.name 
-                              ? getCategoryColor(cat.name) 
-                              : '#4B5563' 
-                          }}
-                          numberOfLines={2}
-                        >
-                          {cat.name}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            )}
-          </ScrollView>
-        </View>
-      </Modal>
+        onClose={() => setCategoryModalVisible(false)}
+        categories={categories}
+        selectedCategory={category}
+        onSelectCategory={setCategory}
+        loadingCategories={loadingCategories}
+      />
+
+      <RestoreDraftModal
+        visible={restoreModalVisible}
+        onClose={() => setRestoreModalVisible(false)}
+        onRestore={() => {
+          loadDraft();
+          setRestoreModalVisible(false);
+        }}
+        onDiscard={() => {
+          clearDraft();
+          setRestoreModalVisible(false);
+        }}
+      />
+
+      <SuccessModal
+        visible={successModalVisible}
+        message={successMessage}
+        onClose={handleSuccessModalClose}
+      />
+
+      <ErrorModal
+        visible={errorModalVisible}
+        title={errorTitle}
+        message={errorMessage}
+        onClose={() => setErrorModalVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 };

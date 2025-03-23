@@ -162,4 +162,27 @@ export const productsService = {
   list: () => api.get(endpoints.posts.list),
 };
 
+/**
+ * Get user products
+ * @param userId User ID
+ * @param status Product status (default: 'active')
+ * @returns Promise with user products
+ */
+export const getUserProducts = async (userId: string, status: string = 'active') => {
+  try {
+    console.log(`API: Fetching products for user ${userId} with status ${status}`);
+    const response = await api.get(`/products/user/${userId}?status=${status}`);
+    
+    if (response.data && response.data.success) {
+      return response.data.products; // The controller returns { success, count, products }
+    }
+    
+    console.log('API: No products found or invalid response structure');
+    return [];
+  } catch (error) {
+    console.error('API: Error fetching user products:', error);
+    throw error;
+  }
+};
+
 export default api; 

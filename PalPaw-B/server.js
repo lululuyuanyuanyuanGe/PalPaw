@@ -13,6 +13,7 @@ import { syncModels } from './models/index.js'; // Sequelize models
 import pgAuthRoutes from './routes/pgAuth.js'; // PostgreSQL auth routes
 import postRoutes from './routes/posts.js'; // Post routes
 import uploadRoutes from './routes/upload.js'; // Upload routes
+import productRoutes from './routes/products.js'; // Product routes
 
 // Load environment variables
 dotenv.config();
@@ -68,11 +69,29 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.use("/api/pg/auth", pgAuthRoutes); // PostgreSQL auth
 app.use("/api/posts", postRoutes); // Post routes
 app.use("/api/upload", uploadRoutes); // Upload routes
+app.use("/api/products", productRoutes); // Product routes
 
 // Home route
 app.get('/', (req, res) => {
   res.json({ message: 'Welcome to PalPaw API' });
 });
 
+// Add error handler middleware at the end of your middleware chain
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  
+  if (req.path.startsWith('/uploads/')) {
+    console.error(`Error serving media file: ${req.path}`, err);
+    return res.status(500).send('Error serving media file');
+  }
+  
+  res.status(500).send('Server error');
+});
+
+// Set port from environment variable or default
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});

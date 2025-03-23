@@ -35,25 +35,21 @@ const Product = sequelize.define('Product', {
       min: 0
     }
   },
-  // Currency code (USD, EUR, etc.)
-  currency: {
-    type: DataTypes.STRING(3),
-    defaultValue: 'USD'
-  },
   // Product category
   category: {
     type: DataTypes.STRING,
     allowNull: false
   },
-  // Product condition (new, used, etc.)
+  // Product condition (New, Like New, Good, Fair)
   condition: {
-    type: DataTypes.ENUM('new', 'like_new', 'good', 'fair', 'poor'),
-    defaultValue: 'new'
+    type: DataTypes.ENUM('New', 'Like New', 'Good', 'Fair'),
+    defaultValue: 'New'
   },
   // Array of media URLs (images, videos)
   media: {
-    type: DataTypes.ARRAY(DataTypes.STRING),
-    defaultValue: []
+    type: DataTypes.JSONB,
+    defaultValue: [],
+    comment: 'Array of media objects with url and type'
   },
   // Product quantity available
   quantity: {

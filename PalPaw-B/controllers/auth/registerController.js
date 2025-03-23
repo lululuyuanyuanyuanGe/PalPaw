@@ -21,41 +21,42 @@ export const register = async (req, res) => {
       });
     }
     
-    // Check if user already exists
+    // Check if user already exists in the database
     const existingUser = await User.findOne({
       where: {
-        [Op.or]: [
-          { username },
-          { email }
-        ]
-      }
+        [Op.or]: [{ username }, { email }],
+      },
     });
 
     if (existingUser) {
       return res.status(400).json({
-        message: "User already exists",
-        field: existingUser.username === username ? "username" : "email"
+        success: false,
+        message: "Username or email already exists",
       });
     }
 
-    // Create new user
-    const newUser = await User.create({
+    // Create a new user with default profile values
+    const user = await User.create({
       username,
       email,
-      password, // Will be hashed by model hook
-      firstName,
-      lastName
+      password,
+      firstName: firstName || '',
+      lastName: lastName || '',
+      bio: "Hello! I'm new to PalPaw.",
+      avatar: "https://robohash.org/" + username + "?set=set4&bgset=bg1",
+      isActive: true,
+      role: 'user'
     });
 
     // Generate token
     const token = jwt.sign(
-      { id: newUser.id },
+      { id: user.id },
       process.env.JWT_SECRET || 'secret',
       { expiresIn: '1d' }
     );
 
     // Return success response without password
-    const userResponse = newUser.toJSON();
+    const userResponse = user.toJSON();
     delete userResponse.password;
 
     console.log('User registered successfully:', userResponse.id);

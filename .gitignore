@@ -37,3 +37,6 @@ PalPaw-B/.env
 
 # typescript
 *.tsbuildinfo
+
+# uploads
+PalPaw-B/uploads
