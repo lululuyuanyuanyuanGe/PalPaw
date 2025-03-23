@@ -31,8 +31,9 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+PalPaw-B/.env
+**/PalPaw-B/**/.env
 
 # typescript
 *.tsbuildinfo
-
-app-example

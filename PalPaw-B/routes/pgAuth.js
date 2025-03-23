@@ -1,6 +1,6 @@
 import express from 'express';
 import { register, login, getProfile } from '../controllers/auth/index.js';
-import { auth } from '../middlewares/authMiddleware.js';
+import { authenticate } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -11,6 +11,6 @@ router.post("/register", register);
 router.post("/login", login);
 
 // Get user profile - protected by auth middleware
-router.get("/profile", auth, getProfile);
+router.get("/profile", authenticate, getProfile);
 
 export default router; 

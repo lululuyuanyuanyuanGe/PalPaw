@@ -23,7 +23,8 @@ const Post = sequelize.define('Post', {
   },
   content: {
     type: DataTypes.TEXT,
-    allowNull: false
+    allowNull: true,
+    defaultValue: ''
   },
   // Array of media URLs (images, videos)
   media: {
@@ -35,28 +36,10 @@ const Post = sequelize.define('Post', {
     type: DataTypes.INTEGER,
     defaultValue: 0
   },
-  // Optional location data
+  // Optional location data - human readable address
   location: {
     type: DataTypes.STRING,
     allowNull: true
-  },
-  // Latitude coordinate for precise location
-  latitude: {
-    type: DataTypes.DECIMAL(10, 8),
-    allowNull: true,
-    validate: {
-      min: -90,
-      max: 90
-    }
-  },
-  // Longitude coordinate for precise location
-  longitude: {
-    type: DataTypes.DECIMAL(11, 8),
-    allowNull: true,
-    validate: {
-      min: -180,
-      max: 180
-    }
   },
   // Optional tags (array of strings)
   tags: {
@@ -88,10 +71,6 @@ const Post = sequelize.define('Post', {
       fields: ['tags'],
       name: 'post_tags_index',
       using: 'gin' // GIN index for array search
-    },
-    {
-      fields: ['latitude', 'longitude'],
-      name: 'post_location_index'
     }
   ]
 });

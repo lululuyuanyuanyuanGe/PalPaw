@@ -11,13 +11,15 @@ import {
   ActivityIndicator,
   FlatList,
   Alert,
-  Switch
+  Switch,
+  Modal
 } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons, MaterialCommunityIcons, Feather, FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { createProduct, Media as ServiceMedia, ProductData, getProductCategories } from './productService';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface Media {
   uri: string;
@@ -34,6 +36,7 @@ const CreateProductScreen: React.FC = () => {
   const [media, setMedia] = useState<Media[]>([]);
   const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState<string>('');
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [condition, setCondition] = useState<string>('New');
   const [quantity, setQuantity] = useState('1');
   const [freeShipping, setFreeShipping] = useState(false);
@@ -41,13 +44,63 @@ const CreateProductScreen: React.FC = () => {
   const [loadingCategories, setLoadingCategories] = useState(false);
   const videoRef = useRef<Video>(null);
 
+  // Function to get icon name based on category
+  const getCategoryIcon = (categoryName: string): any => {
+    const iconMap: {[key: string]: any} = {
+      'Pet Food': 'food-variant',
+      'Pet Toys': 'toy-brick',
+      'Pet Beds': 'bed',
+      'Pet Clothing': 'tshirt-crew',
+      'Health & Wellness': 'medical-bag',
+      'Grooming': 'content-cut',
+      'Training': 'whistle',
+      'Carriers & Travel': 'bag-suitcase',
+      'Accessories': 'dog-side'
+    };
+    
+    return iconMap[categoryName] || 'paw';
+  };
+
+  // Get color based on category
+  const getCategoryColor = (categoryName: string): string => {
+    const colorMap: {[key: string]: string} = {
+      'Pet Food': '#8B5CF6',     // Violet-500
+      'Pet Toys': '#A855F7',     // Purple-500
+      'Pet Beds': '#D946EF',     // Fuchsia-500
+      'Pet Clothing': '#EC4899', // Pink-500
+      'Health & Wellness': '#06B6D4', // Cyan-500
+      'Grooming': '#14B8A6',     // Teal-500
+      'Training': '#F59E0B',     // Amber-500
+      'Carriers & Travel': '#10B981', // Emerald-500
+      'Accessories': '#6366F1'   // Indigo-500
+    };
+    
+    return colorMap[categoryName] || '#9333EA';
+  };
+
   // Load categories when component mounts
   useEffect(() => {
     const loadCategories = async () => {
       setLoadingCategories(true);
-      const data = await getProductCategories();
-      setCategories(data);
-      setLoadingCategories(false);
+      try {
+        // For better UX, we'll create 9 predefined categories with unique icons
+        const predefinedCategories = [
+          { id: '1', name: 'Pet Food' },
+          { id: '2', name: 'Pet Toys' },
+          { id: '3', name: 'Pet Beds' },
+          { id: '4', name: 'Pet Clothing' },
+          { id: '5', name: 'Health & Wellness' },
+          { id: '6', name: 'Grooming' },
+          { id: '7', name: 'Training' },
+          { id: '8', name: 'Carriers & Travel' },
+          { id: '9', name: 'Accessories' }
+        ];
+        setCategories(predefinedCategories);
+      } catch (error) {
+        console.error('Error loading categories:', error);
+      } finally {
+        setLoadingCategories(false);
+      }
     };
     
     loadCategories();
@@ -355,62 +408,94 @@ const CreateProductScreen: React.FC = () => {
           {/* Additional Options */}
           <View className="mb-6">
             {/* Category */}
-            <TouchableOpacity 
-              className="flex-row items-center justify-between py-3 border-b border-gray-100"
-              onPress={() => {
-                if (categories.length > 0) {
-                  // Show category picker
-                  Alert.alert(
-                    'Select Category',
-                    'Choose a category for your product',
-                    categories.map(cat => ({
-                      text: cat.name,
-                      onPress: () => setCategory(cat.name)
-                    }))
-                  );
-                } else {
-                  Alert.alert('Categories', 'Loading categories...');
-                }
-              }}
-            >
-              <View className="flex-row items-center">
-                <View className="bg-green-100 rounded-full p-2 mr-3">
-                  <FontAwesome name="tag" size={18} color="#10B981" />
+            <View className="mb-4">
+              <Text className="text-sm text-gray-500 mb-2 font-rubik">Category *</Text>
+              {category ? (
+                <View className="flex-row items-center">
+                  <View 
+                    className="rounded-full px-4 py-2.5 mr-2 mb-2 flex-row items-center shadow-sm"
+                    style={{ backgroundColor: `${getCategoryColor(category)}20` }} // 20 is hex for 12% opacity
+                  >
+                    <MaterialCommunityIcons 
+                      name={getCategoryIcon(category)} 
+                      size={16} 
+                      color={getCategoryColor(category)}
+                      style={{ marginRight: 8 }} 
+                    />
+                    <Text 
+                      style={{ color: getCategoryColor(category) }}
+                      className="font-rubik-medium mr-2"
+                    >
+                      {category}
+                    </Text>
+                    <TouchableOpacity onPress={() => setCategory('')}>
+                      <Ionicons 
+                        name="close-circle" 
+                        size={18} 
+                        color={getCategoryColor(category)} 
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity 
+                    onPress={() => setCategoryModalVisible(true)}
+                    className="bg-purple-100 rounded-full px-4 py-2.5 mb-2 flex-row items-center shadow-sm"
+                  >
+                    <Feather name="edit-2" size={14} color="#9333EA" style={{ marginRight: 6 }} />
+                    <Text className="text-purple-700 font-rubik">Change</Text>
+                  </TouchableOpacity>
                 </View>
-                <Text className="text-gray-700 font-rubik">
-                  {category ? category : "Select Category *"}
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
+              ) : (
+                <TouchableOpacity 
+                  className="rounded-xl p-4 border border-gray-100 flex-row items-center justify-between shadow-sm"
+                  style={{ backgroundColor: '#f9f5ff' }} // Very light purple background
+                  onPress={() => setCategoryModalVisible(true)}
+                >
+                  <View className="flex-row items-center">
+                    <View className="bg-purple-100 rounded-full p-3 mr-3 shadow-sm">
+                      <MaterialCommunityIcons name="shape-outline" size={18} color="#9333EA" />
+                    </View>
+                    <View>
+                      <Text className="text-gray-700 font-rubik">Select a category</Text>
+                      <Text className="text-xs text-gray-400 font-rubik">Required for your product listing</Text>
+                    </View>
+                  </View>
+                  <View className="bg-purple-500 rounded-full py-2 px-3 shadow-sm">
+                    <Text className="text-white text-xs font-rubik-medium">Select</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
             
             {/* Condition */}
-            <TouchableOpacity 
-              className="flex-row items-center justify-between py-3 border-b border-gray-100"
-              onPress={() => {
-                Alert.alert(
-                  'Select Condition',
-                  'Choose the condition of your product',
-                  [
-                    { text: 'New', onPress: () => setCondition('New') },
-                    { text: 'Like New', onPress: () => setCondition('Like New') },
-                    { text: 'Good', onPress: () => setCondition('Good') },
-                    { text: 'Fair', onPress: () => setCondition('Fair') },
-                  ]
-                );
-              }}
-            >
-              <View className="flex-row items-center">
-                <View className="bg-blue-100 rounded-full p-2 mr-3">
-                  <MaterialCommunityIcons name="star-outline" size={18} color="#3B82F6" />
-                </View>
-                <Text className="text-gray-700 font-rubik">Condition: {condition}</Text>
+            <View className="mb-4">
+              <Text className="text-sm text-gray-500 mb-2 font-rubik">Condition</Text>
+              <View className="flex-row flex-wrap gap-2">
+                {['New', 'Like New', 'Good', 'Fair'].map((conditionOption) => (
+                  <TouchableOpacity 
+                    key={conditionOption}
+                    className={`px-4 py-2 rounded-full ${
+                      condition === conditionOption 
+                        ? 'bg-purple-100 border border-purple-200' 
+                        : 'bg-gray-50 border border-gray-100'
+                    }`}
+                    onPress={() => setCondition(conditionOption)}
+                  >
+                    <Text 
+                      className={`font-rubik ${
+                        condition === conditionOption 
+                          ? 'text-purple-700' 
+                          : 'text-gray-500'
+                      }`}
+                    >
+                      {conditionOption}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-              <Feather name="chevron-right" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
+            </View>
             
             {/* Free Shipping */}
-            <View className="flex-row items-center justify-between py-3 border-b border-gray-100">
+            <View className="flex-row items-center justify-between py-3 mt-2 border-t border-gray-100">
               <View className="flex-row items-center">
                 <View className="bg-amber-100 rounded-full p-2 mr-3">
                   <Feather name="package" size={18} color="#F59E0B" />
@@ -427,6 +512,115 @@ const CreateProductScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+      
+      {/* Category Modal */}
+      <Modal
+        visible={categoryModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setCategoryModalVisible(false)}
+      >
+        <View className="flex-1 bg-white">
+          {/* Modal Header */}
+          <LinearGradient
+            colors={['#9333EA', '#A855F7', '#C084FC']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            className="px-4 pt-12 pb-4 border-b border-gray-100"
+          >
+            <View className="flex-row items-center justify-between">
+              <TouchableOpacity 
+                onPress={() => setCategoryModalVisible(false)}
+                className="bg-white p-2 rounded-full shadow-sm"
+              >
+                <Ionicons name="close" size={22} color="#9333EA" />
+              </TouchableOpacity>
+              <View className="flex-row items-center">
+                <MaterialCommunityIcons name="paw" size={22} color="white" style={{ marginRight: 8 }} />
+                <Text className="text-lg font-rubik-medium text-white">Pet Categories</Text>
+              </View>
+              <TouchableOpacity 
+                onPress={() => setCategoryModalVisible(false)}
+                className="bg-white px-3 py-1 rounded-full shadow-sm"
+              >
+                <Text className="text-purple-700 font-rubik-medium">Done</Text>
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
+          
+          <ScrollView className="flex-1 bg-white">
+            <View className="p-4 bg-purple-50">
+              <View className="flex-row items-center mb-3">
+                <Ionicons name="information-circle-outline" size={18} color="#9333EA" style={{ marginRight: 6 }} />
+                <Text className="text-purple-900 text-sm font-rubik">Select one category for your pet product:</Text>
+              </View>
+            </View>
+            
+            {loadingCategories ? (
+              <View className="py-10 items-center">
+                <ActivityIndicator size="large" color="#9333EA" />
+                <Text className="text-gray-500 mt-3 font-rubik">Loading categories...</Text>
+              </View>
+            ) : (
+              <View className="px-2 py-4">                
+                <View className="flex-row flex-wrap">
+                  {categories.map((cat) => (
+                    <TouchableOpacity 
+                      key={cat.id}
+                      className="w-1/3 px-2 mb-4"
+                      onPress={() => {
+                        setCategory(cat.name);
+                        setCategoryModalVisible(false);
+                      }}
+                    >
+                      <View 
+                        className={`items-center justify-center py-4 px-2 rounded-xl ${
+                          category === cat.name 
+                            ? 'shadow-md border border-purple-200' 
+                            : 'border border-gray-100'
+                        }`}
+                        style={{ 
+                          backgroundColor: category === cat.name 
+                            ? `${getCategoryColor(cat.name)}15` // 15 is hex for 8% opacity
+                            : '#FFFFFF',
+                        }}
+                      >
+                        <View 
+                          className="rounded-full p-3 mb-3 shadow-sm"
+                          style={{ 
+                            backgroundColor: `${getCategoryColor(cat.name)}15`,
+                          }}
+                        >
+                          <MaterialCommunityIcons 
+                            name={getCategoryIcon(cat.name)}
+                            size={28} 
+                            color={getCategoryColor(cat.name)}
+                          />
+                        </View>
+                        <Text 
+                          className={`font-rubik text-center text-xs ${
+                            category === cat.name 
+                              ? 'font-rubik-medium' 
+                              : ''
+                          }`}
+                          style={{ 
+                            color: category === cat.name 
+                              ? getCategoryColor(cat.name) 
+                              : '#4B5563' 
+                          }}
+                          numberOfLines={2}
+                        >
+                          {cat.name}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };

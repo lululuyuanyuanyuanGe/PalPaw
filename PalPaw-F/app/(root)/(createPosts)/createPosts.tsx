@@ -231,7 +231,11 @@ const CreatePostScreen: React.FC = () => {
 
   // Handle post submission
   const handleSubmit = async () => {
-    if (title.trim().length === 0) {
+    console.log('Submit pressed. Title value:', title);
+    console.log('Title length before trim:', title.length);
+    console.log('Title length after trim:', title.trim().length);
+    
+    if (!title || title.trim().length === 0) {
       Alert.alert('Missing Information', 'Please add a title');
       return;
     }
@@ -244,13 +248,15 @@ const CreatePostScreen: React.FC = () => {
     setLoading(true);
     
     try {
-      // Prepare post data
+      // Prepare post data with sanitized values
       const postData: PostData = {
-        title,
-        content,
+        title: title.trim(),  // Ensure trimmed title is used
+        content: content.trim(),
         media: media as ServiceMedia[],
         postType: 'pet',
       };
+      
+      console.log('Post data being sent:', postData);
       
       // Add optional fields
       if (locationText) {
@@ -389,8 +395,15 @@ const CreatePostScreen: React.FC = () => {
               placeholder="What's on your mind?"
               placeholderTextColor="#9CA3AF"
               value={title}
-              onChangeText={setTitle}
+              onChangeText={(text) => {
+                console.log('Title input changed:', text);
+                setTitle(text);
+              }}
               maxLength={100}
+              autoCapitalize="sentences"
+              keyboardType="default"
+              returnKeyType="next"
+              testID="post-title-input"
             />
           </View>
 

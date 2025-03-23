@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Define interfaces
 export interface Media {
@@ -35,7 +36,7 @@ export interface PetTagCategory {
 }
 
 // Base URL for the API
-const API_BASE_URL = 'https://api.palpaw.com'; // Replace with your actual API base URL
+const API_BASE_URL = 'http://192.168.2.11:5001/api'; // Updated to match the local development server
 
 /**
  * Converts a Media object to a FormData-compatible object
@@ -67,9 +68,16 @@ export const createPost = async (data: PostData): Promise<{ success: boolean; me
     const formData = new FormData();
     
     // Add base post data
-    formData.append('title', data.title);
+    console.log('Title before appending:', data.title);
+    formData.append('title', String(data.title.trim()));
     formData.append('content', data.content);
     formData.append('postType', data.postType);
+    
+    // Log FormData (approximate, since FormData can't be directly logged)
+    console.log('FormData entries:');
+    for (const pair of (formData as any).entries()) {
+      console.log(pair[0], pair[1]);
+    }
     
     // Add optional fields if they exist
     if (data.location) formData.append('location', data.location);
@@ -93,21 +101,25 @@ export const createPost = async (data: PostData): Promise<{ success: boolean; me
     
     // Add media files
     data.media.forEach((item, index) => {
-      formData.append(`media[${index}]`, mediaToFormData(item, index) as any);
+      formData.append('media', mediaToFormData(item, index) as any);
     });
     
+    // Get auth token from AsyncStorage
+    const token = await AsyncStorage.getItem('authToken');
+    
     // Make the API request
-    const response = await fetch(`${API_BASE_URL}/posts`, {
+    console.log('Making POST request to:', `${API_BASE_URL}/upload/post`);
+    const response = await fetch(`${API_BASE_URL}/upload/post`, {
       method: 'POST',
       body: formData,
       headers: {
-        'Content-Type': 'multipart/form-data',
-        // Add authentication headers if needed
-        // 'Authorization': `Bearer ${authToken}`
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       },
     });
     
+    console.log('Response status:', response.status);
     const responseData = await response.json();
+    console.log('Response data:', responseData);
     
     if (response.ok) {
       return { 
@@ -160,11 +172,14 @@ export const uploadMedia = async (media: Media): Promise<{ success: boolean; url
     const formData = new FormData();
     formData.append('media', mediaToFormData(media, 0) as any);
     
+    // Get auth token from AsyncStorage
+    const token = await AsyncStorage.getItem('authToken');
+    
     const response = await fetch(`${API_BASE_URL}/media/upload`, {
       method: 'POST',
       body: formData,
       headers: {
-        'Content-Type': 'multipart/form-data',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       },
     });
     
@@ -220,4 +235,4 @@ export const getPetTagSuggestions = async (): Promise<PetTagCategory[]> => {
       color: '#3B82F6' // Blue
     }
   ];
-}; 
+};

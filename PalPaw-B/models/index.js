@@ -2,10 +2,10 @@ import { sequelize } from '../config/postgres.js';
 import User from './PostgresUser.js';
 import Post from './Post.js';
 import Comment from './Comment.js';
-import Product from './Product.js';
-import Follow from './Follow.js';
 import Like from './Like.js';
+import Product from './Product.js';
 import Notification from './Notification.js';
+import Follow from './Follow.js';
 
 // ===================================================
 // Define model relationships
@@ -32,8 +32,8 @@ User.hasMany(Product, { foreignKey: 'userId', as: 'products' });
 Product.belongsTo(User, { foreignKey: 'userId', as: 'seller' });
 
 // User - Follow relationships (followers)
-User.hasMany(Follow, { foreignKey: 'followingId', as: 'followers' });
-Follow.belongsTo(User, { foreignKey: 'followingId', as: 'following' });
+User.hasMany(Follow, { foreignKey: 'followedId', as: 'followers' });
+Follow.belongsTo(User, { foreignKey: 'followedId', as: 'followed' });
 
 // User - Follow relationships (following)
 User.hasMany(Follow, { foreignKey: 'followerId', as: 'following' });
@@ -65,9 +65,9 @@ export {
   User,
   Post,
   Comment,
+  Like,
   Product,
   Follow,
-  Like,
   Notification,
   syncModels
 }; 

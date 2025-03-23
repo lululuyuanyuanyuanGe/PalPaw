@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Define interfaces
 export interface Media {
@@ -22,7 +23,7 @@ export interface ProductData {
 }
 
 // Base URL for the API
-const API_BASE_URL = 'https://api.palpaw.com'; // Replace with your actual API base URL
+const API_BASE_URL = 'http://192.168.2.11:5001/api'; // Updated to match the local development server
 
 /**
  * Converts a Media object to a FormData-compatible object
@@ -75,17 +76,18 @@ export const createProduct = async (data: ProductData): Promise<{ success: boole
     
     // Add media files
     data.media.forEach((item, index) => {
-      formData.append(`media[${index}]`, mediaToFormData(item, index) as any);
+      formData.append('media', mediaToFormData(item, index) as any);
     });
+    
+    // Get auth token from AsyncStorage
+    const token = await AsyncStorage.getItem('authToken');
     
     // Make the API request
     const response = await fetch(`${API_BASE_URL}/products`, {
       method: 'POST',
       body: formData,
       headers: {
-        'Content-Type': 'multipart/form-data',
-        // Add authentication headers if needed
-        // 'Authorization': `Bearer ${authToken}`
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       },
     });
     
