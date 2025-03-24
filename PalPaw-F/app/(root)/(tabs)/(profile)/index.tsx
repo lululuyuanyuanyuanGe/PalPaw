@@ -21,6 +21,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api, { getUserProducts } from "@/utils/apiClient";
 import AuthPrompt from "@/app/components/AuthPrompt";
+import VideoThumbnail from "@/app/components/VideoThumbnail";
 
 // Define API base URL for media
 const API_BASE_URL = 'http://192.168.2.11:5001';
@@ -30,6 +31,8 @@ interface BaseItem {
   id: string;
   image?: any;
   isButton?: boolean;
+  mediaType?: 'image' | 'video';
+  mediaUrl?: string;
 }
 
 // Define post type
@@ -112,6 +115,26 @@ const formatImageUrl = (path: string | undefined): string => {
   return `${API_BASE_URL}${path}`;
 };
 
+// Helper function to check if URL is a video
+const isVideoUrl = (url: string): boolean => {
+  if (!url) return false;
+  
+  // Check common video extensions
+  const videoExtensions = ['.mp4', '.mov', '.avi', '.wmv', '.flv', '.webm', '.mkv'];
+  const lowercasedUrl = url.toLowerCase();
+  
+  for (const ext of videoExtensions) {
+    if (lowercasedUrl.endsWith(ext)) {
+      return true;
+    }
+  }
+  
+  // Also check if the URL contains a video indicator
+  return lowercasedUrl.includes('/video/') || 
+         lowercasedUrl.includes('video=true') || 
+         lowercasedUrl.includes('type=video');
+};
+
 const ProfileScreen = () => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
@@ -188,14 +211,16 @@ const ProfileScreen = () => {
             // Parse the stored user data
             const userData = JSON.parse(userDataStr);
             console.log("ProfileScreen: User data loaded from storage", userData.id);
+            
+            // Set up default user data structure even if some fields are missing
             setUser({
-              id: userData.id,
-              username: userData.username,
-              firstName: userData.firstName,
-              lastName: userData.lastName,
-              avatar: userData.avatar,
+              id: userData.id || 'unknown',
+              username: userData.username || 'User',
+              firstName: userData.firstName || '',
+              lastName: userData.lastName || '',
+              avatar: userData.avatar || '',
               bio: userData.bio || "Hello! I'm a PalPaw user.",
-              email: userData.email,
+              email: userData.email || '',
               stats: {
                 posts: 0,
                 followers: userData.followers || 0,
@@ -205,15 +230,31 @@ const ProfileScreen = () => {
             });
             
             // Fetch user data, posts and products
-            await fetchUserData(userData.id);
+            try {
+              await fetchUserData(userData.id);
+            } catch (fetchError) {
+              console.error("Failed to fetch user data:", fetchError);
+              // We already set default user data, so we can continue
+            }
             // Mark initial load as complete
             initialLoadCompleted.current = true;
           } catch (parseError) {
             console.error("Error parsing user data:", parseError);
-            await AsyncStorage.removeItem('authToken');
-            await AsyncStorage.removeItem('userData');
-            setIsAuthenticated(false);
-            setIsLoading(false);
+            Alert.alert(
+              "Error",
+              "There was a problem with your account data. Please login again.",
+              [
+                { 
+                  text: "OK", 
+                  onPress: async () => {
+                    await AsyncStorage.removeItem('authToken');
+                    await AsyncStorage.removeItem('userData');
+                    setIsAuthenticated(false);
+                    setIsLoading(false);
+                  }
+                }
+              ]
+            );
           }
         } else {
           // Already authenticated with user data, just update loading state
@@ -246,21 +287,59 @@ const ProfileScreen = () => {
   
   // Fetch user's posts and products
   const fetchUserData = async (userId: string) => {
-    console.log(`ProfileScreen: Fetching user data for ${userId}`);
+    console.log("ProfileScreen: Fetching user data for ID:", userId);
     lastFetchTime.current = Date.now();
     
+    if (isFocused.current) {
+      setFetchError(false);
+    }
+    
+    // Only show full loading state if not refreshing
+    if (!refreshing && isFocused.current) {
+      setIsLoading(true);
+    }
+    
     try {
-      if (fetchError) setFetchError(false);
-      
-      // Only show full loading state if not refreshing
-      if (!refreshing) {
-        setIsLoading(true);
+      // Fetch additional user profile data
+      try {
+        console.log("ProfileScreen: Fetching user profile data");
+        const response = await api.get(`/pg/users/${userId}`);
+        console.log("ProfileScreen: User profile data received");
+        
+        if (response.data && response.data.user) {
+          const userData = response.data.user;
+          
+          if (isFocused.current) {
+            setUser((prevUser) => ({
+              ...(prevUser || {}),
+              id: userData.id,
+              username: userData.username,
+              firstName: userData.firstName || prevUser?.firstName,
+              lastName: userData.lastName || prevUser?.lastName,
+              bio: userData.bio || prevUser?.bio || "Hello! I'm a PalPaw user.",
+              avatar: userData.avatar || prevUser?.avatar,
+              email: userData.email || prevUser?.email,
+              stats: {
+                ...prevUser?.stats,
+                // Keep post and product counts until we fetch those separately
+                followers: userData.followers || prevUser?.stats?.followers || 0,
+                following: userData.following || prevUser?.stats?.following || 0,
+              }
+            }));
+          }
+        }
+      } catch (userError: any) {
+        console.error("Error fetching user profile data:", userError.message);
+        if (userError.response) {
+          console.error(`Status code: ${userError.response.status}, data:`, userError.response.data);
+        }
+        // Continue to fetch other data even if user profile fails
       }
       
       // Fetch posts
       try {
         console.log("ProfileScreen: Fetching posts");
-        const postsResponse = await api.get('/posts');
+        const postsResponse = await api.get('/pg/posts');
         console.log("ProfileScreen: Posts response received");
         
         if (postsResponse?.data) {
@@ -279,12 +358,18 @@ const ProfileScreen = () => {
           const fetchedPosts = userPosts.map((post: any) => {
             // Handle media in a similar way to products
             let imageUrl = 'https://robohash.org/post' + post.id + '?set=set4';
+            let mediaType: 'image' | 'video' = 'image';
+            let mediaUrl = '';
             
             if (post.media && post.media.length > 0) {
               if (typeof post.media[0] === 'string') {
-                imageUrl = formatImageUrl(post.media[0]);
+                mediaUrl = formatImageUrl(post.media[0]);
+                mediaType = isVideoUrl(mediaUrl) ? 'video' : 'image';
+                imageUrl = mediaUrl;
               } else if (post.media[0].url) {
-                imageUrl = formatImageUrl(post.media[0].url);
+                mediaUrl = formatImageUrl(post.media[0].url);
+                mediaType = isVideoUrl(mediaUrl) ? 'video' : 'image';
+                imageUrl = mediaUrl;
               }
             }
             
@@ -293,7 +378,9 @@ const ProfileScreen = () => {
               title: post.title || "Untitled Post",
               content: post.content,
               likes: post.likes || 0,
-              image: { uri: imageUrl }
+              image: { uri: imageUrl },
+              mediaType: mediaType,
+              mediaUrl: mediaUrl
             };
           });
           
@@ -321,8 +408,11 @@ const ProfileScreen = () => {
             setPosts([]);
           }
         }
-      } catch (postError) {
-        console.error("Error fetching posts:", postError);
+      } catch (postError: any) {
+        console.error("Error fetching posts:", postError.message);
+        if (postError.response) {
+          console.error(`Status code: ${postError.response.status}, data:`, postError.response.data);
+        }
         if (isFocused.current) {
           setPosts([]);
         }
@@ -331,54 +421,96 @@ const ProfileScreen = () => {
       // Fetch products
       try {
         console.log("ProfileScreen: Fetching products");
-        const userProducts = await getUserProducts(userId);
-        console.log(`ProfileScreen: Received ${userProducts.length} products`);
-        
-        const fetchedProducts = userProducts.map((product: any) => {
-          // Handle media from the API format
-          let imageUrl = 'https://robohash.org/product' + product.id + '?set=set4';
+        try {
+          const userProducts = await getUserProducts(userId);
+          console.log(`ProfileScreen: Received ${userProducts.length} products`);
           
-          if (product.media && product.media.length > 0) {
-            // Check if media is an array of strings or objects
-            if (typeof product.media[0] === 'string') {
-              imageUrl = formatImageUrl(product.media[0]);
-            } else if (product.media[0].url) {
-              imageUrl = formatImageUrl(product.media[0].url);
+          const fetchedProducts = userProducts.map((product: any) => {
+            // Handle media from the API format
+            let imageUrl = 'https://robohash.org/product' + product.id + '?set=set4';
+            let mediaType: 'image' | 'video' = 'image';
+            let mediaUrl = '';
+            
+            if (product.media && product.media.length > 0) {
+              // Check if media is an array of strings or objects
+              if (typeof product.media[0] === 'string') {
+                mediaUrl = formatImageUrl(product.media[0]);
+                mediaType = isVideoUrl(mediaUrl) ? 'video' : 'image';
+                imageUrl = mediaUrl;
+              } else if (product.media[0].url) {
+                mediaUrl = formatImageUrl(product.media[0].url);
+                mediaType = isVideoUrl(mediaUrl) ? 'video' : 'image';
+                imageUrl = mediaUrl;
+              }
+            }
+            
+            return {
+              id: product.id,
+              name: product.name || "Untitled Product",
+              price: product.price || 0,
+              rating: 4.5,
+              sold: product.sold || 0,
+              image: { uri: imageUrl },
+              mediaType: mediaType,
+              mediaUrl: mediaUrl
+            };
+          });
+          
+          console.log(`ProfileScreen: Processed ${fetchedProducts.length} products for display`);
+          
+          // Check if component is still mounted and focused before updating state
+          if (isFocused.current) {
+            setProducts(fetchedProducts);
+            
+            // Update user stats with product count
+            setUser(prevUser => {
+              if (prevUser) {
+                return {
+                  ...prevUser,
+                  stats: {
+                    ...prevUser.stats,
+                    products: fetchedProducts.length
+                  }
+                };
+              }
+              return prevUser;
+            });
+          }
+        } catch (productApiError: any) {
+          console.error("Error in getUserProducts API call:", productApiError.message);
+          if (productApiError.response) {
+            console.error(`Status code: ${productApiError.response.status}, data:`, productApiError.response.data);
+          }
+          // Try fallback to direct API call if the helper function fails
+          const productsResponse = await api.get(`/pg/products`);
+          if (productsResponse?.data) {
+            let userProducts = [];
+            
+            if (Array.isArray(productsResponse.data)) {
+              userProducts = productsResponse.data.filter((product: any) => product.userId === userId);
+            } else if (productsResponse.data.products && Array.isArray(productsResponse.data.products)) {
+              userProducts = productsResponse.data.products.filter((product: any) => product.userId === userId);
+            }
+            
+            console.log(`ProfileScreen: Found ${userProducts.length} products with fallback`);
+            
+            if (isFocused.current) {
+              setProducts(userProducts.map((product: any) => ({
+                id: product.id,
+                name: product.name || "Untitled Product",
+                price: product.price || 0,
+                rating: 4.5,
+                sold: product.sold || 0,
+                image: { uri: formatImageUrl(product.media?.[0] || '') },
+              })));
             }
           }
-          
-          return {
-            id: product.id,
-            name: product.name || "Untitled Product",
-            price: product.price || 0,
-            rating: 4.5,
-            sold: product.sold || 0,
-            image: { uri: imageUrl }
-          };
-        });
-        
-        console.log(`ProfileScreen: Processed ${fetchedProducts.length} products for display`);
-        
-        // Check if component is still mounted and focused before updating state
-        if (isFocused.current) {
-          setProducts(fetchedProducts);
-          
-          // Update user stats with product count
-          setUser(prevUser => {
-            if (prevUser) {
-              return {
-                ...prevUser,
-                stats: {
-                  ...prevUser.stats,
-                  products: fetchedProducts.length
-                }
-              };
-            }
-            return prevUser;
-          });
         }
-      } catch (productError) {
-        console.error("Error fetching products:", productError);
+      } catch (productError: any) {
+        console.error("Error fetching products:", productError.message);
+        if (productError.response) {
+          console.error(`Status code: ${productError.response.status}, data:`, productError.response.data);
+        }
         if (isFocused.current) {
           setProducts([]);
         }
@@ -426,18 +558,29 @@ const ProfileScreen = () => {
     }
   };
 
-  // Screen dimensions for responsive grid
+  // Get dimensions for grid layout
+  const { width } = Dimensions.get('window');
   const numColumns = 2;
-  const screenWidth = Dimensions.get("window").width;
-  const itemSize = screenWidth / numColumns - 16;
+  const paddingSize = 10; // Padding around each grid item
+  const itemWidth = (width - (paddingSize * 2 * numColumns)) / numColumns;
   
   // Add the "Create New" buttons to the lists
   const postsWithButton = [...posts, newPostButton];
   const productsWithButton = [...products, newProductButton];
   
+  // Helper function to check if the item is a button
+  const isButtonItem = (item: BaseItem): boolean => {
+    return item.isButton === true;
+  };
+
   // Render grid items (posts or products)
   const renderItem = ({ item }: { item: BaseItem }) => (
-    <View style={{ width: itemSize, margin: 8 }}>
+    <View
+      style={{
+        padding: paddingSize,
+        width: `${100 / numColumns}%`,
+      }}
+    >
       {isButtonItem(item) ? (
         // "Create New" Button
         <TouchableOpacity 
@@ -465,11 +608,23 @@ const ProfileScreen = () => {
       ) : isPostItem(item) ? (
         // Post Item
         <TouchableOpacity className="rounded-xl overflow-hidden shadow-sm bg-white border border-pink-50">
-          <Image 
-            source={item.image} 
-            style={{ width: '100%', height: 150 }}
-            resizeMode="cover"
-          />
+          {item.mediaType === 'video' && item.mediaUrl ? (
+            <VideoThumbnail
+              videoUrl={item.mediaUrl}
+              width="100%"
+              height={150}
+              onPress={() => {
+                console.log("Video post clicked:", item.id);
+                // Navigate to post detail view
+              }}
+            />
+          ) : (
+            <Image 
+              source={item.image} 
+              style={{ width: '100%', height: 150 }}
+              resizeMode="cover"
+            />
+          )}
           <View className="p-2">
             <Text className="text-gray-800 font-medium" numberOfLines={1}>{item.title}</Text>
             <View className="flex-row items-center mt-1">
@@ -481,11 +636,23 @@ const ProfileScreen = () => {
       ) : isProductItem(item) ? (
         // Product Item
         <TouchableOpacity className="rounded-xl overflow-hidden shadow-sm bg-white border border-pink-50">
-          <Image 
-            source={item.image} 
-            style={{ width: '100%', height: 150 }}
-            resizeMode="cover"
-          />
+          {item.mediaType === 'video' && item.mediaUrl ? (
+            <VideoThumbnail
+              videoUrl={item.mediaUrl}
+              width="100%"
+              height={150}
+              onPress={() => {
+                console.log("Video product clicked:", item.id);
+                // Navigate to product detail view
+              }}
+            />
+          ) : (
+            <Image 
+              source={item.image} 
+              style={{ width: '100%', height: 150 }}
+              resizeMode="cover"
+            />
+          )}
           <View className="absolute top-2 right-2 bg-purple-500 px-2 py-0.5 rounded-full">
             <Text className="text-white text-xs font-bold">${item.price}</Text>
           </View>

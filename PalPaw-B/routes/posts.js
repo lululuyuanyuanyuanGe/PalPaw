@@ -2,6 +2,7 @@ import express from 'express';
 import { 
   getAllPosts, 
   getPostById, 
+  createPost,
   updatePost, 
   deletePost, 
   likePost 
@@ -11,7 +12,14 @@ import { authenticate } from '../middlewares/authMiddleware.js';
 const router = express.Router();
 
 /**
- * @route GET /api/posts
+ * @route POST /api/pg/posts
+ * @desc Create a new post
+ * @access Private
+ */
+router.post('/', authenticate, createPost);
+
+/**
+ * @route GET /api/pg/posts
  * @desc Get all posts with pagination
  * @access Public
  */

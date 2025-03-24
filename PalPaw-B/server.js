@@ -14,6 +14,7 @@ import pgAuthRoutes from './routes/pgAuth.js'; // PostgreSQL auth routes
 import postRoutes from './routes/posts.js'; // Post routes
 import uploadRoutes from './routes/upload.js'; // Upload routes
 import productRoutes from './routes/products.js'; // Product routes
+import userRoutes from './routes/users.js'; // User routes
 
 // Load environment variables
 dotenv.config();
@@ -67,9 +68,10 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Routes
 app.use("/api/pg/auth", pgAuthRoutes); // PostgreSQL auth
-app.use("/api/posts", postRoutes); // Post routes
+app.use("/api/pg/posts", postRoutes); // Post routes
 app.use("/api/upload", uploadRoutes); // Upload routes
-app.use("/api/products", productRoutes); // Product routes
+app.use("/api/pg/products", productRoutes); // Product routes
+app.use("/api/pg/users", userRoutes); // User routes
 
 // Home route
 app.get('/', (req, res) => {

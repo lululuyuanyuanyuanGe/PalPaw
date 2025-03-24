@@ -16,7 +16,7 @@ import {
   Dimensions,
   BackHandler
 } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Ionicons, MaterialCommunityIcons, Feather, AntDesign } from '@expo/vector-icons';
@@ -47,6 +47,32 @@ interface PostDraft extends Omit<PostData, 'locationCoordinates'> {
 const POST_DRAFT_KEY = 'post_draft';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Simple Video Preview component without hooks
+const VideoPreview: React.FC<{ uri: string }> = ({ uri }) => {
+  return (
+    <View className="w-full h-full items-center justify-center bg-black">
+      <View className="w-full h-full">
+        <Image 
+          source={{ uri }} 
+          className="w-full h-full"
+          resizeMode="cover"
+        />
+      </View>
+      {/* Play button overlay */}
+      <View className="absolute inset-0 items-center justify-center bg-black/30">
+        <View className="bg-black/50 rounded-full w-8 h-8 items-center justify-center">
+          <Ionicons name="play" size={16} color="white" />
+        </View>
+      </View>
+      {/* Video indicator */}
+      <View className="absolute top-1 left-1 bg-black/60 px-2 py-0.5 rounded-full flex-row items-center">
+        <Ionicons name="videocam" size={10} color="white" />
+        <Text className="text-white text-xs ml-0.5">Video</Text>
+      </View>
+    </View>
+  );
+};
 
 const CreatePostScreen: React.FC = () => {
   const router = useRouter();
@@ -428,27 +454,23 @@ const CreatePostScreen: React.FC = () => {
   };
 
   // Render media preview
-  const renderMediaItem = ({ item, index }: { item: Media; index: number }) => (
-    <View className="relative mr-2 rounded-xl overflow-hidden" style={{ width: 100, height: 100 }}>
-      {item.type === 'image' ? (
-        <Image source={{ uri: item.uri }} className="w-full h-full" />
-      ) : (
-        <Video
-          ref={videoRef}
-          source={{ uri: item.uri }}
-          className="w-full h-full"
-          resizeMode={ResizeMode.CONTAIN}
-          useNativeControls
-        />
-      )}
-      <TouchableOpacity 
-        onPress={() => removeMedia(index)}
-        className="absolute top-1 right-1 bg-black/50 rounded-full p-1"
-      >
-        <Ionicons name="close" size={16} color="white" />
-      </TouchableOpacity>
-    </View>
-  );
+  const renderMediaItem = ({ item, index }: { item: Media; index: number }) => {
+    return (
+      <View className="relative mr-2 rounded-xl overflow-hidden" style={{ width: 100, height: 100 }}>
+        {item.type === 'image' ? (
+          <Image source={{ uri: item.uri }} className="w-full h-full" resizeMode="cover" />
+        ) : (
+          <VideoPreview uri={item.uri} key={`video-${item.uri}`} />
+        )}
+        <TouchableOpacity 
+          onPress={() => removeMedia(index)}
+          className="absolute top-1 right-1 bg-black/50 rounded-full p-1"
+        >
+          <Ionicons name="close" size={16} color="white" />
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   // Render a tag item
   const renderTagItem = ({ item }: { item: string }) => (

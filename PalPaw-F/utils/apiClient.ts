@@ -96,12 +96,12 @@ export const endpoints = {
     profile: '/pg/auth/profile',
   },
   posts: {
-    create: '/posts',
-    list: '/posts',
+    create: '/pg/posts',
+    list: '/pg/posts',
   },
   products: {
-    create: '/products',
-    list: '/products',
+    create: '/pg/products',
+    list: '/pg/products',
   },
 };
 
@@ -159,7 +159,7 @@ export const postsService = {
 // Products service
 export const productsService = {
   create: (data: ProductData) => api.post(endpoints.products.create, data),
-  list: () => api.get(endpoints.posts.list),
+  list: () => api.get(endpoints.products.list),
 };
 
 /**
@@ -171,7 +171,7 @@ export const productsService = {
 export const getUserProducts = async (userId: string, status: string = 'active') => {
   try {
     console.log(`API: Fetching products for user ${userId} with status ${status}`);
-    const response = await api.get(`/products/user/${userId}?status=${status}`);
+    const response = await api.get(`/pg/products/user/${userId}?status=${status}`);
     
     if (response.data && response.data.success) {
       return response.data.products; // The controller returns { success, count, products }

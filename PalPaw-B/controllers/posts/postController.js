@@ -4,6 +4,103 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
+ * Create a new post
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const createPost = async (req, res) => {
+  try {
+    const {
+      title,
+      content,
+      location,
+      latitude,
+      longitude,
+      tags: tagsJson,
+      visibility = 'public'
+    } = req.body;
+    
+    // Parse tags if they exist
+    let tags = [];
+    if (tagsJson) {
+      try {
+        tags = typeof tagsJson === 'string' ? JSON.parse(tagsJson) : tagsJson;
+      } catch (e) {
+        console.error('Error parsing tags:', e);
+      }
+    }
+    
+    // Handle media uploads
+    const mediaUrls = [];
+    
+    if (req.files && req.files.media) {
+      // Create upload directory if it doesn't exist
+      const uploadDir = path.join(process.cwd(), 'uploads', 'posts');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      
+      // Process uploaded files
+      if (Array.isArray(req.files.media)) {
+        for (const file of req.files.media) {
+          const fileName = `${uuidv4()}_${file.originalFilename || 'upload'}`;
+          const filePath = path.join(uploadDir, fileName);
+          
+          // Copy file from temp location to uploads directory
+          fs.copyFileSync(file.path, filePath);
+          
+          // Add to mediaUrls array
+          mediaUrls.push(`/uploads/posts/${fileName}`);
+        }
+      } else {
+        // If media is a single file
+        const file = req.files.media;
+        const fileName = `${uuidv4()}_${file.originalFilename || 'upload'}`;
+        const filePath = path.join(uploadDir, fileName);
+        
+        // Copy file from temp location to uploads directory
+        fs.copyFileSync(file.path, filePath);
+        
+        // Add to mediaUrls array
+        mediaUrls.push(`/uploads/posts/${fileName}`);
+      }
+    }
+    
+    // Create post data
+    const postData = {
+      userId: req.user.id,
+      title: title || 'Untitled Post',
+      content: content || '',
+      media: mediaUrls,
+      location: location || '',
+      visibility,
+      tags,
+      likes: 0,
+      ...(latitude && longitude ? {
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude)
+      } : {})
+    };
+    
+    // Create post in database
+    const post = await Post.create(postData);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Post created successfully',
+      post
+    });
+  } catch (error) {
+    console.error('Error in createPost:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating post',
+      error: error.message
+    });
+  }
+};
+
+/**
  * Get all posts
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
