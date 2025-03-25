@@ -66,6 +66,16 @@ const TabsLayout = () => {
                     <TabIcon icon={icons.person} focused={focused} title="Profile"/> 
                 )
             }}/>
+
+        <Tabs.Screen 
+            name="(posts)" 
+            options={{
+                title: 'Posts',
+                headerShown: false,
+                tabBarIcon: ({focused}) => (
+                    <TabIcon icon={icons.person} focused={focused} title="posts"/> 
+                )
+            }}/>
     </Tabs>
   )
 }
