@@ -15,8 +15,6 @@ import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-ico
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { PostItem } from '../(tabs)/(profile)/types';
-import { BlurView } from 'expo-blur';
-import { formatImageUrl } from '../(tabs)/(profile)/renderService';
 import Animated, { 
   useSharedValue, 
   useAnimatedStyle, 
@@ -24,6 +22,7 @@ import Animated, {
   interpolate,
   Extrapolate
 } from 'react-native-reanimated';
+import { usePosts } from '../../../context';
 
 // Utility function to format the date/time
 const formatTimeAgo = (date: string | Date) => {
@@ -103,19 +102,15 @@ const PostDetail = () => {
   const params = useLocalSearchParams();
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [liked, setLiked] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [comments, setComments] = useState<Array<{
-    id: string;
-    author: string;
-    content: string;
-    timestamp: Date;
-    avatarUri: string;
-    likes: number;
-  }>>([]);
+  const [newComment, setNewComment] = useState('');
   const videoRef = useRef<Video>(null);
   const scrollY = useSharedValue(0);
   const { width } = Dimensions.get('window');
+  
+  // Get posts context
+  const { state: postsState, likePost, unlikePost, addComment, setCurrentPost } = usePosts();
+  const { currentPost } = postsState;
   
   // Parse allMedia if it exists
   const allMedia = params.allMedia ? JSON.parse(params.allMedia as string) : [];
@@ -127,6 +122,9 @@ const PostDetail = () => {
       transform: [{ scale: likeScale.value }]
     };
   });
+
+  // Local state for tracking likes while also using the global state
+  const [liked, setLiked] = useState(false);
 
   // Animated header style based on scroll position
   const headerAnimatedStyle = useAnimatedStyle(() => {
@@ -145,8 +143,33 @@ const PostDetail = () => {
     };
   });
   
-  // Mock data using the params passed from the profile page
-  const post: ExtendedPostItem = {
+  // Create post object from params or use current post from context
+  useEffect(() => {
+    // If we have a current post in context, use that
+    if (currentPost && currentPost.id === params.id) {
+      return;
+    }
+    
+    // Otherwise, create a post from URL params
+    const post: ExtendedPostItem = {
+      id: params.id as string,
+      title: params.title as string || "Adorable pets at the park today! 🐶",
+      content: params.content as string || "Had an amazing time at the dog park today. Met so many cute pets and their owners. It's incredible how social and playful the dogs become when they're around each other. Looking forward to our next visit! #PetLovers #DogPark #WeekendFun",
+      likes: parseInt(params.likes as string) || 143,
+      mediaType: params.mediaType as 'image' | 'video' || 'image',
+      mediaUrl: params.mediaUrl as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636",
+      thumbnailUri: params.thumbnailUri as string || "",
+      image: { uri: params.thumbnailUri as string || params.mediaUrl as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636" },
+      createdAt: new Date(params.createdAt ? params.createdAt as string : Date.now() - 2 * 60 * 60 * 1000), // Use provided date or default to 2 hours ago
+      allMedia: allMedia
+    };
+    
+    // Set as current post in context
+    setCurrentPost(post);
+  }, [params.id, currentPost, setCurrentPost]);
+  
+  // Use the current post from context or fall back to params
+  const post = currentPost || {
     id: params.id as string,
     title: params.title as string || "Adorable pets at the park today! 🐶",
     content: params.content as string || "Had an amazing time at the dog park today. Met so many cute pets and their owners. It's incredible how social and playful the dogs become when they're around each other. Looking forward to our next visit! #PetLovers #DogPark #WeekendFun",
@@ -154,8 +177,8 @@ const PostDetail = () => {
     mediaType: params.mediaType as 'image' | 'video' || 'image',
     mediaUrl: params.mediaUrl as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636",
     thumbnailUri: params.thumbnailUri as string || "",
-    image: { uri: params.imageUri as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636" },
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+    image: { uri: params.thumbnailUri as string || params.mediaUrl as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636" },
+    createdAt: new Date(params.createdAt ? params.createdAt as string : Date.now() - 2 * 60 * 60 * 1000), // Use provided date or default to 2 hours ago
     allMedia: allMedia
   };
 
@@ -168,6 +191,16 @@ const PostDetail = () => {
   
   // The tags from the post content
   const tags = extractTags(post.content || '');
+
+  // Local state for comments with initialization from context
+  const [comments, setComments] = useState<Array<{
+    id: string;
+    author: string;
+    content: string;
+    timestamp: Date;
+    avatarUri: string;
+    likes: number;
+  }>>([]);
   
   // Generate dynamic comments based on the post content
   useEffect(() => {
@@ -245,7 +278,16 @@ const PostDetail = () => {
     likeScale.value = withSpring(1.3, { damping: 10 }, () => {
       likeScale.value = withSpring(1);
     });
+    
+    // Toggle local liked state
     setLiked(!liked);
+    
+    // Update global state
+    if (!liked) {
+      likePost(post.id);
+    } else {
+      unlikePost(post.id);
+    }
   };
   
   // Handle mute toggle
@@ -256,9 +298,7 @@ const PostDetail = () => {
     }
   };
   
-  // Add a new comment
-  const [newComment, setNewComment] = useState('');
-  
+  // Handle adding a new comment
   const handleAddComment = () => {
     if (newComment.trim()) {
       const comment = {
@@ -270,7 +310,13 @@ const PostDetail = () => {
         likes: 0
       };
       
+      // Update local state
       setComments([comment, ...comments]);
+      
+      // Update global state through context
+      addComment(post.id, comment);
+      
+      // Clear input
       setNewComment('');
     }
   };
@@ -336,7 +382,7 @@ const PostDetail = () => {
               {!isPlaying && (
                 <View className="absolute inset-0">
                   <Image
-                    source={{ uri: post.thumbnailUri || post.mediaUrl || '' }}
+                    source={{ uri: post.thumbnailUri || post.image?.uri || post.mediaUrl || '' }}
                     style={{ width: '100%', height: '100%' }}
                     resizeMode="cover"
                   />

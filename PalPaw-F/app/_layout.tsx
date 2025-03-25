@@ -3,7 +3,7 @@ import "../global.css";
 import { useFonts } from 'expo-font';
 import { useEffect } from "react";
 import { StatusBar} from "react-native";
-
+import { RootProvider } from "../context";
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -25,9 +25,9 @@ export default function RootLayout() {
     return null;
   }
   return (
-    <>
+    <RootProvider>
       <StatusBar hidden={true} />
       <Stack screenOptions={{ headerShown: false }} />
-    </>
+    </RootProvider>
   );
 }

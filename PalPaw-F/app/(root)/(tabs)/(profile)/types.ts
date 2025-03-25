@@ -14,6 +14,7 @@ export interface PostItem extends BaseItem {
   title?: string;
   likes?: number;
   content?: string;
+  createdAt?: Date;
 }
 
 // Define new post button type

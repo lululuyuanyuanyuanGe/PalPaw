@@ -3,7 +3,8 @@ import { View, Text, Image, TouchableOpacity, ActivityIndicator, StyleSheet, Dim
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons, FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BaseItem, isButtonItem, isPostItem, isProductItem, ProfileTab } from './types';
+import { BaseItem, PostItem, ProductItem, isButtonItem, isPostItem, isProductItem, ProfileTab } from './types';
+import { usePosts } from '../../../../context';
 
 interface RenderItemProps {
   item: BaseItem;
@@ -18,6 +19,7 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
   const { width } = Dimensions.get('window');
   
   const router = useRouter();
+  const { setCurrentPost } = usePosts();
   
   if (!item) {
     return <View style={{ padding: 10, width: `${100 / 2}%` }} />;
@@ -26,22 +28,28 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
   // Function to navigate to post detail
   const navigateToPostDetail = (post: BaseItem) => {
     if (isPostItem(post)) {
-      // Use a proper path to navigate to the post detail page
+      // Set current post in context first
+      setCurrentPost(post);
+      
+      // Prepare the media array
+      const allMediaParam = post.allMedia ? JSON.stringify(post.allMedia) : '[]';
+      
+      // Navigate to posts detail screen with all available data
       router.push({
         pathname: "/(root)/(posts)",
         params: {
           id: post.id,
-          title: post.title || "Untitled Post",
-          content: post.content || "",
-          likes: post.likes?.toString() || "0",
-          mediaType: post.mediaType || "image",
-          mediaUrl: post.mediaUrl || "",
-          thumbnailUri: post.thumbnailUri || "",
-          imageUri: post.image?.uri || "",
-          // Pass allMedia for displaying in comments section
-          allMedia: JSON.stringify(post.allMedia || [])
+          title: (post as PostItem).title || '',
+          content: (post as PostItem).content || '',
+          likes: (post as PostItem).likes?.toString() || '0',
+          mediaType: post.mediaType,
+          mediaUrl: post.mediaUrl,
+          thumbnailUri: post.thumbnailUri || '',
+          imageUri: post.image?.uri || '',
+          allMedia: allMediaParam,
+          createdAt: (post as PostItem).createdAt?.toISOString() || new Date().toISOString()
         }
-      });
+      } as any);
     } else if (isProductItem(post)) {
       console.log('Product item clicked');
       // Future implementation for product detail navigation

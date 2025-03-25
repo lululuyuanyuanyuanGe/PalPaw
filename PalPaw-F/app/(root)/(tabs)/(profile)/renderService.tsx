@@ -237,7 +237,7 @@ export const fetchUserPosts = async (userId: string): Promise<PostItem[]> => {
 };
 
 // Fallback function for posts if new endpoint fails
-const fetchPostsFallback = async (userId: string): Promise<PostItem[]> => {
+export const fetchPostsFallback = async (userId: string): Promise<PostItem[]> => {
   try {
     const postsResponse = await api.get('/pg/posts');
     
