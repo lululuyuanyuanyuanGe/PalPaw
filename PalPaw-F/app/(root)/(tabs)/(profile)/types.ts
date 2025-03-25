@@ -15,6 +15,20 @@ export interface PostItem extends BaseItem {
   likes?: number;
   content?: string;
   createdAt?: Date;
+  authorData?: {
+    id: string;
+    username: string;
+    avatar: string;
+  };
+  comments?: Array<{
+    id: string;
+    author: string;
+    content: string;
+    timestamp: Date;
+    avatarUri: string;
+    likes: number;
+  }>;
+  tags?: string[];
 }
 
 // Define new post button type

@@ -124,9 +124,38 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
           : state.currentPost,
       };
     case 'ADD_COMMENT':
-      // In a real app, you'd update the post to include the new comment
-      // Here we're just demonstrating the structure
-      return state;
+      // Update the post to include the new comment
+      return {
+        ...state,
+        posts: state.posts.map(post =>
+          post.id === action.payload.postId
+            ? { 
+                ...post, 
+                comments: post.comments 
+                  ? [action.payload.comment, ...post.comments]
+                  : [action.payload.comment]
+              }
+            : post
+        ),
+        userPosts: state.userPosts.map(post =>
+          post.id === action.payload.postId
+            ? { 
+                ...post, 
+                comments: post.comments 
+                  ? [action.payload.comment, ...post.comments]
+                  : [action.payload.comment]
+              }
+            : post
+        ),
+        currentPost: state.currentPost?.id === action.payload.postId
+          ? { 
+              ...state.currentPost, 
+              comments: state.currentPost.comments 
+                ? [action.payload.comment, ...state.currentPost.comments]
+                : [action.payload.comment]
+            }
+          : state.currentPost,
+      };
     case 'CLEAR_ERRORS':
       return {
         ...state,

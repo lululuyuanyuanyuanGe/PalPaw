@@ -95,6 +95,20 @@ const Comment: React.FC<CommentProps> = ({ author, content, timestamp, avatarUri
 // Create a local interface extending PostItem with createdAt
 interface ExtendedPostItem extends PostItem {
   createdAt?: Date;
+  authorData?: {
+    id: string;
+    username: string;
+    avatar: string;
+  };
+  comments?: Array<{
+    id: string;
+    author: string;
+    content: string;
+    timestamp: Date;
+    avatarUri: string;
+    likes: number;
+  }>;
+  tags?: string[];
 }
 
 const PostDetail = () => {
@@ -143,6 +157,14 @@ const PostDetail = () => {
     };
   });
   
+  // Extract hashtags from the post content
+  const extractTags = (content: string) => {
+    if (!content) return [];
+    const tagRegex = /#(\w+)/g;
+    const matches = content.match(tagRegex);
+    return matches ? matches.map(tag => tag.substring(1)) : [];
+  };
+  
   // Create post object from params or use current post from context
   useEffect(() => {
     // If we have a current post in context, use that
@@ -151,6 +173,8 @@ const PostDetail = () => {
     }
     
     // Otherwise, create a post from URL params
+    const extractedTags = extractTags(params.content as string || "");
+    
     const post: ExtendedPostItem = {
       id: params.id as string,
       title: params.title as string || "Adorable pets at the park today! 🐶",
@@ -161,7 +185,21 @@ const PostDetail = () => {
       thumbnailUri: params.thumbnailUri as string || "",
       image: { uri: params.thumbnailUri as string || params.mediaUrl as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636" },
       createdAt: new Date(params.createdAt ? params.createdAt as string : Date.now() - 2 * 60 * 60 * 1000), // Use provided date or default to 2 hours ago
-      allMedia: allMedia
+      allMedia: allMedia,
+      authorData: {
+        id: params.authorId as string || "user123",
+        username: params.authorName as string || "John Doe",
+        avatar: params.authorAvatar as string || "https://robohash.org/user123?set=set4"
+      },
+      comments: [] as Array<{
+        id: string;
+        author: string;
+        content: string;
+        timestamp: Date;
+        avatarUri: string;
+        likes: number;
+      }>,
+      tags: extractedTags.length > 0 ? extractedTags : ["PetLovers", "DogPark", "WeekendFun"]
     };
     
     // Set as current post in context
@@ -179,18 +217,25 @@ const PostDetail = () => {
     thumbnailUri: params.thumbnailUri as string || "",
     image: { uri: params.thumbnailUri as string || params.mediaUrl as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636" },
     createdAt: new Date(params.createdAt ? params.createdAt as string : Date.now() - 2 * 60 * 60 * 1000), // Use provided date or default to 2 hours ago
-    allMedia: allMedia
-  };
-
-  // Extract hashtags from the post content
-  const extractTags = (content: string) => {
-    const tagRegex = /#(\w+)/g;
-    const matches = content.match(tagRegex);
-    return matches ? matches.map(tag => tag.substring(1)) : [];
+    allMedia: allMedia,
+    authorData: {
+      id: params.authorId as string || "user123",
+      username: params.authorName as string || "John Doe",
+      avatar: params.authorAvatar as string || "https://robohash.org/user123?set=set4"
+    },
+    comments: [] as Array<{
+      id: string;
+      author: string;
+      content: string;
+      timestamp: Date;
+      avatarUri: string;
+      likes: number;
+    }>,
+    tags: extractTags(params.content as string || "Had an amazing time at the dog park today. Met so many cute pets and their owners. It's incredible how social and playful the dogs become when they're around each other. Looking forward to our next visit! #PetLovers #DogPark #WeekendFun")
   };
   
-  // The tags from the post content
-  const tags = extractTags(post.content || '');
+  // Get tags from the current post
+  const tags = post.tags || extractTags(post.content || '');
 
   // Local state for comments with initialization from context
   const [comments, setComments] = useState<Array<{
@@ -200,7 +245,7 @@ const PostDetail = () => {
     timestamp: Date;
     avatarUri: string;
     likes: number;
-  }>>([]);
+  }>>(post.comments || []);
   
   // Generate dynamic comments based on the post content
   useEffect(() => {
@@ -211,13 +256,14 @@ const PostDetail = () => {
       
       // Generate comments relevant to the post content
       const generatedComments = [];
+      let commentId = 1;
       
       // If post mentions pets/animals
       if (postContent.toLowerCase().includes('pet') || 
           postContent.toLowerCase().includes('dog') || 
           postContent.toLowerCase().includes('cat')) {
         generatedComments.push({
-          id: '1',
+          id: `comment-${commentId++}`,
           author: 'Jane Smith',
           content: 'Such adorable pets! I love bringing my golden retriever to that park too. Maybe we will run into each other sometime! 🐕',
           timestamp: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
@@ -229,7 +275,7 @@ const PostDetail = () => {
       // If it's a video post
       if (mediaType === 'video') {
         generatedComments.push({
-          id: '2',
+          id: `comment-${commentId++}`,
           author: 'Mark Thompson',
           content: 'Great video quality! Which camera did you use to record this?',
           timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
@@ -240,7 +286,7 @@ const PostDetail = () => {
       
       // Add a generic comment
       generatedComments.push({
-        id: generatedComments.length + 1 + '',
+        id: `comment-${commentId++}`,
         author: 'Samantha Lee',
         content: postContent.length > 100 
           ? 'I love the detailed description! Thanks for sharing this wonderful moment with us.' 
@@ -251,8 +297,17 @@ const PostDetail = () => {
       });
       
       setComments(generatedComments);
+      
+      // Update the post with generated comments in context
+      if (currentPost) {
+        const updatedPost = {
+          ...currentPost,
+          comments: generatedComments
+        };
+        setCurrentPost(updatedPost);
+      }
     }
-  }, [post.content, post.mediaType, comments.length]);
+  }, [post.content, post.mediaType, comments.length, currentPost, setCurrentPost]);
   
   // Handle video playback
   const handlePlayPress = () => {
@@ -302,7 +357,7 @@ const PostDetail = () => {
   const handleAddComment = () => {
     if (newComment.trim()) {
       const comment = {
-        id: (comments.length + 1).toString(),
+        id: `comment-${Date.now()}`, // Use timestamp for unique ID
         author: 'You',
         content: newComment.trim(),
         timestamp: new Date(),
@@ -450,11 +505,11 @@ const PostDetail = () => {
         <View className="p-4 bg-white shadow-sm">
           <View className="flex-row items-center">
             <Image
-              source={{ uri: 'https://robohash.org/user123?set=set4' }}
+              source={{ uri: post.authorData?.avatar || 'https://robohash.org/user123?set=set4' }}
               className="w-12 h-12 rounded-full border-2 border-purple-100"
             />
             <View className="ml-3 flex-1">
-              <Text className="font-rubik-semibold text-gray-800">John Doe</Text>
+              <Text className="font-rubik-semibold text-gray-800">{post.authorData?.username || 'Unknown User'}</Text>
               <Text className="text-xs text-gray-500 font-rubik">{formatTimeAgo(post.createdAt || new Date())}</Text>
             </View>
             <TouchableOpacity className="bg-purple-100 px-4 py-2 rounded-full">
@@ -473,7 +528,7 @@ const PostDetail = () => {
           {/* Tags */}
           <View className="flex-row flex-wrap mt-4">
             {tags.length > 0 ? (
-              tags.map((tag, index) => (
+              tags.map((tag: string, index: number) => (
                 <View key={index} className="bg-purple-50 px-3 py-1 rounded-full mr-2 mb-2">
                   <Text className="text-purple-600 text-xs font-rubik-medium">#{tag}</Text>
                 </View>
