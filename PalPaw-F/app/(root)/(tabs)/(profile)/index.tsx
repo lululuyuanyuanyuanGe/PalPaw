@@ -19,121 +19,30 @@ import Constants from "expo-constants";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import api, { getUserProducts } from "@/utils/apiClient";
+import api from "@/utils/apiClient";
 import AuthPrompt from "@/app/components/AuthPrompt";
 import VideoThumbnail from "@/app/components/VideoThumbnail";
-
-// Define API base URL for media
-const API_BASE_URL = 'http://192.168.2.11:5001';
-
-// Base item type with common properties
-interface BaseItem {
-  id: string;
-  image?: any;
-  isButton?: boolean;
-  mediaType?: 'image' | 'video';
-  mediaUrl?: string;
-}
-
-// Define post type
-interface PostItem extends BaseItem {
-  title: string;
-  likes?: number;
-  content?: string;
-}
-
-// Define new post button type
-interface ButtonItem extends BaseItem {
-  isButton: true;
-  title: string;
-  image: null;
-}
-
-// Define product type
-interface ProductItem extends BaseItem {
-  name: string;
-  price: number;
-  rating?: number;
-  sold?: number;
-}
-
-// Define new product button type
-interface ProductButtonItem extends BaseItem {
-  isButton: true;
-  name: string;
-  image: null;
-}
-
-// Define user type
-interface User {
-  id: string;
-  username: string;
-  firstName?: string;
-  lastName?: string;
-  avatar?: string;
-  bio?: string;
-  email?: string;
-  stats?: {
-    posts?: number;
-    followers?: number;
-    following?: number;
-    products?: number;
-  };
-}
-
-// Type guard functions
-const isPostItem = (item: any): item is PostItem => {
-  return 'title' in item && !('price' in item);
-};
-
-const isProductItem = (item: any): item is ProductItem => {
-  return 'name' in item && 'price' in item;
-};
-
-const isButtonItem = (item: any): item is ButtonItem | ProductButtonItem => {
-  return item.isButton === true;
-};
-
-// Create new post button item
-const newPostButton: ButtonItem = { id: "newPost", isButton: true, title: "", image: null };
-
-// Create new product button item
-const newProductButton: ProductButtonItem = { id: "newProduct", isButton: true, name: "", image: null };
-
-type ProfileTab = 'posts' | 'products';
-
-// Format image URL function
-const formatImageUrl = (path: string | undefined): string => {
-  if (!path) {
-    return 'https://robohash.org/default?set=set4&bgset=bg1';
-  }
-  
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
-  }
-  
-  return `${API_BASE_URL}${path}`;
-};
-
-// Helper function to check if URL is a video
-const isVideoUrl = (url: string): boolean => {
-  if (!url) return false;
-  
-  // Check common video extensions
-  const videoExtensions = ['.mp4', '.mov', '.avi', '.wmv', '.flv', '.webm', '.mkv'];
-  const lowercasedUrl = url.toLowerCase();
-  
-  for (const ext of videoExtensions) {
-    if (lowercasedUrl.endsWith(ext)) {
-      return true;
-    }
-  }
-  
-  // Also check if the URL contains a video indicator
-  return lowercasedUrl.includes('/video/') || 
-         lowercasedUrl.includes('video=true') || 
-         lowercasedUrl.includes('type=video');
-};
+import { 
+  fetchUserPosts, 
+  fetchUserProducts, 
+  fetchUserProfileData, 
+  formatImageUrl 
+} from "./renderService";
+import {
+  BaseItem,
+  PostItem,
+  ProductItem,
+  ButtonItem,
+  ProductButtonItem,
+  User,
+  isPostItem,
+  isProductItem,
+  isButtonItem,
+  newPostButton,
+  newProductButton,
+  ProfileTab
+} from "./types";
+import { RenderGridItem } from './ProfileRenderer';
 
 const ProfileScreen = () => {
   const router = useRouter();
@@ -302,117 +211,55 @@ const ProfileScreen = () => {
     try {
       // Fetch additional user profile data
       try {
-        console.log("ProfileScreen: Fetching user profile data");
-        const response = await api.get(`/pg/users/${userId}`);
-        console.log("ProfileScreen: User profile data received");
+        const userData = await fetchUserProfileData(userId);
         
-        if (response.data && response.data.user) {
-          const userData = response.data.user;
-          
-          if (isFocused.current) {
-            setUser((prevUser) => ({
-              ...(prevUser || {}),
-              id: userData.id,
-              username: userData.username,
-              firstName: userData.firstName || prevUser?.firstName,
-              lastName: userData.lastName || prevUser?.lastName,
-              bio: userData.bio || prevUser?.bio || "Hello! I'm a PalPaw user.",
-              avatar: userData.avatar || prevUser?.avatar,
-              email: userData.email || prevUser?.email,
-              stats: {
-                ...prevUser?.stats,
-                // Keep post and product counts until we fetch those separately
-                followers: userData.followers || prevUser?.stats?.followers || 0,
-                following: userData.following || prevUser?.stats?.following || 0,
-              }
-            }));
-          }
+        if (userData && isFocused.current) {
+          setUser((prevUser) => ({
+            ...(prevUser || {}),
+            id: userData.id,
+            username: userData.username,
+            firstName: userData.firstName || prevUser?.firstName,
+            lastName: userData.lastName || prevUser?.lastName,
+            bio: userData.bio || prevUser?.bio || "Hello! I'm a PalPaw user.",
+            avatar: userData.avatar || prevUser?.avatar,
+            email: userData.email || prevUser?.email,
+            stats: {
+              ...prevUser?.stats,
+              // Keep post and product counts until we fetch those separately
+              followers: userData.followers || prevUser?.stats?.followers || 0,
+              following: userData.following || prevUser?.stats?.following || 0,
+            }
+          }));
         }
-      } catch (userError: any) {
-        console.error("Error fetching user profile data:", userError.message);
-        if (userError.response) {
-          console.error(`Status code: ${userError.response.status}, data:`, userError.response.data);
-        }
+      } catch (userError) {
+        console.error("Error fetching user profile data:", userError);
         // Continue to fetch other data even if user profile fails
       }
       
       // Fetch posts
       try {
-        console.log("ProfileScreen: Fetching posts");
-        const postsResponse = await api.get('/pg/posts');
-        console.log("ProfileScreen: Posts response received");
+        const fetchedPosts = await fetchUserPosts(userId);
         
-        if (postsResponse?.data) {
-          let userPosts = [];
+        // Check if component is still mounted and focused before updating state
+        if (isFocused.current) {
+          setPosts(fetchedPosts);
           
-          if (Array.isArray(postsResponse.data)) {
-            userPosts = postsResponse.data.filter((post: any) => post.userId === userId);
-          } else if (postsResponse.data.posts && Array.isArray(postsResponse.data.posts)) {
-            userPosts = postsResponse.data.posts.filter((post: any) => post.userId === userId);
-          } else if (typeof postsResponse.data === 'object') {
-            userPosts = [];
-          }
-          
-          console.log(`ProfileScreen: Found ${userPosts.length} posts for user`);
-          
-          const fetchedPosts = userPosts.map((post: any) => {
-            // Handle media in a similar way to products
-            let imageUrl = 'https://robohash.org/post' + post.id + '?set=set4';
-            let mediaType: 'image' | 'video' = 'image';
-            let mediaUrl = '';
-            
-            if (post.media && post.media.length > 0) {
-              if (typeof post.media[0] === 'string') {
-                mediaUrl = formatImageUrl(post.media[0]);
-                mediaType = isVideoUrl(mediaUrl) ? 'video' : 'image';
-                imageUrl = mediaUrl;
-              } else if (post.media[0].url) {
-                mediaUrl = formatImageUrl(post.media[0].url);
-                mediaType = isVideoUrl(mediaUrl) ? 'video' : 'image';
-                imageUrl = mediaUrl;
-              }
+          // Update user stats with post count
+          setUser(prevUser => {
+            if (prevUser) {
+              return {
+                ...prevUser,
+                stats: {
+                  ...prevUser.stats,
+                  posts: fetchedPosts.length
+                }
+              };
             }
-            
-            return {
-              id: post.id,
-              title: post.title || "Untitled Post",
-              content: post.content,
-              likes: post.likes || 0,
-              image: { uri: imageUrl },
-              mediaType: mediaType,
-              mediaUrl: mediaUrl
-            };
+            return prevUser;
           });
-          
-          // Check if component is still mounted and focused before updating state
-          if (isFocused.current) {
-            setPosts(fetchedPosts);
-            
-            // Update user stats with post count
-            setUser(prevUser => {
-              if (prevUser) {
-                return {
-                  ...prevUser,
-                  stats: {
-                    ...prevUser.stats,
-                    posts: fetchedPosts.length
-                  }
-                };
-              }
-              return prevUser;
-            });
-          }
-        } else {
-          console.log("ProfileScreen: No posts data in response");
-          if (isFocused.current) {
-            setPosts([]);
-          }
         }
-      } catch (postError: any) {
-        console.error("Error fetching posts:", postError.message);
-        if (postError.response) {
-          console.error(`Status code: ${postError.response.status}, data:`, postError.response.data);
-        }
+      } catch (postError) {
+        console.error("Error in post fetching:", postError);
         if (isFocused.current) {
           setPosts([]);
         }
@@ -420,97 +267,28 @@ const ProfileScreen = () => {
       
       // Fetch products
       try {
-        console.log("ProfileScreen: Fetching products");
-        try {
-          const userProducts = await getUserProducts(userId);
-          console.log(`ProfileScreen: Received ${userProducts.length} products`);
+        const fetchedProducts = await fetchUserProducts(userId);
+        
+        // Check if component is still mounted and focused before updating state
+        if (isFocused.current) {
+          setProducts(fetchedProducts);
           
-          const fetchedProducts = userProducts.map((product: any) => {
-            // Handle media from the API format
-            let imageUrl = 'https://robohash.org/product' + product.id + '?set=set4';
-            let mediaType: 'image' | 'video' = 'image';
-            let mediaUrl = '';
-            
-            if (product.media && product.media.length > 0) {
-              // Check if media is an array of strings or objects
-              if (typeof product.media[0] === 'string') {
-                mediaUrl = formatImageUrl(product.media[0]);
-                mediaType = isVideoUrl(mediaUrl) ? 'video' : 'image';
-                imageUrl = mediaUrl;
-              } else if (product.media[0].url) {
-                mediaUrl = formatImageUrl(product.media[0].url);
-                mediaType = isVideoUrl(mediaUrl) ? 'video' : 'image';
-                imageUrl = mediaUrl;
-              }
+          // Update user stats with product count
+          setUser(prevUser => {
+            if (prevUser) {
+              return {
+                ...prevUser,
+                stats: {
+                  ...prevUser.stats,
+                  products: fetchedProducts.length
+                }
+              };
             }
-            
-            return {
-              id: product.id,
-              name: product.name || "Untitled Product",
-              price: product.price || 0,
-              rating: 4.5,
-              sold: product.sold || 0,
-              image: { uri: imageUrl },
-              mediaType: mediaType,
-              mediaUrl: mediaUrl
-            };
+            return prevUser;
           });
-          
-          console.log(`ProfileScreen: Processed ${fetchedProducts.length} products for display`);
-          
-          // Check if component is still mounted and focused before updating state
-          if (isFocused.current) {
-            setProducts(fetchedProducts);
-            
-            // Update user stats with product count
-            setUser(prevUser => {
-              if (prevUser) {
-                return {
-                  ...prevUser,
-                  stats: {
-                    ...prevUser.stats,
-                    products: fetchedProducts.length
-                  }
-                };
-              }
-              return prevUser;
-            });
-          }
-        } catch (productApiError: any) {
-          console.error("Error in getUserProducts API call:", productApiError.message);
-          if (productApiError.response) {
-            console.error(`Status code: ${productApiError.response.status}, data:`, productApiError.response.data);
-          }
-          // Try fallback to direct API call if the helper function fails
-          const productsResponse = await api.get(`/pg/products`);
-          if (productsResponse?.data) {
-            let userProducts = [];
-            
-            if (Array.isArray(productsResponse.data)) {
-              userProducts = productsResponse.data.filter((product: any) => product.userId === userId);
-            } else if (productsResponse.data.products && Array.isArray(productsResponse.data.products)) {
-              userProducts = productsResponse.data.products.filter((product: any) => product.userId === userId);
-            }
-            
-            console.log(`ProfileScreen: Found ${userProducts.length} products with fallback`);
-            
-            if (isFocused.current) {
-              setProducts(userProducts.map((product: any) => ({
-                id: product.id,
-                name: product.name || "Untitled Product",
-                price: product.price || 0,
-                rating: 4.5,
-                sold: product.sold || 0,
-                image: { uri: formatImageUrl(product.media?.[0] || '') },
-              })));
-            }
-          }
         }
-      } catch (productError: any) {
-        console.error("Error fetching products:", productError.message);
-        if (productError.response) {
-          console.error(`Status code: ${productError.response.status}, data:`, productError.response.data);
-        }
+      } catch (productError) {
+        console.error("Error in product fetching:", productError);
         if (isFocused.current) {
           setProducts([]);
         }
@@ -568,109 +346,13 @@ const ProfileScreen = () => {
   const postsWithButton = [...posts, newPostButton];
   const productsWithButton = [...products, newProductButton];
   
-  // Helper function to check if the item is a button
-  const isButtonItem = (item: BaseItem): boolean => {
-    return item.isButton === true;
-  };
-
   // Render grid items (posts or products)
   const renderItem = ({ item }: { item: BaseItem }) => (
-    <View
-      style={{
-        padding: paddingSize,
-        width: `${100 / numColumns}%`,
-      }}
-    >
-      {isButtonItem(item) ? (
-        // "Create New" Button
-        <TouchableOpacity 
-          onPress={() => {
-            if (activeTab === 'posts') {
-              router.push("/(root)/(createPosts)/createPosts");
-            } else {
-              router.push("/(root)/(createProducts)/createProducts");
-            }
-          }}
-          className="h-40 rounded-xl overflow-hidden"
-        >
-          <LinearGradient
-            colors={['#9333EA', '#C084FC']}
-            className="w-full h-full items-center justify-center"
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Feather name="plus" size={34} color="white" />
-            <Text className="text-white font-medium mt-2">
-              {activeTab === 'posts' ? 'New Post' : 'Add Product'}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      ) : isPostItem(item) ? (
-        // Post Item
-        <TouchableOpacity className="rounded-xl overflow-hidden shadow-sm bg-white border border-pink-50">
-          {item.mediaType === 'video' && item.mediaUrl ? (
-            <VideoThumbnail
-              videoUrl={item.mediaUrl}
-              width="100%"
-              height={150}
-              onPress={() => {
-                console.log("Video post clicked:", item.id);
-                // Navigate to post detail view
-              }}
-            />
-          ) : (
-            <Image 
-              source={item.image} 
-              style={{ width: '100%', height: 150 }}
-              resizeMode="cover"
-            />
-          )}
-          <View className="p-2">
-            <Text className="text-gray-800 font-medium" numberOfLines={1}>{item.title}</Text>
-            <View className="flex-row items-center mt-1">
-              <Ionicons name="heart" size={12} color="#FF2442" />
-              <Text className="text-xs text-gray-500 ml-1">{item.likes || 0}</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      ) : isProductItem(item) ? (
-        // Product Item
-        <TouchableOpacity className="rounded-xl overflow-hidden shadow-sm bg-white border border-pink-50">
-          {item.mediaType === 'video' && item.mediaUrl ? (
-            <VideoThumbnail
-              videoUrl={item.mediaUrl}
-              width="100%"
-              height={150}
-              onPress={() => {
-                console.log("Video product clicked:", item.id);
-                // Navigate to product detail view
-              }}
-            />
-          ) : (
-            <Image 
-              source={item.image} 
-              style={{ width: '100%', height: 150 }}
-              resizeMode="cover"
-            />
-          )}
-          <View className="absolute top-2 right-2 bg-purple-500 px-2 py-0.5 rounded-full">
-            <Text className="text-white text-xs font-bold">${item.price}</Text>
-          </View>
-          <View className="p-2">
-            <Text className="text-gray-800 font-medium" numberOfLines={1}>{item.name}</Text>
-            <View className="flex-row items-center justify-between mt-1">
-              <View className="flex-row items-center">
-                <FontAwesome name="star" size={10} color="#FBBF24" />
-                <Text className="text-xs text-gray-500 ml-1">{item.rating || 4.5}</Text>
-              </View>
-              <Text className="text-xs text-gray-400">{item.sold || 0} sold</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      ) : (
-        <View />
-      )}
-    </View>
+    <RenderGridItem 
+      item={item} 
+      paddingSize={paddingSize} 
+      activeTab={activeTab} 
+    />
   );
   
   // Retry function

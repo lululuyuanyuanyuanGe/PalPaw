@@ -1,5 +1,5 @@
 import { sequelize } from '../config/postgres.js';
-import User from './PostgresUser.js';
+import User from './User.js';
 import Post from './Post.js';
 import Comment from './Comment.js';
 import Like from './Like.js';

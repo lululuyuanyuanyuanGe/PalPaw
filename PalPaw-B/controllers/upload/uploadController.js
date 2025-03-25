@@ -3,6 +3,8 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
 import Post from '../../models/Post.js';
+import Product from '../../models/Product.js';
+import User from '../../models/User.js';
 
 // Configure multer storage
 const storage = multer.diskStorage({
@@ -197,4 +199,142 @@ export const handlePostMulterError = (err, req, res, next) => {
     });
   }
   next();
+};
+
+/**
+ * Get posts for a user
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const getUserPosts = async (req, res) => {
+  try {
+    // Get user ID from params or from authenticated user
+    const userId = req.params.userId || req.user.id;
+
+    // Fetch posts for the user
+    const posts = await Post.findAll({
+      where: { userId },
+      order: [['createdAt', 'DESC']]
+    });
+
+    return res.status(200).json({
+      success: true,
+      posts
+    });
+  } catch (error) {
+    console.error('Error fetching user posts:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while fetching posts',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get a specific post by ID
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const getPostById = async (req, res) => {
+  try {
+    const postId = req.params.postId;
+    
+    const post = await Post.findByPk(postId, {
+      include: [
+        {
+          model: User,
+          attributes: ['id', 'username', 'avatar']
+        }
+      ]
+    });
+    
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found'
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      post
+    });
+  } catch (error) {
+    console.error('Error fetching post:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while fetching post',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get products for a user
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const getUserProducts = async (req, res) => {
+  try {
+    // Get user ID from params or from authenticated user
+    const userId = req.params.userId || req.user.id;
+
+    // Fetch products for the user
+    const products = await Product.findAll({
+      where: { userId },
+      order: [['createdAt', 'DESC']]
+    });
+
+    return res.status(200).json({
+      success: true,
+      products
+    });
+  } catch (error) {
+    console.error('Error fetching user products:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while fetching products',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get a specific product by ID
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const getProductById = async (req, res) => {
+  try {
+    const productId = req.params.productId;
+    
+    const product = await Product.findByPk(productId, {
+      include: [
+        {
+          model: User,
+          attributes: ['id', 'username', 'avatar']
+        }
+      ]
+    });
+    
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      product
+    });
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while fetching product',
+      error: error.message
+    });
+  }
 };

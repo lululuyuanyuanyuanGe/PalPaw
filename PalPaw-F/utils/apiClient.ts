@@ -98,10 +98,14 @@ export const endpoints = {
   posts: {
     create: '/pg/posts',
     list: '/pg/posts',
+    userPosts: '/upload/posts',
+    postById: '/upload/post',
   },
   products: {
     create: '/pg/products',
     list: '/pg/products',
+    userProducts: '/upload/products',
+    productById: '/upload/product',
   },
 };
 
@@ -163,6 +167,50 @@ export const productsService = {
 };
 
 /**
+ * Get user posts
+ * @param userId User ID
+ * @returns Promise with user posts
+ */
+export const getUserPosts = async (userId: string) => {
+  try {
+    console.log(`API: Fetching posts for user ${userId}`);
+    const response = await api.get(`${endpoints.posts.userPosts}/${userId}`);
+    
+    if (response.data && response.data.success) {
+      return response.data.posts;
+    }
+    
+    console.log('API: No posts found or invalid response structure');
+    return [];
+  } catch (error) {
+    console.error('API: Error fetching user posts:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get post by ID
+ * @param postId Post ID
+ * @returns Promise with post data
+ */
+export const getPostById = async (postId: string) => {
+  try {
+    console.log(`API: Fetching post ${postId}`);
+    const response = await api.get(`${endpoints.posts.postById}/${postId}`);
+    
+    if (response.data && response.data.success) {
+      return response.data.post;
+    }
+    
+    console.log('API: Post not found or invalid response structure');
+    return null;
+  } catch (error) {
+    console.error('API: Error fetching post:', error);
+    throw error;
+  }
+};
+
+/**
  * Get user products
  * @param userId User ID
  * @param status Product status (default: 'active')
@@ -171,16 +219,38 @@ export const productsService = {
 export const getUserProducts = async (userId: string, status: string = 'active') => {
   try {
     console.log(`API: Fetching products for user ${userId} with status ${status}`);
-    const response = await api.get(`/pg/products/user/${userId}?status=${status}`);
+    const response = await api.get(`${endpoints.products.userProducts}/${userId}?status=${status}`);
     
     if (response.data && response.data.success) {
-      return response.data.products; // The controller returns { success, count, products }
+      return response.data.products;
     }
     
     console.log('API: No products found or invalid response structure');
     return [];
   } catch (error) {
     console.error('API: Error fetching user products:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get product by ID
+ * @param productId Product ID
+ * @returns Promise with product data
+ */
+export const getProductById = async (productId: string) => {
+  try {
+    console.log(`API: Fetching product ${productId}`);
+    const response = await api.get(`${endpoints.products.productById}/${productId}`);
+    
+    if (response.data && response.data.success) {
+      return response.data.product;
+    }
+    
+    console.log('API: Product not found or invalid response structure');
+    return null;
+  } catch (error) {
+    console.error('API: Error fetching product:', error);
     throw error;
   }
 };

@@ -19,7 +19,7 @@ const app = express();
 
 // Connect to PostgreSQL and synchronize models
 testConnection();
-syncModels(true); // Force sync once to update schema
+syncModels(); // Force sync once to update schema
 
 // Middleware
 app.use(cors());
