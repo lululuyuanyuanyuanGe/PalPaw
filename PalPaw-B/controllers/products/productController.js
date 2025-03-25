@@ -8,11 +8,22 @@ import Product from '../../models/Product.js';
 // Simple file storage setup - similar to posts
 const simpleStorage = multer.diskStorage({
   destination: function(req, file, cb) {
-    const uploadDir = path.join(process.cwd(), 'uploads', 'products');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    // Get the user ID from the authenticated request
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return cb(new Error('User ID not available for file upload'), null);
     }
-    cb(null, uploadDir);
+    
+    // Create path structure: uploads/{userId}/products
+    const userUploadDir = path.join(process.cwd(), 'uploads', userId.toString(), 'products');
+    
+    // Create directories recursively if they don't exist
+    if (!fs.existsSync(userUploadDir)) {
+      fs.mkdirSync(userUploadDir, { recursive: true });
+    }
+    
+    cb(null, userUploadDir);
   },
   filename: function(req, file, cb) {
     const uniqueName = `${uuidv4()}_${file.originalname}`;
@@ -24,6 +35,41 @@ const simpleStorage = multer.diskStorage({
 const simpleUpload = multer({ 
   storage: simpleStorage,
   limits: { fileSize: 15 * 1024 * 1024 } // 15MB limit
+});
+
+// Configure multer storage for product uploads
+const productStorage = multer.diskStorage({
+  destination: function(req, file, cb) {
+    // Get the user ID from the authenticated request
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return cb(new Error('User ID not available for file upload'), null);
+    }
+    
+    // Create path structure: uploads/{userId}/products
+    const userUploadDir = path.join(process.cwd(), 'uploads', userId.toString(), 'products');
+    
+    // Create directories recursively if they don't exist
+    if (!fs.existsSync(userUploadDir)) {
+      fs.mkdirSync(userUploadDir, { recursive: true });
+    }
+    
+    cb(null, userUploadDir);
+  },
+  filename: function(req, file, cb) {
+    const uniqueName = `${uuidv4()}_${file.originalname}`;
+    cb(null, uniqueName);
+  }
+});
+
+// Product upload middleware with increased limits
+export const productUpload = multer({ 
+  storage: productStorage,
+  limits: { 
+    fileSize: 100 * 1024 * 1024, // 100MB limit for larger product images/videos
+    fieldSize: 25 * 1024 * 1024 // 25MB for field size limit
+  }
 });
 
 // Simple product creation with media - similar to posts controller
@@ -133,26 +179,12 @@ export const createProductWithMedia = async (req, res) => {
       // If media is an array of files
       if (Array.isArray(req.files.media)) {
         for (const file of req.files.media) {
-          const fileName = `${uuidv4()}_${file.originalname || 'upload'}`;
-          const filePath = path.join(uploadDir, fileName);
-          
-          // Copy file from temp location to uploads directory
-          fs.copyFileSync(file.path, filePath);
-          
-          // Add to mediaUrls array
-          mediaUrls.push(`/uploads/products/${fileName}`);
+          mediaUrls.push(`/uploads/products/${file.filename || file.originalFilename}`);
         }
       } else {
         // If media is a single file
         const file = req.files.media;
-        const fileName = `${uuidv4()}_${file.originalname || 'upload'}`;
-        const filePath = path.join(uploadDir, fileName);
-        
-        // Copy file from temp location to uploads directory
-        fs.copyFileSync(file.path, filePath);
-        
-        // Add to mediaUrls array
-        mediaUrls.push(`/uploads/products/${fileName}`);
+        mediaUrls.push(`/uploads/products/${file.filename || file.originalFilename}`);
       }
     }
     
@@ -308,39 +340,49 @@ export const uploadProductFiles = (req, res, next) => {
   });
 };
 
-// Error handler for multer errors
+/**
+ * Error handler for multer errors in product uploads
+ */
 export const handleProductMulterError = (err, req, res, next) => {
-  if (req.multerError) {
-    console.error('Handling multer error:', req.multerError.message || err.message);
+  if (err instanceof multer.MulterError) {
+    console.error('Multer error in product upload:', err.message);
     
-    // Check for specific error types
+    // Handle specific multer errors
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({
         success: false,
-        message: 'File too large. Maximum file size is 15MB.'
+        message: 'File too large. Maximum file size is 100MB.'
       });
     }
     
-    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-      return res.status(400).json({
+    if (err.code === 'LIMIT_FIELD_SIZE') {
+      return res.status(413).json({
         success: false,
-        message: 'Too many files uploaded. Maximum is 10 images.'
-      });
-    }
-    
-    if (err.message && err.message.includes('Unexpected end of form')) {
-      return res.status(400).json({
-        success: false,
-        message: 'Upload failed: form data was truncated or malformed. Try reducing the number or size of images.'
+        message: 'Form field too large.'
       });
     }
     
     return res.status(400).json({
       success: false,
-      message: req.multerError.message || 'Error uploading files'
+      message: `Upload error: ${err.message}`
+    });
+  } else if (err) {
+    console.error('Unknown error during product upload:', err.message);
+    
+    // Handle "Unexpected end of form" specifically
+    if (err.message && err.message.includes('Unexpected end of form')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Upload was interrupted. Please try again with a smaller file or check your connection.'
+      });
+    }
+    
+    return res.status(500).json({
+      success: false,
+      message: 'An unexpected error occurred during file upload'
     });
   }
-  next(err);
+  next();
 };
 
 // Create a new product
@@ -806,8 +848,7 @@ export const deleteProduct = async (req, res) => {
 };
 
 /**
- * Creates a new product with media files using express-form-data
- * This approach matches how posts are handled
+ * Creates a new product with media files using multer
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
@@ -816,6 +857,15 @@ export const createProductWithFormData = async (req, res) => {
     console.log('createProductWithFormData called');
     console.log('Request body:', req.body);
     console.log('Request files:', req.files);
+
+    // Check if files exist
+    if (!req.files || req.files.length === 0) {
+      console.error('No files received in the request');
+      return res.status(400).json({
+        success: false,
+        message: 'No media files uploaded. Please include at least one image.'
+      });
+    }
 
     // Extract data from request body
     const {
@@ -876,72 +926,38 @@ export const createProductWithFormData = async (req, res) => {
       free: shippingOptions.includes('Free Shipping')
     };
 
-    // Create upload directory if it doesn't exist
-    const uploadDir = path.join(process.cwd(), 'uploads', 'products');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    // Process media files from express-form-data
-    const mediaUrls = [];
+    // Process media files using multer uploaded files
+    const mediaObjects = [];
+    const userId = req.user.id;
     
-    // In express-form-data, files are directly in req.files as an object
-    // with the field name as key
-    if (req.files) {
-      // Check for media field
-      if (req.files.media) {
-        const mediaFiles = Array.isArray(req.files.media) ? req.files.media : [req.files.media];
+    if (req.files && Array.isArray(req.files)) {
+      req.files.forEach(file => {
+        // Log each file for debugging
+        console.log('Processing file:', {
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size,
+          filename: file.filename
+        });
         
-        console.log(`Processing ${mediaFiles.length} media files`);
+        // Get the file path relative to the server using the new structure
+        const fileUrl = `/uploads/${userId}/products/${file.filename}`;
         
-        for (const file of mediaFiles) {
-          // Generate a unique filename
-          const fileName = `${uuidv4()}_${path.basename(file.path)}`;
-          const destPath = path.join(uploadDir, fileName);
-          
-          // Copy file from tmp to uploads directory
-          try {
-            fs.copyFileSync(file.path, destPath);
-            mediaUrls.push(`/uploads/products/${fileName}`);
-            console.log(`Copied file to ${destPath}`);
-          } catch (err) {
-            console.error('Error copying file:', err);
-          }
-        }
-      }
-      
-      // Also check for images field
-      if (req.files.images) {
-        const imageFiles = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
+        // Determine media type based on mimetype
+        const mediaType = file.mimetype.startsWith('image/') ? 'image' : 
+                          file.mimetype.startsWith('video/') ? 'video' : 'image'; // Default to image if unknown
         
-        console.log(`Processing ${imageFiles.length} image files`);
-        
-        for (const file of imageFiles) {
-          // Generate a unique filename
-          const fileName = `${uuidv4()}_${path.basename(file.path)}`;
-          const destPath = path.join(uploadDir, fileName);
-          
-          // Copy file from tmp to uploads directory
-          try {
-            fs.copyFileSync(file.path, destPath);
-            mediaUrls.push(`/uploads/products/${fileName}`);
-            console.log(`Copied file to ${destPath}`);
-          } catch (err) {
-            console.error('Error copying file:', err);
-          }
-        }
-      }
+        // Create media object with all relevant details
+        mediaObjects.push({
+          url: fileUrl,
+          type: mediaType,
+          size: file.size,
+          filename: file.filename
+        });
+      });
     }
     
-    // Create product media objects for JSONB field
-    const mediaObjects = mediaUrls.map(url => ({
-      url,
-      type: 'image'
-    }));
-    
-    console.log('Creating product with data:', { 
-      name, description, price, category, condition, mediaObjects 
-    });
+    console.log('Media objects to save:', mediaObjects);
     
     if (!req.user || !req.user.id) {
       console.error('User not available in request:', req.user);

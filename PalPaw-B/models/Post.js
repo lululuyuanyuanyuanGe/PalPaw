@@ -26,9 +26,9 @@ const Post = sequelize.define('Post', {
     allowNull: true,
     defaultValue: ''
   },
-  // Array of media URLs (images, videos)
+  // Media items with URLs and types
   media: {
-    type: DataTypes.ARRAY(DataTypes.STRING),
+    type: DataTypes.ARRAY(DataTypes.JSONB),
     defaultValue: []
   },
   // Like count
@@ -38,7 +38,7 @@ const Post = sequelize.define('Post', {
   },
   // Optional location data - human readable address
   location: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: true
   },
   // Optional tags (array of strings)

@@ -1,5 +1,10 @@
 import express from 'express';
-import { createPostWithMedia } from '../controllers/posts/uploadController.js';
+import { createPostWithMedia, upload, handlePostMulterError } from '../controllers/posts/uploadPostsController.js';
+import { 
+  createProductWithFormData, 
+  productUpload, 
+  handleProductMulterError 
+} from '../controllers/products/productController.js';
 import { authenticate } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -9,6 +14,13 @@ const router = express.Router();
  * @desc Upload media files and create a post
  * @access Private
  */
-router.post('/post', authenticate, createPostWithMedia);
+router.post('/post', authenticate, upload.array('media'), handlePostMulterError, createPostWithMedia);
 
-export default router; 
+/**
+ * @route POST /api/upload/product
+ * @desc Upload media files and create a product
+ * @access Private
+ */
+router.post('/product', authenticate, productUpload.array('media'), handleProductMulterError, createProductWithFormData);
+
+export default router;

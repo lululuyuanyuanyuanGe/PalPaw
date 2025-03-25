@@ -10,9 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   FlatList,
-  Alert,
   Switch,
-  Modal,
   BackHandler
 } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
@@ -34,7 +32,7 @@ import {
   RestoreDraftModal,
   SuccessModal,
   ErrorModal
-} from './modal';
+} from './modals';
 
 const PRODUCT_DRAFT_KEY = 'product_draft';
 

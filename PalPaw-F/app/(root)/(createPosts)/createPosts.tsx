@@ -10,9 +10,6 @@ import {
   Platform,
   ActivityIndicator,
   FlatList,
-  Alert,
-  Modal,
-  SafeAreaView,
   Dimensions,
   BackHandler
 } from 'react-native';
@@ -23,6 +20,7 @@ import { Ionicons, MaterialCommunityIcons, Feather, AntDesign } from '@expo/vect
 import { useRouter } from 'expo-router';
 import { createPost, Media as ServiceMedia, PostData, getPetTagSuggestions, PetTagCategory } from './postService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { RestoreDraftModal, SuccessModal, ErrorModal, TagModal } from './modals';
 
 interface Media {
   uri: string;
@@ -86,7 +84,6 @@ const CreatePostScreen: React.FC = () => {
   const [tagModalVisible, setTagModalVisible] = useState(false);
   const [tagCategories, setTagCategories] = useState<PetTagCategory[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
-  const [customTag, setCustomTag] = useState('');
   const [hasDraft, setHasDraft] = useState(false);
   const [draftSaving, setDraftSaving] = useState(false);
   const [isDraftRestored, setIsDraftRestored] = useState(false);
@@ -119,7 +116,6 @@ const CreatePostScreen: React.FC = () => {
         title,
         content,
         media,
-        postType: 'pet',
         location: locationText,
         locationCoordinates: locationData || undefined,
         tags: tags.length > 0 ? tags : undefined,
@@ -383,10 +379,6 @@ const CreatePostScreen: React.FC = () => {
     setMedia(newMedia);
   };
 
-  // Remove a tag
-  const removeTag = (tag: string) => {
-    setTags(tags.filter(t => t !== tag));
-  };
 
   // Handle post submission
   const handleSubmit = async () => {
@@ -411,7 +403,6 @@ const CreatePostScreen: React.FC = () => {
         title: title.trim(),  // Ensure trimmed title is used
         content: content.trim(),
         media: media as ServiceMedia[],
-        postType: 'pet',
       };
       
       console.log('Post data being sent:', postData);
@@ -471,43 +462,6 @@ const CreatePostScreen: React.FC = () => {
       </View>
     );
   };
-
-  // Render a tag item
-  const renderTagItem = ({ item }: { item: string }) => (
-    <View className="bg-purple-100 rounded-full px-3 py-1 mr-2 mb-2 flex-row items-center">
-      <Text className="text-purple-700 text-xs font-rubik mr-1">{item}</Text>
-      <TouchableOpacity onPress={() => removeTag(item)}>
-        <Ionicons name="close-circle" size={16} color="#8B5CF6" />
-      </TouchableOpacity>
-    </View>
-  );
-
-  // Render tag category in modal
-  const renderTagCategory = ({ item }: { item: PetTagCategory }) => (
-    <View className="mb-5">
-      <Text className="text-gray-700 font-rubik-medium mb-2">{item.name}</Text>
-      <View className="flex-row flex-wrap">
-        {item.tags.map((tag) => (
-          <TouchableOpacity 
-            key={tag}
-            onPress={() => toggleTag(tag)}
-            className={`rounded-full px-3 py-1 mr-2 mb-2 ${
-              tags.includes(tag) ? 'bg-opacity-100' : 'bg-opacity-20'
-            }`}
-            style={{ backgroundColor: item.color + (tags.includes(tag) ? '' : '40') }}
-          >
-            <Text 
-              className={`text-xs font-rubik ${
-                tags.includes(tag) ? 'text-white' : 'text-gray-700'
-              }`}
-            >
-              {tag}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
 
   return (
     <KeyboardAvoidingView
@@ -716,186 +670,33 @@ const CreatePostScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* Pet Tag Selection Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
+      {/* Modals */}
+      <TagModal
         visible={tagModalVisible}
-        onRequestClose={() => setTagModalVisible(false)}
-      >
-        <SafeAreaView className="flex-1 bg-white">
-          <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
-            <TouchableOpacity onPress={() => setTagModalVisible(false)}>
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
-            <Text className="text-lg font-rubik-medium text-gray-800">Pet Tags</Text>
-            <TouchableOpacity 
-              onPress={() => {
-                if (customTag.trim().length > 0) {
-                  if (!tags.includes(customTag.trim())) {
-                    setTags([...tags, customTag.trim()]);
-                  }
-                  setCustomTag('');
-                }
-                setTagModalVisible(false);
-              }}
-            >
-              <Text className="text-purple-600 font-rubik-medium">Done</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <View className="p-4">
-            <Text className="text-base font-rubik-medium text-gray-800 mb-2">Add Tags</Text>
-            <Text className="text-sm font-rubik-regular text-gray-600 mb-4">
-              Tags help others discover your post
-            </Text>
-            
-            {/* Custom Tag Input */}
-            <View className="flex-row items-center bg-gray-100 rounded-full px-4 mb-4">
-              <TextInput
-                className="flex-1 py-2 text-gray-800 font-rubik-regular"
-                placeholder="Add a custom tag..."
-                placeholderTextColor="#9CA3AF"
-                value={customTag}
-                onChangeText={setCustomTag}
-                onSubmitEditing={() => {
-                  if (customTag.trim().length > 0) {
-                    if (!tags.includes(customTag.trim())) {
-                      setTags([...tags, customTag.trim()]);
-                    }
-                    setCustomTag('');
-                  }
-                }}
-              />
-              {customTag.trim().length > 0 && (
-                <TouchableOpacity onPress={() => {
-                  if (!tags.includes(customTag.trim())) {
-                    setTags([...tags, customTag.trim()]);
-                  }
-                  setCustomTag('');
-                }}>
-                  <AntDesign name="pluscircle" size={20} color="#7C3AED" />
-                </TouchableOpacity>
-              )}
-            </View>
-            
-            {/* Selected Tags */}
-            {tags.length > 0 && (
-              <View className="mb-4">
-                <Text className="text-sm font-rubik-medium text-gray-800 mb-2">Your Tags</Text>
-                <View className="flex-row flex-wrap">
-                  {tags.map((tag, index) => (
-                    <View key={index} className="flex-row items-center bg-purple-100 rounded-full px-3 py-1 mr-2 mb-2">
-                      <Text className="text-purple-700 font-rubik-regular">{tag}</Text>
-                      <TouchableOpacity 
-                        onPress={() => {
-                          const newTags = [...tags];
-                          newTags.splice(index, 1);
-                          setTags(newTags);
-                        }}
-                        className="ml-1"
-                      >
-                        <Ionicons name="close-circle" size={16} color="#7C3AED" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-            
-            {/* Suggested Tag Categories */}
-            {tagCategories.length > 0 ? (
-              <View>
-                <Text className="text-sm font-rubik-medium text-gray-800 mb-2">Suggested Categories</Text>
-                {tagCategories.map((category, catIndex) => (
-                  <View key={catIndex} className="mb-4">
-                    <Text className="text-xs font-rubik-medium text-gray-500 uppercase mb-2">{category.name}</Text>
-                    <View className="flex-row flex-wrap">
-                      {category.tags.map((tag, tagIndex) => (
-                        <TouchableOpacity
-                          key={tagIndex}
-                          onPress={() => {
-                            if (!tags.includes(tag)) {
-                              setTags([...tags, tag]);
-                            }
-                          }}
-                          className={`mr-2 mb-2 px-3 py-1 rounded-full ${
-                            tags.includes(tag) ? 'bg-purple-500' : 'bg-gray-100'
-                          }`}
-                        >
-                          <Text 
-                            className={`font-rubik-regular ${
-                              tags.includes(tag) ? 'text-white' : 'text-gray-700'
-                            }`}
-                          >
-                            {tag}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                ))}
-              </View>
-            ) : loadingTags ? (
-              <View className="py-8 items-center">
-                <ActivityIndicator color="#7C3AED" />
-                <Text className="mt-2 text-gray-500 font-rubik-regular">Loading suggestions...</Text>
-              </View>
-            ) : null}
-          </View>
-        </SafeAreaView>
-      </Modal>
+        onClose={() => setTagModalVisible(false)}
+        tags={tags}
+        setTags={setTags}
+        tagCategories={tagCategories}
+        loadingTags={loadingTags}
+      />
 
-      {/* Custom Restore Draft Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
+      <RestoreDraftModal
         visible={restoreModalVisible}
-        onRequestClose={() => setRestoreModalVisible(false)}
-      >
-        <View className="flex-1 justify-center items-center bg-black/50">
-          <View className="bg-white w-[85%] rounded-xl overflow-hidden shadow-lg">
-            <View className="bg-purple-50 p-4 border-b border-purple-100">
-              <Text className="text-lg font-rubik-medium text-purple-800 text-center">Restore Draft</Text>
-            </View>
-            
-            <View className="px-5 py-6">
-              <Text className="text-base text-gray-700 font-rubik text-center mb-6">
-                You have an unsaved post draft. Would you like to restore it?
-              </Text>
-              
-              <View className="flex-row justify-center">
-                <TouchableOpacity 
-                  onPress={() => {
-                    clearDraft();
-                    setRestoreModalVisible(false);
-                  }}
-                  className="bg-gray-100 py-3 px-6 rounded-full mr-3"
-                >
-                  <Text className="text-gray-700 font-rubik-medium">DISCARD</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  onPress={() => {
-                    loadDraft();
-                    setRestoreModalVisible(false);
-                  }}
-                  className="bg-purple-500 py-3 px-6 rounded-full"
-                >
-                  <Text className="text-white font-rubik-medium">RESTORE</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setRestoreModalVisible(false)}
+        onRestore={() => {
+          loadDraft();
+          setRestoreModalVisible(false);
+        }}
+        onDiscard={() => {
+          clearDraft();
+          setRestoreModalVisible(false);
+        }}
+      />
 
-      {/* Custom Success Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
+      <SuccessModal
         visible={successModalVisible}
-        onRequestClose={() => {
+        message={successMessage}
+        onClose={() => {
           setSuccessModalVisible(false);
           // Clear form
           setTitle('');
@@ -907,76 +708,14 @@ const CreatePostScreen: React.FC = () => {
           // Navigate back
           router.back();
         }}
-      >
-        <View className="flex-1 justify-center items-center bg-black/50">
-          <View className="bg-white w-[85%] rounded-xl overflow-hidden shadow-lg">
-            <View className="bg-purple-500 p-4">
-              <Text className="text-lg font-rubik-medium text-white text-center">Success</Text>
-            </View>
-            
-            <View className="px-5 py-6 items-center">
-              <View className="mb-4 bg-green-100 p-3 rounded-full">
-                <Ionicons name="checkmark-circle" size={36} color="#10B981" />
-              </View>
-              
-              <Text className="text-base text-gray-700 font-rubik text-center mb-6">
-                {successMessage}
-              </Text>
-              
-              <TouchableOpacity 
-                onPress={() => {
-                  setSuccessModalVisible(false);
-                  // Clear form
-                  setTitle('');
-                  setContent('');
-                  setMedia([]);
-                  setLocationText('');
-                  setLocationData(null);
-                  setTags([]);
-                  // Navigate back
-                  router.back();
-                }}
-                className="bg-purple-500 py-3 px-6 rounded-full"
-              >
-                <Text className="text-white font-rubik-medium">OK</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      />
 
-      {/* Custom Error Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
+      <ErrorModal
         visible={errorModalVisible}
-        onRequestClose={() => setErrorModalVisible(false)}
-      >
-        <View className="flex-1 justify-center items-center bg-black/50">
-          <View className="bg-white w-[85%] rounded-xl overflow-hidden shadow-lg">
-            <View className="bg-rose-500 p-4">
-              <Text className="text-lg font-rubik-medium text-white text-center">{errorTitle}</Text>
-            </View>
-            
-            <View className="px-5 py-6 items-center">
-              <View className="mb-4 bg-rose-100 p-3 rounded-full">
-                <Ionicons name="alert-circle" size={36} color="#F43F5E" />
-              </View>
-              
-              <Text className="text-base text-gray-700 font-rubik text-center mb-6">
-                {errorMessage}
-              </Text>
-              
-              <TouchableOpacity 
-                onPress={() => setErrorModalVisible(false)}
-                className="bg-rose-500 py-3 px-6 rounded-full"
-              >
-                <Text className="text-white font-rubik-medium">OK</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        title={errorTitle}
+        message={errorMessage}
+        onClose={() => setErrorModalVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 };

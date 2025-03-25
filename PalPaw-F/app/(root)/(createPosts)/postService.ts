@@ -23,7 +23,6 @@ export interface PostData {
   location?: string;
   locationCoordinates?: LocationCoordinates;
   tags?: string[];
-  postType: 'pet' | 'market';
   price?: number;
   category?: string;
   shippingOptions?: string[];
@@ -73,7 +72,6 @@ export const createPost = async (data: PostData): Promise<{ success: boolean; me
     console.log('Title before appending:', data.title);
     formData.append('title', String(data.title.trim()));
     formData.append('content', data.content);
-    formData.append('postType', data.postType);
     
     // Log FormData (approximate, since FormData can't be directly logged)
     console.log('FormData entries:');
@@ -166,39 +164,6 @@ export const saveDraft = async (data: PostData): Promise<{ success: boolean; dra
 };
 
 /**
- * Uploads a single media file to get its URL before creating the full post
- * Useful for progressive uploads
- */
-export const uploadMedia = async (media: Media): Promise<{ success: boolean; url?: string }> => {
-  try {
-    const formData = new FormData();
-    formData.append('media', mediaToFormData(media, 0) as any);
-    
-    // Get auth token from AsyncStorage
-    const token = await AsyncStorage.getItem('authToken');
-    
-    const response = await fetch(`${API_BASE_URL}/media/upload`, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      },
-    });
-    
-    const responseData = await response.json();
-    
-    if (response.ok) {
-      return { success: true, url: responseData.url };
-    } else {
-      return { success: false };
-    }
-  } catch (error) {
-    console.error('Error uploading media:', error);
-    return { success: false };
-  }
-};
-
-/**
  * Get pet tag suggestions organized by categories
  * In a real app, this would fetch from the API
  */
@@ -237,92 +202,4 @@ export const getPetTagSuggestions = async (): Promise<PetTagCategory[]> => {
       color: '#3B82F6' // Blue
     }
   ];
-};
-
-/**
- * Updates an existing post with the given data
- * @param id Post ID to update
- * @param data Post data including title, content, and media
- * @returns Promise with the response from the server
- */
-export const updatePost = async (
-  id: string,
-  data: PostData
-): Promise<{ success: boolean; message: string; post?: any }> => {
-  try {
-    const formData = new FormData();
-    
-    // Add base post data
-    if (data.title) formData.append('title', String(data.title.trim()));
-    if (data.content !== undefined) formData.append('content', data.content);
-    
-    // Add optional fields if they exist
-    if (data.location !== undefined) formData.append('location', data.location);
-    if (data.price !== undefined) formData.append('price', data.price.toString());
-    if (data.category) formData.append('category', data.category);
-    
-    // Add location coordinates if available
-    if (data.locationCoordinates) {
-      formData.append('latitude', data.locationCoordinates.latitude.toString());
-      formData.append('longitude', data.locationCoordinates.longitude.toString());
-    }
-    
-    // Add arrays as JSON strings
-    if (data.tags && data.tags.length > 0) {
-      formData.append('tags', JSON.stringify(data.tags));
-    }
-    
-    if (data.shippingOptions && data.shippingOptions.length > 0) {
-      formData.append('shippingOptions', JSON.stringify(data.shippingOptions));
-    }
-    
-    // Add media files to be deleted if specified
-    if (data.mediaToDelete && data.mediaToDelete.length > 0) {
-      formData.append('mediaToDelete', JSON.stringify(data.mediaToDelete));
-    }
-    
-    // Add new media files
-    if (data.media) {
-      const newMedia = data.media.filter(item => !item.isExisting);
-      newMedia.forEach((item, index) => {
-        formData.append('media', mediaToFormData(item, index) as any);
-      });
-    }
-    
-    // Get auth token from AsyncStorage
-    const token = await AsyncStorage.getItem('authToken');
-    
-    // Make the API request
-    console.log(`Making PUT request to: ${API_BASE_URL}/posts/${id}`);
-    const response = await fetch(`${API_BASE_URL}/posts/${id}`, {
-      method: 'PUT',
-      body: formData,
-      headers: {
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      },
-    });
-    
-    console.log('Response status:', response.status);
-    const responseData = await response.json();
-    console.log('Response data:', responseData);
-    
-    if (response.ok) {
-      return { 
-        success: true, 
-        message: 'Post updated successfully!',
-        post: responseData.post
-      };
-    } else {
-      return { 
-        success: false, 
-        message: responseData.message || 'Failed to update post'
-      };
-    }
-  } catch (error) {
-    console.error('Error updating post:', error);
-    return { 
-      success: false, 
-      message: error instanceof Error ? error.message : 'An unexpected error occurred'
-    };
-  }
 };

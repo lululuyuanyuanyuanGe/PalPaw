@@ -3,17 +3,13 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import path from 'path';
-import formData from 'express-form-data';
-import os from 'os';
 
 import { testConnection } from './config/postgres.js'; // PostgreSQL connection
 import { syncModels } from './models/index.js'; // Sequelize models
 
 // Import routes
 import pgAuthRoutes from './routes/pgAuth.js'; // PostgreSQL auth routes
-import postRoutes from './routes/posts.js'; // Post routes
 import uploadRoutes from './routes/upload.js'; // Upload routes
-import productRoutes from './routes/products.js'; // Product routes
 import userRoutes from './routes/users.js'; // User routes
 
 // Load environment variables
@@ -23,12 +19,12 @@ const app = express();
 
 // Connect to PostgreSQL and synchronize models
 testConnection();
-syncModels(); // Set to true to force recreate tables: syncModels(true)
+syncModels(true); // Force sync once to update schema
 
 // Middleware
 app.use(cors());
 
-// Add raw body logging middleware before body parser
+// Add request logging middleware
 app.use((req, res, next) => {
   console.log('== REQUEST INFO ==');
   console.log('URL:', req.url);
@@ -37,26 +33,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// Options for express-form-data
-const formDataOptions = {
-  uploadDir: os.tmpdir(),
-  autoClean: true
-};
+// Increase size limits for larger uploads
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true, parameterLimit: 50000 }));
 
-// Parse multipart/form-data
-app.use(formData.parse(formDataOptions));
-// Delete files from the upload directory
-app.use(formData.format());
-// Change file objects to node stream.Readable
-app.use(formData.stream());
-// Union body and files
-app.use(formData.union());
-
-app.use(bodyParser.json());
-
-// Another middleware after body-parser to see what's available
+// Logging middleware to see body after parsing
 app.use((req, res, next) => {
-  if (req.method === 'POST') {
+  if (req.method === 'POST' && !req.url.startsWith('/api/upload/')) {
     console.log('== PARSED BODY ==');
     console.log('Body after parsing:', req.body);
   }
@@ -68,9 +51,7 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Routes
 app.use("/api/pg/auth", pgAuthRoutes); // PostgreSQL auth
-app.use("/api/pg/posts", postRoutes); // Post routes
 app.use("/api/upload", uploadRoutes); // Upload routes
-app.use("/api/pg/products", productRoutes); // Product routes
 app.use("/api/pg/users", userRoutes); // User routes
 
 // Home route
