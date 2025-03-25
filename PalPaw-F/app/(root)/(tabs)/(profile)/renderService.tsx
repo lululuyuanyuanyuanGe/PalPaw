@@ -10,8 +10,16 @@ export const formatImageUrl = (path: string | undefined): string => {
     return 'https://robohash.org/default?set=set4&bgset=bg1';
   }
   
+  // Log the path for debugging
+  console.log('Formatting URL for path:', path);
+  
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
+  }
+  
+  // Ensure path has a leading slash
+  if (!path.startsWith('/')) {
+    path = '/' + path;
   }
   
   return `${API_BASE_URL}${path}`;
@@ -27,14 +35,150 @@ export const isVideoUrl = (url: string): boolean => {
   
   for (const ext of videoExtensions) {
     if (lowercasedUrl.endsWith(ext)) {
+      console.log('Detected video URL by extension:', url);
       return true;
     }
   }
   
   // Also check if the URL contains a video indicator
-  return lowercasedUrl.includes('/video/') || 
+  const isVideo = lowercasedUrl.includes('/video/') || 
          lowercasedUrl.includes('video=true') || 
          lowercasedUrl.includes('type=video');
+         
+  if (isVideo) {
+    console.log('Detected video URL by indicator:', url);
+  }
+  
+  return isVideo;
+};
+
+// Helper function to process media files and select appropriate thumbnail
+const processMediaFiles = (mediaArray: any[]): { imageUrl: string, mediaType: 'image' | 'video', mediaUrl: string } => {
+  let imageUrl = '';
+  let mediaType: 'image' | 'video' = 'image';
+  let mediaUrl = '';
+  
+  console.log('Processing media array:', JSON.stringify(mediaArray));
+  
+  // Default to placeholder if no media
+  imageUrl = 'https://robohash.org/default?set=set4&bgset=bg1';
+  
+  if (!mediaArray || !Array.isArray(mediaArray) || mediaArray.length === 0) {
+    console.log('No media found, using default placeholder');
+    return { imageUrl, mediaType, mediaUrl };
+  }
+  
+  // First, try to find an image to use as thumbnail
+  const firstImage = mediaArray.find(item => {
+    if (typeof item === 'object' && item !== null && item.type) {
+      return item.type === 'image';
+    } else if (typeof item === 'string') {
+      return !isVideoUrl(item);
+    }
+    return false;
+  });
+  
+  if (firstImage) {
+    console.log('Found image for thumbnail:', 
+      typeof firstImage === 'object' ? JSON.stringify(firstImage) : firstImage);
+  }
+  
+  // Now look for videos
+  const videoMedia = mediaArray.find(item => {
+    if (typeof item === 'object' && item !== null && item.type) {
+      return item.type === 'video';
+    } else if (typeof item === 'string') {
+      return isVideoUrl(item);
+    }
+    return false;
+  });
+  
+  if (videoMedia) {
+    console.log('Found video media:', 
+      typeof videoMedia === 'object' ? JSON.stringify(videoMedia) : videoMedia);
+  }
+  
+  // If we found a video, use it for the mediaUrl and set type to video
+  if (videoMedia) {
+    mediaType = 'video';
+    
+    if (typeof videoMedia === 'object' && videoMedia !== null) {
+      // Make sure the URL is an absolute path
+      mediaUrl = formatImageUrl(videoMedia.url);
+      console.log('Using video URL from object:', mediaUrl);
+      
+      // If we also found an image, use that for the thumbnail
+      if (firstImage) {
+        if (typeof firstImage === 'object' && firstImage !== null) {
+          imageUrl = formatImageUrl(firstImage.url);
+          console.log('Using image URL from object as thumbnail:', imageUrl);
+        } else if (typeof firstImage === 'string') {
+          imageUrl = formatImageUrl(firstImage);
+          console.log('Using image string as thumbnail:', imageUrl);
+        }
+      } else {
+        // If no image is available, we still need to set the imageUrl
+        // but we'll set it to a placeholder instead of the video URL
+        // since using the video URL directly doesn't work well as a thumbnail
+        imageUrl = 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
+        console.log('No image found for thumbnail, using placeholder');
+      }
+    } else if (typeof videoMedia === 'string') {
+      mediaUrl = formatImageUrl(videoMedia);
+      console.log('Using video URL from string:', mediaUrl);
+      
+      // If we also found an image, use that for the thumbnail
+      if (firstImage && typeof firstImage === 'string') {
+        imageUrl = formatImageUrl(firstImage);
+        console.log('Using image string as thumbnail:', imageUrl);
+      } else {
+        // If no image is available, we'll use a placeholder
+        imageUrl = 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
+        console.log('No image found for thumbnail, using placeholder');
+      }
+    }
+  } else if (firstImage) {
+    // No videos, just use the first image
+    mediaType = 'image';
+    if (typeof firstImage === 'object' && firstImage !== null) {
+      mediaUrl = formatImageUrl(firstImage.url);
+      imageUrl = mediaUrl;
+      console.log('Using image URL from object for both media and thumbnail:', mediaUrl);
+    } else if (typeof firstImage === 'string') {
+      mediaUrl = formatImageUrl(firstImage);
+      imageUrl = mediaUrl;
+      console.log('Using image string for both media and thumbnail:', mediaUrl);
+    }
+  } else {
+    // No videos or images, use the first media item whatever it is
+    const firstMedia = mediaArray[0];
+    if (typeof firstMedia === 'object' && firstMedia !== null) {
+      mediaUrl = formatImageUrl(firstMedia.url || '');
+      mediaType = firstMedia.type === 'video' ? 'video' : 'image';
+      // For videos, use a placeholder for the thumbnail
+      if (mediaType === 'video') {
+        imageUrl = 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
+        console.log('Using first media item (video) with placeholder thumbnail:', mediaUrl);
+      } else {
+        imageUrl = mediaUrl;
+        console.log('Using first media item (image) for both media and thumbnail:', mediaUrl);
+      }
+    } else if (typeof firstMedia === 'string') {
+      mediaUrl = formatImageUrl(firstMedia);
+      mediaType = isVideoUrl(firstMedia) ? 'video' : 'image';
+      // For videos, use a placeholder for the thumbnail
+      if (mediaType === 'video') {
+        imageUrl = 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
+        console.log('Using first media string (video) with placeholder thumbnail:', mediaUrl);
+      } else {
+        imageUrl = mediaUrl;
+        console.log('Using first media string (image) for both media and thumbnail:', mediaUrl);
+      }
+    }
+  }
+  
+  console.log(`Media processing result: type=${mediaType}, imageUrl=${imageUrl}, mediaUrl=${mediaUrl}`);
+  return { imageUrl, mediaType, mediaUrl };
 };
 
 // Fetch user's posts
@@ -47,28 +191,17 @@ export const fetchUserPosts = async (userId: string): Promise<PostItem[]> => {
     console.log(`ProfileService: Received ${posts.length} posts`);
     
     const fetchedPosts = posts.map((post: any) => {
-      // Handle media as JSONB array from updated backend
+      // Default values
       let imageUrl = 'https://robohash.org/post' + post.id + '?set=set4';
       let mediaType: 'image' | 'video' = 'image';
       let mediaUrl = '';
       
+      // Process media array to find the right thumbnail
       if (post.media && Array.isArray(post.media) && post.media.length > 0) {
-        // Check if media is an array of JSONB objects (new format)
-        const mediaItem = post.media[0];
-        
-        if (typeof mediaItem === 'object' && mediaItem !== null) {
-          if (mediaItem.url) {
-            mediaUrl = formatImageUrl(mediaItem.url);
-            // Use the type field from the JSONB object
-            mediaType = mediaItem.type === 'video' ? 'video' : 'image';
-            imageUrl = mediaUrl;
-          }
-        } else if (typeof mediaItem === 'string') {
-          // Handle old format for backward compatibility
-          mediaUrl = formatImageUrl(mediaItem);
-          mediaType = isVideoUrl(mediaUrl) ? 'video' : 'image';
-          imageUrl = mediaUrl;
-        }
+        const mediaResult = processMediaFiles(post.media);
+        imageUrl = mediaResult.imageUrl;
+        mediaType = mediaResult.mediaType;
+        mediaUrl = mediaResult.mediaUrl;
       }
       
       return {
@@ -78,7 +211,9 @@ export const fetchUserPosts = async (userId: string): Promise<PostItem[]> => {
         likes: post.likes || 0,
         image: { uri: imageUrl },
         mediaType: mediaType,
-        mediaUrl: mediaUrl
+        mediaUrl: mediaUrl,
+        // Add the full media array for reference
+        allMedia: post.media
       };
     });
     
@@ -110,28 +245,17 @@ const fetchPostsFallback = async (userId: string): Promise<PostItem[]> => {
       console.log(`ProfileService: Found ${userPosts.length} posts with fallback`);
       
       const fetchedPosts = userPosts.map((post: any) => {
-        // Same processing logic as above
+        // Default values
         let imageUrl = 'https://robohash.org/post' + post.id + '?set=set4';
         let mediaType: 'image' | 'video' = 'image';
         let mediaUrl = '';
         
+        // Process media array to find the right thumbnail
         if (post.media && Array.isArray(post.media) && post.media.length > 0) {
-          // Check if media is an array of JSONB objects (new format)
-          const mediaItem = post.media[0];
-          
-          if (typeof mediaItem === 'object' && mediaItem !== null) {
-            if (mediaItem.url) {
-              mediaUrl = formatImageUrl(mediaItem.url);
-              // Use the type field from the JSONB object
-              mediaType = mediaItem.type === 'video' ? 'video' : 'image';
-              imageUrl = mediaUrl;
-            }
-          } else if (typeof mediaItem === 'string') {
-            // Handle old format for backward compatibility
-            mediaUrl = formatImageUrl(mediaItem);
-            mediaType = isVideoUrl(mediaUrl) ? 'video' : 'image';
-            imageUrl = mediaUrl;
-          }
+          const mediaResult = processMediaFiles(post.media);
+          imageUrl = mediaResult.imageUrl;
+          mediaType = mediaResult.mediaType;
+          mediaUrl = mediaResult.mediaUrl;
         }
         
         return {
@@ -141,7 +265,9 @@ const fetchPostsFallback = async (userId: string): Promise<PostItem[]> => {
           likes: post.likes || 0,
           image: { uri: imageUrl },
           mediaType: mediaType,
-          mediaUrl: mediaUrl
+          mediaUrl: mediaUrl,
+          // Add the full media array for reference
+          allMedia: post.media
         };
       });
       
@@ -167,28 +293,17 @@ export const fetchUserProducts = async (userId: string): Promise<ProductItem[]> 
       console.log(`ProfileService: Received ${userProducts.length} products`);
       
       const fetchedProducts = userProducts.map((product: any) => {
-        // Handle media from the API format
+        // Default values
         let imageUrl = 'https://robohash.org/product' + product.id + '?set=set4';
         let mediaType: 'image' | 'video' = 'image';
         let mediaUrl = '';
         
+        // Process media array to find the right thumbnail
         if (product.media && Array.isArray(product.media) && product.media.length > 0) {
-          // Check if media is an array of JSONB objects (new format)
-          const mediaItem = product.media[0];
-          
-          if (typeof mediaItem === 'object' && mediaItem !== null) {
-            if (mediaItem.url) {
-              mediaUrl = formatImageUrl(mediaItem.url);
-              // Use the type field from the JSONB object
-              mediaType = mediaItem.type === 'video' ? 'video' : 'image';
-              imageUrl = mediaUrl;
-            }
-          } else if (typeof mediaItem === 'string') {
-            // Handle old format for backward compatibility
-            mediaUrl = formatImageUrl(mediaItem);
-            mediaType = isVideoUrl(mediaUrl) ? 'video' : 'image';
-            imageUrl = mediaUrl;
-          }
+          const mediaResult = processMediaFiles(product.media);
+          imageUrl = mediaResult.imageUrl;
+          mediaType = mediaResult.mediaType;
+          mediaUrl = mediaResult.mediaUrl;
         }
         
         return {
@@ -199,7 +314,9 @@ export const fetchUserProducts = async (userId: string): Promise<ProductItem[]> 
           sold: product.sold || 0,
           image: { uri: imageUrl },
           mediaType: mediaType,
-          mediaUrl: mediaUrl
+          mediaUrl: mediaUrl,
+          // Add the full media array for reference
+          allMedia: product.media
         };
       });
       
@@ -229,28 +346,17 @@ const fetchProductsFallback = async (userId: string): Promise<ProductItem[]> => 
       console.log(`ProfileService: Received ${userProducts.length} products with fallback`);
       
       const fetchedProducts = userProducts.map((product: any) => {
-        // Same processing logic as above
+        // Default values
         let imageUrl = 'https://robohash.org/product' + product.id + '?set=set4';
         let mediaType: 'image' | 'video' = 'image';
         let mediaUrl = '';
         
+        // Process media array to find the right thumbnail
         if (product.media && Array.isArray(product.media) && product.media.length > 0) {
-          // Check if media is an array of JSONB objects (new format)
-          const mediaItem = product.media[0];
-          
-          if (typeof mediaItem === 'object' && mediaItem !== null) {
-            if (mediaItem.url) {
-              mediaUrl = formatImageUrl(mediaItem.url);
-              // Use the type field from the JSONB object
-              mediaType = mediaItem.type === 'video' ? 'video' : 'image';
-              imageUrl = mediaUrl;
-            }
-          } else if (typeof mediaItem === 'string') {
-            // Handle old format for backward compatibility
-            mediaUrl = formatImageUrl(mediaItem);
-            mediaType = isVideoUrl(mediaUrl) ? 'video' : 'image';
-            imageUrl = mediaUrl;
-          }
+          const mediaResult = processMediaFiles(product.media);
+          imageUrl = mediaResult.imageUrl;
+          mediaType = mediaResult.mediaType;
+          mediaUrl = mediaResult.mediaUrl;
         }
         
         return {
@@ -261,7 +367,8 @@ const fetchProductsFallback = async (userId: string): Promise<ProductItem[]> => 
           sold: product.sold || 0,
           image: { uri: imageUrl },
           mediaType: mediaType,
-          mediaUrl: mediaUrl
+          mediaUrl: mediaUrl,
+          allMedia: product.media
         };
       });
       
@@ -280,14 +387,31 @@ const fetchProductsFallback = async (userId: string): Promise<ProductItem[]> => 
         
         console.log(`ProfileService: Found ${userProducts.length} products with second fallback`);
         
-        return userProducts.map((product: any) => ({
-          id: product.id,
-          name: product.name || "Untitled Product",
-          price: product.price || 0,
-          rating: 4.5,
-          sold: product.sold || 0,
-          image: { uri: formatImageUrl(product.media?.[0] || '') },
-        }));
+        return userProducts.map((product: any) => {
+          // Process media array to find the right thumbnail
+          let imageUrl = 'https://robohash.org/product' + product.id + '?set=set4';
+          let mediaType: 'image' | 'video' = 'image';
+          let mediaUrl = '';
+          
+          if (product.media && Array.isArray(product.media) && product.media.length > 0) {
+            const mediaResult = processMediaFiles(product.media);
+            imageUrl = mediaResult.imageUrl;
+            mediaType = mediaResult.mediaType;
+            mediaUrl = mediaResult.mediaUrl;
+          }
+          
+          return {
+            id: product.id,
+            name: product.name || "Untitled Product",
+            price: product.price || 0,
+            rating: 4.5,
+            sold: product.sold || 0,
+            image: { uri: imageUrl },
+            mediaType: mediaType,
+            mediaUrl: mediaUrl,
+            allMedia: product.media
+          };
+        });
       }
     }
     return [];

@@ -1,15 +1,16 @@
 // Base item type with common properties
 export interface BaseItem {
   id: string;
-  image?: any;
+  image?: {uri?: string} | null;
   isButton?: boolean;
   mediaType?: 'image' | 'video';
   mediaUrl?: string;
+  allMedia?: any[];
 }
 
 // Define post type
 export interface PostItem extends BaseItem {
-  title: string;
+  title?: string;
   likes?: number;
   content?: string;
 }
@@ -23,8 +24,8 @@ export interface ButtonItem extends BaseItem {
 
 // Define product type
 export interface ProductItem extends BaseItem {
-  name: string;
-  price: number;
+  name?: string;
+  price?: number;
   rating?: number;
   sold?: number;
 }
@@ -55,15 +56,17 @@ export interface User {
 
 // Type guard functions
 export const isPostItem = (item: any): item is PostItem => {
-  return 'title' in item && !('price' in item);
+  if (!item) return false;
+  return ('title' in item && !('price' in item)) || ('content' in item);
 };
 
 export const isProductItem = (item: any): item is ProductItem => {
-  return 'name' in item && 'price' in item;
+  if (!item) return false;
+  return ('name' in item && 'price' in item) || ('rating' in item && 'sold' in item);
 };
 
 export const isButtonItem = (item: BaseItem): boolean => {
-  return item.isButton === true;
+  return !!item && item.isButton === true;
 };
 
 // Create new post button item

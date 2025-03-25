@@ -47,12 +47,19 @@ app.use((req, res, next) => {
 });
 
 // Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+const uploadsPath = path.join(process.cwd(), 'uploads');
+console.log('Serving uploads from:', uploadsPath);
+app.use('/uploads', express.static(uploadsPath));
 
 // Routes
+console.log('Registered routes:');
 app.use("/api/pg/auth", pgAuthRoutes); // PostgreSQL auth
+console.log('- /api/pg/auth');
 app.use("/api/upload", uploadRoutes); // Upload routes
+console.log('- /api/upload');
 app.use("/api/pg/users", userRoutes); // User routes
+console.log('- /api/pg/users');
+
 
 // Home route
 app.get('/', (req, res) => {

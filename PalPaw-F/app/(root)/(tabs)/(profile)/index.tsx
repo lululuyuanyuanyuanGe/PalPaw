@@ -21,7 +21,6 @@ import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "@/utils/apiClient";
 import AuthPrompt from "@/app/components/AuthPrompt";
-import VideoThumbnail from "@/app/components/VideoThumbnail";
 import { 
   fetchUserPosts, 
   fetchUserProducts, 
@@ -42,7 +41,7 @@ import {
   newProductButton,
   ProfileTab
 } from "./types";
-import { RenderGridItem } from './ProfileRenderer';
+import { RenderItem } from './ProfileRenderer';
 
 const ProfileScreen = () => {
   const router = useRouter();
@@ -346,14 +345,30 @@ const ProfileScreen = () => {
   const postsWithButton = [...posts, newPostButton];
   const productsWithButton = [...products, newProductButton];
   
-  // Render grid items (posts or products)
-  const renderItem = ({ item }: { item: BaseItem }) => (
-    <RenderGridItem 
-      item={item} 
-      paddingSize={paddingSize} 
-      activeTab={activeTab} 
-    />
-  );
+  // Render grid items
+  const renderItem = ({ item }: { item: BaseItem }) => {
+    if (!item) return null;
+    
+    console.log(`Rendering item ${item.id} for ${activeTab} tab, mediaType: ${item.mediaType}, mediaUrl: ${item.mediaUrl?.substring(0, 30)}`);
+    
+    return (
+      <RenderItem 
+        item={item} 
+        activeTab={activeTab} 
+        onPress={(selectedItem) => {
+          console.log(`Item pressed: ${selectedItem.id}`);
+          // Here you can navigate to the detail screen or perform other actions
+          if (isPostItem(selectedItem)) {
+            console.log('Post item clicked');
+            // router.push(`/posts/${selectedItem.id}`);
+          } else if (isProductItem(selectedItem)) {
+            console.log('Product item clicked');
+            // router.push(`/products/${selectedItem.id}`);
+          }
+        }}
+      />
+    );
+  };
   
   // Retry function
   const handleRetry = () => {

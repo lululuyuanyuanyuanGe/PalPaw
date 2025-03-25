@@ -1,24 +1,33 @@
-import React from 'react';
-import { View, Text, Image, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Image, TouchableOpacity, ActivityIndicator, StyleSheet, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons, FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import VideoThumbnail from '@/app/components/VideoThumbnail';
 import { BaseItem, isButtonItem, isPostItem, isProductItem, ProfileTab } from './types';
+import VideoPreview from './VideoPreview';
 
 interface RenderItemProps {
   item: BaseItem;
-  paddingSize: number;
   activeTab: ProfileTab;
+  onPress: (item: BaseItem) => void;
+  showTabBar?: boolean;
 }
 
-export const RenderGridItem: React.FC<RenderItemProps> = ({ item, paddingSize, activeTab }) => {
+export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress: handleItemPress, showTabBar }) => {
+  
+  // Get screen width for sizing
+  const { width } = Dimensions.get('window');
+  
   const router = useRouter();
+  
+  if (!item) {
+    return <View style={{ padding: 10, width: `${100 / 2}%` }} />;
+  }
   
   return (
     <View
       style={{
-        padding: paddingSize,
+        padding: 10,
         width: `${100 / 2}%`, // 2 columns
       }}
     >
@@ -52,30 +61,28 @@ export const RenderGridItem: React.FC<RenderItemProps> = ({ item, paddingSize, a
           className="rounded-xl overflow-hidden shadow-sm bg-white border border-pink-50"
           onPress={() => {
             console.log(`Post clicked: ${item.id}`);
-            // Navigate to post detail screen (could be implemented later)
+            handleItemPress(item);
           }}
         >
           {item.mediaType === 'video' && item.mediaUrl ? (
-            <VideoThumbnail
-              videoUrl={item.mediaUrl}
-              width="100%"
-              height={150}
-              onPress={() => {
-                console.log("Video post clicked:", item.id);
-                // Navigate to post detail view
-              }}
-            />
+            <View style={{ height: 150, overflow: 'hidden' }}>
+              <VideoPreview 
+                uri={item.mediaUrl} 
+                height={150} 
+                width={width / 2 - 20} 
+              />
+            </View>
           ) : (
             // Show placeholder if image fails to load
             <Image 
-              source={item.image}
+              source={item.image?.uri ? item.image : { uri: 'https://via.placeholder.com/300x200/000000/FFFFFF?text=No+Image' }}
               style={{ width: '100%', height: 150 }}
               resizeMode="cover"
-              defaultSource={require('@/assets/images/placeholder.png')}
+              defaultSource={require('@/assets/images/no-result.png')}
             />
           )}
           <View className="p-2">
-            <Text className="text-gray-800 font-medium" numberOfLines={1}>{item.title}</Text>
+            <Text className="text-gray-800 font-medium" numberOfLines={1}>{item.title || 'Untitled'}</Text>
             <View className="flex-row items-center mt-1">
               <Ionicons name="heart" size={12} color="#FF2442" />
               <Text className="text-xs text-gray-500 ml-1">{item.likes || 0}</Text>
@@ -88,32 +95,30 @@ export const RenderGridItem: React.FC<RenderItemProps> = ({ item, paddingSize, a
           className="rounded-xl overflow-hidden shadow-sm bg-white border border-pink-50"
           onPress={() => {
             console.log(`Product clicked: ${item.id}`);
-            // Navigate to product detail screen (could be implemented later)
+            handleItemPress(item);
           }}
         >
           {item.mediaType === 'video' && item.mediaUrl ? (
-            <VideoThumbnail
-              videoUrl={item.mediaUrl}
-              width="100%"
-              height={150}
-              onPress={() => {
-                console.log("Video product clicked:", item.id);
-                // Navigate to product detail view
-              }}
-            />
+            <View style={{ height: 150, overflow: 'hidden' }}>
+              <VideoPreview 
+                uri={item.mediaUrl} 
+                height={150} 
+                width={width / 2 - 20} 
+              />
+            </View>
           ) : (
             <Image 
-              source={item.image}
+              source={item.image?.uri ? item.image : { uri: 'https://via.placeholder.com/300x200/000000/FFFFFF?text=No+Image' }}
               style={{ width: '100%', height: 150 }}
               resizeMode="cover"
-              defaultSource={require('@/assets/images/placeholder.png')}
+              defaultSource={require('@/assets/images/no-result.png')}
             />
           )}
           <View className="absolute top-2 right-2 bg-purple-500 px-2 py-0.5 rounded-full">
-            <Text className="text-white text-xs font-bold">${item.price}</Text>
+            <Text className="text-white text-xs font-bold">${item.price || 0}</Text>
           </View>
           <View className="p-2">
-            <Text className="text-gray-800 font-medium" numberOfLines={1}>{item.name}</Text>
+            <Text className="text-gray-800 font-medium" numberOfLines={1}>{item.name || 'Untitled'}</Text>
             <View className="flex-row items-center justify-between mt-1">
               <View className="flex-row items-center">
                 <FontAwesome name="star" size={10} color="#FBBF24" />
@@ -128,4 +133,13 @@ export const RenderGridItem: React.FC<RenderItemProps> = ({ item, paddingSize, a
       )}
     </View>
   );
-}; 
+};
+
+const styles = StyleSheet.create({
+  videoIndicator: {
+    zIndex: 10,
+  },
+  playButton: {
+    zIndex: 5,
+  }
+}); 

@@ -5,6 +5,7 @@ import multer from 'multer';
 import Post from '../../models/Post.js';
 import Product from '../../models/Product.js';
 import User from '../../models/User.js';
+import { generateVideoThumbnail } from '../../utils/videoThumbnail.js';
 
 // Configure multer storage
 const storage = multer.diskStorage({
@@ -96,8 +97,14 @@ export const createPostWithMedia = async (req, res) => {
       // Get the user ID for constructing the file URL
       const userId = req.user.id;
       
-      // Multer adds the files under their field name
-      req.files.forEach(file => {
+      // Create thumbnails directory if it doesn't exist
+      const thumbnailDir = path.join(process.cwd(), 'uploads', userId.toString(), 'thumbnails');
+      if (!fs.existsSync(thumbnailDir)) {
+        fs.mkdirSync(thumbnailDir, { recursive: true });
+      }
+      
+      // Process each file (includes thumbnail generation for videos)
+      for (const file of req.files) {
         // Log each file for debugging
         console.log('Processing file:', {
           originalname: file.originalname,
@@ -111,16 +118,40 @@ export const createPostWithMedia = async (req, res) => {
         
         // Determine media type based on mimetype
         const mediaType = file.mimetype.startsWith('image/') ? 'image' : 
-                          file.mimetype.startsWith('video/') ? 'video' : 'image'; // Default to image if unknown
+                        file.mimetype.startsWith('video/') ? 'video' : 'image'; // Default to image if unknown
         
         // Create media object compatible with the Post model's JSONB structure
-        mediaObjects.push({
+        const mediaObject = {
           url: fileUrl,
           type: mediaType,
           size: file.size,
           filename: file.filename
-        });
-      });
+        };
+        
+        // Generate thumbnail for video files
+        if (mediaType === 'video') {
+          try {
+            // Full path to the uploaded video
+            const videoPath = path.join(process.cwd(), 'uploads', userId.toString(), 'posts', file.filename);
+            
+            // Generate unique thumbnail filename
+            const thumbnailFilename = `thumbnail_${uuidv4()}.jpg`;
+            const thumbnailPath = path.join(thumbnailDir, thumbnailFilename);
+            
+            // Generate thumbnail (at 2 seconds into the video)
+            await generateVideoThumbnail(videoPath, thumbnailPath, 0, '320x240');
+            
+            // Add thumbnail URL to the media object
+            mediaObject.thumbnail = `/uploads/${userId}/thumbnails/${thumbnailFilename}`;
+            console.log(`Created thumbnail at ${thumbnailPath} for video ${file.filename}`);
+          } catch (thumbnailError) {
+            console.error('Error generating thumbnail:', thumbnailError);
+            // Continue without thumbnail if generation fails
+          }
+        }
+        
+        mediaObjects.push(mediaObject);
+      }
     }
 
     console.log('Media objects to save:', mediaObjects);
