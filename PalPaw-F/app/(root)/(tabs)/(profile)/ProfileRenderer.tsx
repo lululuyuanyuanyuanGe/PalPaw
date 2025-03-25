@@ -23,6 +23,31 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
     return <View style={{ padding: 10, width: `${100 / 2}%` }} />;
   }
   
+  // Function to navigate to post detail
+  const navigateToPostDetail = (post: BaseItem) => {
+    if (isPostItem(post)) {
+      // Use a proper path to navigate to the post detail page
+      router.push({
+        pathname: "/(root)/(posts)",
+        params: {
+          id: post.id,
+          title: post.title || "Untitled Post",
+          content: post.content || "",
+          likes: post.likes?.toString() || "0",
+          mediaType: post.mediaType || "image",
+          mediaUrl: post.mediaUrl || "",
+          thumbnailUri: post.thumbnailUri || "",
+          imageUri: post.image?.uri || "",
+          // Pass allMedia for displaying in comments section
+          allMedia: JSON.stringify(post.allMedia || [])
+        }
+      });
+    } else if (isProductItem(post)) {
+      console.log('Product item clicked');
+      // Future implementation for product detail navigation
+    }
+  };
+  
   return (
     <View
       style={{
@@ -60,7 +85,8 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
           className="rounded-xl overflow-hidden shadow-sm bg-white border border-pink-50"
           onPress={() => {
             console.log(`Post clicked: ${item.id}`);
-            handleItemPress(item);
+            // Navigate to post detail instead of just calling the handler
+            navigateToPostDetail(item);
           }}
         >
           {item.mediaType === 'video' && item.mediaUrl ? (

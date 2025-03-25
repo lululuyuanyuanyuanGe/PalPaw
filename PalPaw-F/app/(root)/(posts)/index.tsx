@@ -14,9 +14,9 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { PostItem } from '../(profile)/types';
+import { PostItem } from '../(tabs)/(profile)/types';
 import { BlurView } from 'expo-blur';
-import { formatImageUrl } from '../(profile)/renderService';
+import { formatImageUrl } from '../(tabs)/(profile)/renderService';
 import Animated, { 
   useSharedValue, 
   useAnimatedStyle, 
@@ -105,9 +105,20 @@ const PostDetail = () => {
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [comments, setComments] = useState<Array<{
+    id: string;
+    author: string;
+    content: string;
+    timestamp: Date;
+    avatarUri: string;
+    likes: number;
+  }>>([]);
   const videoRef = useRef<Video>(null);
   const scrollY = useSharedValue(0);
   const { width } = Dimensions.get('window');
+  
+  // Parse allMedia if it exists
+  const allMedia = params.allMedia ? JSON.parse(params.allMedia as string) : [];
   
   // Animation for the like button
   const likeScale = useSharedValue(1);
@@ -134,7 +145,7 @@ const PostDetail = () => {
     };
   });
   
-  // Mock data - in real app, fetch this from API using params.id
+  // Mock data using the params passed from the profile page
   const post: ExtendedPostItem = {
     id: params.id as string,
     title: params.title as string || "Adorable pets at the park today! 🐶",
@@ -143,9 +154,72 @@ const PostDetail = () => {
     mediaType: params.mediaType as 'image' | 'video' || 'image',
     mediaUrl: params.mediaUrl as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636",
     thumbnailUri: params.thumbnailUri as string || "",
-    image: { uri: params.imageUrl as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636" },
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000) // 2 hours ago
+    image: { uri: params.imageUri as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636" },
+    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+    allMedia: allMedia
   };
+
+  // Extract hashtags from the post content
+  const extractTags = (content: string) => {
+    const tagRegex = /#(\w+)/g;
+    const matches = content.match(tagRegex);
+    return matches ? matches.map(tag => tag.substring(1)) : [];
+  };
+  
+  // The tags from the post content
+  const tags = extractTags(post.content || '');
+  
+  // Generate dynamic comments based on the post content
+  useEffect(() => {
+    // Only create comments if we don't already have them
+    if (comments.length === 0) {
+      const postContent = post.content || '';
+      const mediaType = post.mediaType || 'image';
+      
+      // Generate comments relevant to the post content
+      const generatedComments = [];
+      
+      // If post mentions pets/animals
+      if (postContent.toLowerCase().includes('pet') || 
+          postContent.toLowerCase().includes('dog') || 
+          postContent.toLowerCase().includes('cat')) {
+        generatedComments.push({
+          id: '1',
+          author: 'Jane Smith',
+          content: 'Such adorable pets! I love bringing my golden retriever to that park too. Maybe we will run into each other sometime! 🐕',
+          timestamp: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
+          avatarUri: 'https://robohash.org/user456?set=set4',
+          likes: 12
+        });
+      }
+      
+      // If it's a video post
+      if (mediaType === 'video') {
+        generatedComments.push({
+          id: '2',
+          author: 'Mark Thompson',
+          content: 'Great video quality! Which camera did you use to record this?',
+          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+          avatarUri: 'https://robohash.org/user789?set=set4',
+          likes: 5
+        });
+      }
+      
+      // Add a generic comment
+      generatedComments.push({
+        id: generatedComments.length + 1 + '',
+        author: 'Samantha Lee',
+        content: postContent.length > 100 
+          ? 'I love the detailed description! Thanks for sharing this wonderful moment with us.' 
+          : 'Great post! Thanks for sharing.',
+        timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000), // 3 hours ago
+        avatarUri: 'https://robohash.org/user101?set=set4',
+        likes: 8
+      });
+      
+      setComments(generatedComments);
+    }
+  }, [post.content, post.mediaType, comments.length]);
   
   // Handle video playback
   const handlePlayPress = () => {
@@ -182,33 +256,24 @@ const PostDetail = () => {
     }
   };
   
-  // Sample comments data
-  const comments = [
-    {
-      id: '1',
-      author: 'Jane Smith',
-      content: 'Such adorable pups! I love bringing my golden retriever to that park too. Maybe we will run into each other sometime! 🐕',
-      timestamp: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
-      avatarUri: 'https://robohash.org/user456?set=set4',
-      likes: 12
-    },
-    {
-      id: '2',
-      author: 'Mark Thompson',
-      content: 'Great photos! Which park is this? I have been looking for a new place to take my corgi.',
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-      avatarUri: 'https://robohash.org/user789?set=set4',
-      likes: 5
-    },
-    {
-      id: '3',
-      author: 'Samantha Lee',
-      content: 'Your dog is so precious! How old is she?',
-      timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000), // 3 hours ago
-      avatarUri: 'https://robohash.org/user101?set=set4',
-      likes: 8
+  // Add a new comment
+  const [newComment, setNewComment] = useState('');
+  
+  const handleAddComment = () => {
+    if (newComment.trim()) {
+      const comment = {
+        id: (comments.length + 1).toString(),
+        author: 'You',
+        content: newComment.trim(),
+        timestamp: new Date(),
+        avatarUri: 'https://robohash.org/myavatar?set=set4',
+        likes: 0
+      };
+      
+      setComments([comment, ...comments]);
+      setNewComment('');
     }
-  ];
+  };
 
   return (
     <>
@@ -361,15 +426,25 @@ const PostDetail = () => {
           
           {/* Tags */}
           <View className="flex-row flex-wrap mt-4">
-            <View className="bg-purple-50 px-3 py-1 rounded-full mr-2 mb-2">
-              <Text className="text-purple-600 text-xs font-rubik-medium">#PetLovers</Text>
-            </View>
-            <View className="bg-purple-50 px-3 py-1 rounded-full mr-2 mb-2">
-              <Text className="text-purple-600 text-xs font-rubik-medium">#DogPark</Text>
-            </View>
-            <View className="bg-purple-50 px-3 py-1 rounded-full mr-2 mb-2">
-              <Text className="text-purple-600 text-xs font-rubik-medium">#WeekendFun</Text>
-            </View>
+            {tags.length > 0 ? (
+              tags.map((tag, index) => (
+                <View key={index} className="bg-purple-50 px-3 py-1 rounded-full mr-2 mb-2">
+                  <Text className="text-purple-600 text-xs font-rubik-medium">#{tag}</Text>
+                </View>
+              ))
+            ) : (
+              <>
+                <View className="bg-purple-50 px-3 py-1 rounded-full mr-2 mb-2">
+                  <Text className="text-purple-600 text-xs font-rubik-medium">#PetLovers</Text>
+                </View>
+                <View className="bg-purple-50 px-3 py-1 rounded-full mr-2 mb-2">
+                  <Text className="text-purple-600 text-xs font-rubik-medium">#DogPark</Text>
+                </View>
+                <View className="bg-purple-50 px-3 py-1 rounded-full mr-2 mb-2">
+                  <Text className="text-purple-600 text-xs font-rubik-medium">#WeekendFun</Text>
+                </View>
+              </>
+            )}
           </View>
         </View>
 
@@ -442,8 +517,10 @@ const PostDetail = () => {
               placeholder="Add a comment..."
               className="flex-1 text-gray-700 font-rubik"
               placeholderTextColor="#9CA3AF"
+              value={newComment}
+              onChangeText={setNewComment}
             />
-            <TouchableOpacity>
+            <TouchableOpacity onPress={handleAddComment}>
               <Ionicons name="send" size={20} color="#9333EA" />
             </TouchableOpacity>
           </View>
