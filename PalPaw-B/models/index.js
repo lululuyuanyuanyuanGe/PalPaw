@@ -51,6 +51,33 @@ Notification.belongsTo(User, { foreignKey: 'userId', as: 'recipient' });
 User.hasMany(Notification, { foreignKey: 'triggeredBy', as: 'triggeredNotifications' });
 Notification.belongsTo(User, { foreignKey: 'triggeredBy', as: 'trigger' });
 
+// User - Post for likes (many-to-many relationship)
+User.belongsToMany(Post, {
+  through: {
+    model: Like,
+    scope: {
+      entityType: 'post'
+    }
+  },
+  foreignKey: 'userId',
+  otherKey: 'entityId',
+  as: 'likedPosts',
+  constraints: false
+});
+
+Post.belongsToMany(User, {
+  through: {
+    model: Like,
+    scope: {
+      entityType: 'post'
+    }
+  },
+  foreignKey: 'entityId',
+  otherKey: 'userId',
+  as: 'likedBy',
+  constraints: false
+});
+
 // Function to sync all models with the database
 const syncModels = async (force = false) => {
   try {

@@ -11,6 +11,7 @@ import { syncModels } from './models/index.js'; // Sequelize models
 import pgAuthRoutes from './routes/pgAuth.js'; // PostgreSQL auth routes
 import uploadRoutes from './routes/upload.js'; // Upload routes
 import userRoutes from './routes/users.js'; // User routes
+import likesRoutes from './routes/likes.js'; // Likes routes
 
 // Load environment variables
 dotenv.config();
@@ -59,6 +60,8 @@ app.use("/api/upload", uploadRoutes); // Upload routes
 console.log('- /api/upload');
 app.use("/api/pg/users", userRoutes); // User routes
 console.log('- /api/pg/users');
+app.use("/api/likes", likesRoutes); // Likes routes
+console.log('- /api/likes');
 
 
 // Home route

@@ -81,6 +81,20 @@ const User = sequelize.define('User', {
     set(value) {
       this.setDataValue('_followingCount', value);
     }
+  },
+  likedPostsCount: {
+    type: DataTypes.VIRTUAL,
+    get() {
+      return this.getDataValue('_likedPostsCount') || 0;
+    },
+    set(value) {
+      this.setDataValue('_likedPostsCount', value);
+    }
+  },
+  likedPostIds: {
+    type: DataTypes.ARRAY(DataTypes.UUID),
+    defaultValue: [],
+    allowNull: false
   }
 }, {
   timestamps: true, // Automatically add createdAt and updatedAt
@@ -108,7 +122,7 @@ User.prototype.comparePassword = async function(candidatePassword) {
 
 // Instance method to get public profile
 User.prototype.getPublicProfile = function() {
-  const { id, username, firstName, lastName, avatar, bio, followerCount, followingCount } = this;
+  const { id, username, firstName, lastName, avatar, bio, followerCount, followingCount, likedPostsCount, likedPostIds } = this;
   return {
     id,
     username,
@@ -117,7 +131,9 @@ User.prototype.getPublicProfile = function() {
     avatar,
     bio,
     followers: followerCount,
-    following: followingCount
+    following: followingCount,
+    likedPosts: likedPostsCount,
+    likedPostIds
   };
 };
 
@@ -127,6 +143,31 @@ User.prototype.isFollowing = async function(userId) {
     where: { followedId: userId }
   });
   return following.length > 0;
+};
+
+// Instance method to check if user has liked a post
+User.prototype.hasLikedPost = function(postId) {
+  return this.likedPostIds.includes(postId);
+};
+
+// Instance method to like a post
+User.prototype.likePost = async function(postId) {
+  if (!this.hasLikedPost(postId)) {
+    this.likedPostIds = [...this.likedPostIds, postId];
+    await this.save();
+    return true;
+  }
+  return false;
+};
+
+// Instance method to unlike a post
+User.prototype.unlikePost = async function(postId) {
+  if (this.hasLikedPost(postId)) {
+    this.likedPostIds = this.likedPostIds.filter(id => id !== postId);
+    await this.save();
+    return true;
+  }
+  return false;
 };
 
 export default User; 
