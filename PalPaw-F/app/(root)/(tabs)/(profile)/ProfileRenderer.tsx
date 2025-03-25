@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { Feather, Ionicons, FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BaseItem, isButtonItem, isPostItem, isProductItem, ProfileTab } from './types';
-import VideoPreview from './VideoPreview';
 
 interface RenderItemProps {
   item: BaseItem;
@@ -66,11 +65,25 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
         >
           {item.mediaType === 'video' && item.mediaUrl ? (
             <View style={{ height: 150, overflow: 'hidden' }}>
-              <VideoPreview 
-                uri={item.mediaUrl} 
-                height={150} 
-                width={width / 2 - 20} 
+              <Image 
+                source={{ uri: item.thumbnailUri || item.mediaUrl }}
+                style={{ width: '100%', height: 150 }}
+                resizeMode="cover"
+                defaultSource={require('@/assets/images/no-result.png')}
               />
+              {/* Video indicator overlay */}
+              <View style={[styles.videoIndicator, { position: 'absolute', top: 5, left: 5 }]}>
+                <View className="bg-black/60 px-2 py-0.5 rounded-full flex-row items-center">
+                  <Ionicons name="videocam" size={10} color="white" />
+                  <Text className="text-white text-xs ml-0.5">Video</Text>
+                </View>
+              </View>
+              {/* Play button overlay */}
+              <View style={[styles.playButton, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }]}>
+                <View className="bg-black/50 rounded-full w-8 h-8 items-center justify-center">
+                  <Ionicons name="play" size={16} color="white" />
+                </View>
+              </View>
             </View>
           ) : (
             // Show placeholder if image fails to load
@@ -100,11 +113,25 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
         >
           {item.mediaType === 'video' && item.mediaUrl ? (
             <View style={{ height: 150, overflow: 'hidden' }}>
-              <VideoPreview 
-                uri={item.mediaUrl} 
-                height={150} 
-                width={width / 2 - 20} 
+              <Image 
+                source={{ uri: item.thumbnailUri || item.mediaUrl }}
+                style={{ width: '100%', height: 150 }}
+                resizeMode="cover"
+                defaultSource={require('@/assets/images/no-result.png')}
               />
+              {/* Video indicator overlay */}
+              <View style={[styles.videoIndicator, { position: 'absolute', top: 5, left: 5 }]}>
+                <View className="bg-black/60 px-2 py-0.5 rounded-full flex-row items-center">
+                  <Ionicons name="videocam" size={10} color="white" />
+                  <Text className="text-white text-xs ml-0.5">Video</Text>
+                </View>
+              </View>
+              {/* Play button overlay */}
+              <View style={[styles.playButton, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }]}>
+                <View className="bg-black/50 rounded-full w-8 h-8 items-center justify-center">
+                  <Ionicons name="play" size={16} color="white" />
+                </View>
+              </View>
             </View>
           ) : (
             <Image 

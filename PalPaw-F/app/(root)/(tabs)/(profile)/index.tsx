@@ -336,10 +336,7 @@ const ProfileScreen = () => {
   };
 
   // Get dimensions for grid layout
-  const { width } = Dimensions.get('window');
   const numColumns = 2;
-  const paddingSize = 10; // Padding around each grid item
-  const itemWidth = (width - (paddingSize * 2 * numColumns)) / numColumns;
   
   // Add the "Create New" buttons to the lists
   const postsWithButton = [...posts, newPostButton];

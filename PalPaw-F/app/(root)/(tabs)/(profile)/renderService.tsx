@@ -53,10 +53,11 @@ export const isVideoUrl = (url: string): boolean => {
 };
 
 // Helper function to process media files and select appropriate thumbnail
-const processMediaFiles = (mediaArray: any[]): { imageUrl: string, mediaType: 'image' | 'video', mediaUrl: string } => {
+const processMediaFiles = (mediaArray: any[]): { imageUrl: string, mediaType: 'image' | 'video', mediaUrl: string, thumbnailUri?: string } => {
   let imageUrl = '';
   let mediaType: 'image' | 'video' = 'image';
   let mediaUrl = '';
+  let thumbnailUri = '';
   
   console.log('Processing media array:', JSON.stringify(mediaArray));
   
@@ -107,8 +108,14 @@ const processMediaFiles = (mediaArray: any[]): { imageUrl: string, mediaType: 'i
       mediaUrl = formatImageUrl(videoMedia.url);
       console.log('Using video URL from object:', mediaUrl);
       
-      // If we also found an image, use that for the thumbnail
-      if (firstImage) {
+      // Check if video media has a thumbnail field first
+      if (videoMedia.thumbnail) {
+        thumbnailUri = formatImageUrl(videoMedia.thumbnail);
+        imageUrl = thumbnailUri;
+        console.log('Using video thumbnail from object:', thumbnailUri);
+      }
+      // If no thumbnail but we found an image, use that for the thumbnail
+      else if (firstImage) {
         if (typeof firstImage === 'object' && firstImage !== null) {
           imageUrl = formatImageUrl(firstImage.url);
           console.log('Using image URL from object as thumbnail:', imageUrl);
@@ -177,8 +184,8 @@ const processMediaFiles = (mediaArray: any[]): { imageUrl: string, mediaType: 'i
     }
   }
   
-  console.log(`Media processing result: type=${mediaType}, imageUrl=${imageUrl}, mediaUrl=${mediaUrl}`);
-  return { imageUrl, mediaType, mediaUrl };
+  console.log(`Media processing result: type=${mediaType}, imageUrl=${imageUrl}, mediaUrl=${mediaUrl}, thumbnailUri=${thumbnailUri}`);
+  return { imageUrl, mediaType, mediaUrl, thumbnailUri };
 };
 
 // Fetch user's posts
@@ -195,6 +202,7 @@ export const fetchUserPosts = async (userId: string): Promise<PostItem[]> => {
       let imageUrl = 'https://robohash.org/post' + post.id + '?set=set4';
       let mediaType: 'image' | 'video' = 'image';
       let mediaUrl = '';
+      let thumbnailUri = '';
       
       // Process media array to find the right thumbnail
       if (post.media && Array.isArray(post.media) && post.media.length > 0) {
@@ -202,6 +210,7 @@ export const fetchUserPosts = async (userId: string): Promise<PostItem[]> => {
         imageUrl = mediaResult.imageUrl;
         mediaType = mediaResult.mediaType;
         mediaUrl = mediaResult.mediaUrl;
+        thumbnailUri = mediaResult.thumbnailUri || '';
       }
       
       return {
@@ -212,6 +221,7 @@ export const fetchUserPosts = async (userId: string): Promise<PostItem[]> => {
         image: { uri: imageUrl },
         mediaType: mediaType,
         mediaUrl: mediaUrl,
+        thumbnailUri: thumbnailUri,
         // Add the full media array for reference
         allMedia: post.media
       };
@@ -249,6 +259,7 @@ const fetchPostsFallback = async (userId: string): Promise<PostItem[]> => {
         let imageUrl = 'https://robohash.org/post' + post.id + '?set=set4';
         let mediaType: 'image' | 'video' = 'image';
         let mediaUrl = '';
+        let thumbnailUri = '';
         
         // Process media array to find the right thumbnail
         if (post.media && Array.isArray(post.media) && post.media.length > 0) {
@@ -256,6 +267,7 @@ const fetchPostsFallback = async (userId: string): Promise<PostItem[]> => {
           imageUrl = mediaResult.imageUrl;
           mediaType = mediaResult.mediaType;
           mediaUrl = mediaResult.mediaUrl;
+          thumbnailUri = mediaResult.thumbnailUri || '';
         }
         
         return {
@@ -266,6 +278,7 @@ const fetchPostsFallback = async (userId: string): Promise<PostItem[]> => {
           image: { uri: imageUrl },
           mediaType: mediaType,
           mediaUrl: mediaUrl,
+          thumbnailUri: thumbnailUri,
           // Add the full media array for reference
           allMedia: post.media
         };

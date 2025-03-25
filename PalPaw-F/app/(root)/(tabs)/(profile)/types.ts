@@ -5,6 +5,7 @@ export interface BaseItem {
   isButton?: boolean;
   mediaType?: 'image' | 'video';
   mediaUrl?: string;
+  thumbnailUri?: string;
   allMedia?: any[];
 }
 
