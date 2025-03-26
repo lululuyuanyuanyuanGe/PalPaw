@@ -124,8 +124,6 @@ const useUserData = () => {
 const ProfileScreen = () => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
-  const [userPosts, setUserPosts] = useState<PostItem[]>([]);
-  const [likedPosts, setLikedPosts] = useState<PostItem[]>([]);
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [postsLoading, setPostsLoading] = useState<boolean>(false);
@@ -150,9 +148,10 @@ const ProfileScreen = () => {
     state,
     setCurrentPost,
     likePost,
-    unlikePost
+    unlikePost,
+    isPostLiked
   } = usePosts();
-  const { likedPostIds } = state;
+  const { userPosts, likedPosts, likedPostIds } = state;
   
   // Ref to track last data fetch time to prevent too frequent refreshes
   const lastFetchTime = useRef(0);
@@ -273,11 +272,6 @@ const ProfileScreen = () => {
         // Set the current post in context before navigation
         setCurrentPost(item);
         
-        // Navigate to the post detail view
-        router.push({
-          pathname: "/(root)/(posts)",
-          params: { id: item.id }
-        } as any);
       } else if (isProductItem(item)) {
         // Future: Handle product navigation
         console.log('Product item clicked');

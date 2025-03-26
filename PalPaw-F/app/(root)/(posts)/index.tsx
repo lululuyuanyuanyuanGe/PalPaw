@@ -108,9 +108,6 @@ const PostDetail = () => {
       transform: [{ scale: likeScale.value }]
     };
   });
-
-  // Local state for tracking likes
-  const [userLiked, setUserLiked] = useState(false);
   
   // Fetch post if not already in context
   useEffect(() => {
@@ -123,16 +120,6 @@ const PostDetail = () => {
     }
   }, [params.id, currentPost, fetchPostById]);
   
-  // Initialize like state based on context
-  useEffect(() => {
-    if (currentPost && currentPost.id) {
-      setUserLiked(isPostLiked(currentPost.id));
-      
-      // Debug log for post author data
-      console.log('Post detail - authorData:', JSON.stringify(currentPost.authorData));
-    }
-  }, [currentPost, isPostLiked]);
-
   // If post is not loaded yet, show loading
   if (!currentPost) {
     return (
@@ -183,6 +170,27 @@ const PostDetail = () => {
       
       // Clear input
       setNewComment('');
+    }
+  };
+
+  // Handle interactions
+  const handleLikeToggle = async () => {
+    // Animate like button
+    likeScale.value = withSpring(1.3, { damping: 10 }, () => {
+      likeScale.value = withSpring(1);
+    });
+    
+    // Toggle like state using context
+    if (isPostLiked(post.id)) {
+      const success = await unlikePost(post.id);
+      if (!success) {
+        console.error('Failed to unlike post');
+      }
+    } else {
+      const success = await likePost(post.id);
+      if (!success) {
+        console.error('Failed to like post');
+      }
     }
   };
 
@@ -292,33 +300,17 @@ const PostDetail = () => {
           <View className="flex-row items-center">
             <TouchableOpacity 
               className="flex-row items-center mr-6" 
-              onPress={() => {
-                // Animate like button
-                likeScale.value = withSpring(1.3, { damping: 10 }, () => {
-                  likeScale.value = withSpring(1);
-                });
-                
-                // Toggle like state
-                if (userLiked) {
-                  unlikePost(post.id).then(success => {
-                    if (success) setUserLiked(false);
-                  });
-                } else {
-                  likePost(post.id).then(success => {
-                    if (success) setUserLiked(true);
-                  });
-                }
-              }}
+              onPress={handleLikeToggle}
               activeOpacity={0.7}
             >
               <Animated.View style={likeAnimatedStyle}>
                 <Ionicons 
-                  name={userLiked ? "heart" : "heart-outline"} 
+                  name={isPostLiked(post.id) ? "heart" : "heart-outline"} 
                   size={24} 
-                  color={userLiked ? "#F43F5E" : "#374151"} 
+                  color={isPostLiked(post.id) ? "#F43F5E" : "#374151"} 
                 />
               </Animated.View>
-              <Text className="ml-2 text-gray-600 font-rubik-medium">{post.likes || 0}</Text>
+              <Text className="ml-2 text-gray-600 font-rubik-medium">{Math.max(0, post.likes || 0)}</Text>
             </TouchableOpacity>
             <TouchableOpacity className="flex-row items-center mr-6">
               <Ionicons name="chatbubble-outline" size={22} color="#374151" />

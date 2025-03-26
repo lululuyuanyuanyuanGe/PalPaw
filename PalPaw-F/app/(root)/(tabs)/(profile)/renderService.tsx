@@ -270,179 +270,44 @@ export const standardizePostFormat = (post: any): any => {
   };
 };
 
-// Fetch user's posts - now a wrapper around the PostsContext method
+// Fetch user's posts - now just calls the PostsContext method
 export const fetchUserPosts = async (userId: string): Promise<PostItem[]> => {
-  console.log("ProfileService: Fetching user posts via PostsContext");
+  console.log("ProfileService: This function is deprecated. Use PostsContext.fetchUserPosts directly.");
   
   try {
-    // Get posts from the context
+    // Get the usePosts context
     const { fetchUserPosts, state } = usePosts();
     
-    // Call the context method to fetch and update state
+    // Call the context method and return its result
     await fetchUserPosts(userId);
-    
-    // Make sure we have author data for all posts
-    const postsWithAuthor = state.userPosts.map(post => {
-      // Log any missing author data
-      if (!post.authorData) {
-        console.warn(`ProfileService: Post ${post.id} still missing authorData after context fetch`);
-      }
-      
-      return post;
-    });
-    
-    // Return the posts from the state
-    return postsWithAuthor;
+    return state.userPosts;
   } catch (error: any) {
-    console.error("Error in fetchUserPosts wrapper:", error);
-    
-    // Fall back to direct API call if context fails
-    return fetchUserPostsDirect(userId);
+    console.error("Error in fetchUserPosts:", error);
+    return [];
   }
 };
 
-// Direct API call implementation as fallback
-const fetchUserPostsDirect = async (userId: string): Promise<PostItem[]> => {
-  console.log("ProfileService: Falling back to direct API call for user posts");
-  
-  try {
-    // Use the getUserPosts function from apiClient
-    const posts = await getUserPosts(userId);
-    console.log(`ProfileService: Received ${posts.length} posts`);
-    
-    // Standardize post format for each post
-    const fetchedPosts = posts.map((post: any) => {
-      // Make sure post has all required fields
-      if (!post.media) {
-        console.warn(`User post ${post.id} is missing media field`);
-      }
-      
-      if (!post.tags) {
-        console.warn(`User post ${post.id} is missing tags field`);
-      }
-      
-      return standardizePostFormat(post);
-    });
-    
-    return fetchedPosts;
-  } catch (error: any) {
-    console.error("Error fetching user posts directly:", error);
-    
-    // Try fallback to old endpoints
-    return fetchPostsFallback(userId);
-  }
-};
-
-// Fetch liked posts - now a wrapper around the PostsContext method
+// Fetch liked posts - now just calls the PostsContext method
 export const fetchLikedPosts = async (userId: string): Promise<PostItem[]> => {
-  console.log("ProfileService: Fetching liked posts via PostsContext");
+  console.log("ProfileService: This function is deprecated. Use PostsContext.fetchLikedPosts directly.");
   
   try {
-    // Get methods from the context
+    // Get the usePosts context
     const { fetchLikedPosts, state } = usePosts();
     
-    // Call the context method to fetch and update state
+    // Call the context method and return its result
     await fetchLikedPosts(userId);
-    
-    // Return the posts from the state
     return state.likedPosts;
   } catch (error: any) {
-    console.error("Error in fetchLikedPosts wrapper:", error);
-    
-    // Fall back to direct API call if context fails
-    return fetchLikedPostsDirect(userId);
-  }
-};
-
-// Direct API call implementation as fallback
-const fetchLikedPostsDirect = async (userId: string): Promise<PostItem[]> => {
-  console.log("ProfileService: Falling back to direct API call for liked posts");
-  
-  try {
-    // Get auth token
-    const authToken = await AsyncStorage.getItem('authToken');
-    if (!authToken) {
-      throw new Error("No auth token found");
-    }
-    
-    // Call API to get liked posts
-    const response = await api.get('/likes/posts', {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    
-    console.log("Liked posts API response structure:", Object.keys(response.data));
-    
-    if (response?.data?.likedPosts) {
-      const { likedPosts } = response.data;
-      console.log(`ProfileService: Received ${likedPosts.length} liked posts`);
-      
-      // Process liked posts exactly the same way as regular posts
-      const fetchedPosts = likedPosts.map((post: any) => {
-        // Make sure post has all required fields
-        if (!post.media) {
-          console.warn(`Liked post ${post.id} is missing media field`);
-        }
-        
-        if (!post.tags) {
-          console.warn(`Liked post ${post.id} is missing tags field`);
-        }
-        
-        return standardizePostFormat(post);
-      });
-      
-      return fetchedPosts;
-    }
-    
-    console.warn("No likedPosts field in API response");
-    return [];
-  } catch (error: any) {
-    console.error("Error fetching liked posts directly:", error);
+    console.error("Error in fetchLikedPosts:", error);
     return [];
   }
 };
 
-// Fallback function for posts if new endpoint fails
+// Fallback function - also deprecated in favor of context methods
 export const fetchPostsFallback = async (userId: string): Promise<PostItem[]> => {
-  try {
-    console.log("ProfileService: Attempting fallback for user posts");
-    const postsResponse = await api.get('/pg/posts');
-    
-    if (postsResponse?.data) {
-      let userPosts = [];
-      
-      if (Array.isArray(postsResponse.data)) {
-        userPosts = postsResponse.data.filter((post: any) => post.userId === userId);
-      } else if (postsResponse.data.posts && Array.isArray(postsResponse.data.posts)) {
-        userPosts = postsResponse.data.posts.filter((post: any) => post.userId === userId);
-      } else if (typeof postsResponse.data === 'object') {
-        userPosts = [];
-      }
-      
-      console.log(`ProfileService: Found ${userPosts.length} posts with fallback`);
-      
-      // Standardize post format for each post
-      const fetchedPosts = userPosts.map((post: any) => {
-        // Make sure post has all required fields
-        if (!post.media) {
-          console.warn(`Fallback post ${post.id} is missing media field`);
-        }
-        
-        if (!post.tags) {
-          console.warn(`Fallback post ${post.id} is missing tags field`);
-        }
-        
-        return standardizePostFormat(post);
-      });
-      
-      return fetchedPosts;
-    }
-    
-    console.warn("No posts data in fallback API response");
-    return [];
-  } catch (error: any) {
-    console.error("Error in post fallback:", error);
-    return [];
-  }
+  console.log("ProfileService: This function is deprecated. Use PostsContext methods directly.");
+  return [];
 };
 
 // Fetch user's products

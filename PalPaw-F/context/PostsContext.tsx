@@ -367,54 +367,87 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
         ...state,
         currentPost: null,
       };
-    case 'LIKE_POST_SUCCESS':
-      // Update the likedPostIds array with the new postId
+    case 'LIKE_POST_SUCCESS': {
+      // Find all instances of the post and update them
+      const postId = action.payload.postId;
+      const updatedPosts = state.posts.map(post => 
+        post.id === postId 
+          ? { ...post, likes: Math.max(0, (post.likes || 0) + 1) } 
+          : post
+      );
+      const updatedUserPosts = state.userPosts.map(post => 
+        post.id === postId 
+          ? { ...post, likes: Math.max(0, (post.likes || 0) + 1) } 
+          : post
+      );
+      const updatedLikedPosts = state.likedPosts.map(post => 
+        post.id === postId 
+          ? { ...post, likes: Math.max(0, (post.likes || 0) + 1) } 
+          : post
+      );
+      
+      // Update currentPost if it's the liked post
+      const updatedCurrentPost = state.currentPost?.id === postId
+        ? { ...state.currentPost, likes: Math.max(0, (state.currentPost.likes || 0) + 1) }
+        : state.currentPost;
+      
+      // If this is a newly liked post, add it to likedPosts if not already there
+      let newLikedPosts = [...state.likedPosts];
+      if (!state.likedPosts.some(post => post.id === postId)) {
+        const postToAdd = updatedPosts.find(post => post.id === postId) || 
+                         updatedUserPosts.find(post => post.id === postId);
+        if (postToAdd) {
+          newLikedPosts = [postToAdd, ...newLikedPosts];
+        }
+      }
+      
       return {
         ...state,
+        posts: updatedPosts,
+        userPosts: updatedUserPosts,
+        likedPosts: newLikedPosts,
         likedPostIds: action.payload.likedPostIds,
-        posts: state.posts.map(post =>
-          post.id === action.payload.postId
-            ? { ...post, likes: (post.likes || 0) + 1 }
-            : post
-        ),
-        userPosts: state.userPosts.map(post =>
-          post.id === action.payload.postId
-            ? { ...post, likes: (post.likes || 0) + 1 }
-            : post
-        ),
-        likedPosts: state.likedPosts.map(post =>
-          post.id === action.payload.postId
-            ? { ...post, likes: (post.likes || 0) + 1 }
-            : post
-        ),
-        currentPost: state.currentPost?.id === action.payload.postId
-          ? { ...state.currentPost, likes: (state.currentPost.likes || 0) + 1 }
-          : state.currentPost,
+        currentPost: updatedCurrentPost
       };
-    case 'UNLIKE_POST_SUCCESS':
-      // Remove the postId from the likedPostIds array
+    }
+    
+    case 'UNLIKE_POST_SUCCESS': {
+      // Find all instances of the post and update them
+      const postId = action.payload.postId;
+      const updatedPosts = state.posts.map(post => 
+        post.id === postId 
+          ? { ...post, likes: Math.max(0, (post.likes || 0) - 1) } 
+          : post
+      );
+      const updatedUserPosts = state.userPosts.map(post => 
+        post.id === postId 
+          ? { ...post, likes: Math.max(0, (post.likes || 0) - 1) } 
+          : post
+      );
+      
+      // Remove the post from likedPosts if it's there, and update likes for others
+      const updatedLikedPosts = state.likedPosts
+        .filter(post => !action.payload.likedPostIds.includes(post.id) ? post.id !== postId : true)
+        .map(post => 
+          post.id === postId 
+            ? { ...post, likes: Math.max(0, (post.likes || 0) - 1) } 
+            : post
+        );
+      
+      // Update currentPost if it's the unliked post
+      const updatedCurrentPost = state.currentPost?.id === postId
+        ? { ...state.currentPost, likes: Math.max(0, (state.currentPost.likes || 0) - 1) }
+        : state.currentPost;
+      
       return {
         ...state,
+        posts: updatedPosts,
+        userPosts: updatedUserPosts,
+        likedPosts: updatedLikedPosts,
         likedPostIds: action.payload.likedPostIds,
-        posts: state.posts.map(post =>
-          post.id === action.payload.postId && (post.likes || 0) > 0
-            ? { ...post, likes: (post.likes || 0) - 1 }
-            : post
-        ),
-        userPosts: state.userPosts.map(post =>
-          post.id === action.payload.postId && (post.likes || 0) > 0
-            ? { ...post, likes: (post.likes || 0) - 1 }
-            : post
-        ),
-        likedPosts: state.likedPosts.map(post =>
-          post.id === action.payload.postId && (post.likes || 0) > 0
-            ? { ...post, likes: (post.likes || 0) - 1 }
-            : post
-        ),
-        currentPost: state.currentPost?.id === action.payload.postId && (state.currentPost.likes || 0) > 0
-          ? { ...state.currentPost, likes: (state.currentPost.likes || 0) - 1 }
-          : state.currentPost,
+        currentPost: updatedCurrentPost
       };
+    }
     case 'LIKE_POST_FAILURE':
     case 'UNLIKE_POST_FAILURE':
       return {

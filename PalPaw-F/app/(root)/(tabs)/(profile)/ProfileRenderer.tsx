@@ -324,7 +324,7 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
                       color={isPostLiked(item.id) ? "#F43F5E" : "#374151"} 
                     />
                   </Animated.View>
-                  <Text className="ml-1 text-xs text-gray-600">{item.likes || 0}</Text>
+                  <Text className="ml-1 text-xs text-gray-600">{Math.max(0, item.likes || 0)}</Text>
                 </TouchableOpacity>
                 
                 {item.comments && (
