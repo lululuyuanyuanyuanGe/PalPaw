@@ -61,7 +61,7 @@ const Product = sequelize.define('Product', {
   },
   // Product status
   status: {
-    type: DataTypes.ENUM('active', 'sold', 'unavailable'),
+    type: DataTypes.ENUM('active', 'sold', 'archived'),
     defaultValue: 'active'
   },
   // Optional product tags
@@ -77,7 +77,8 @@ const Product = sequelize.define('Product', {
   // View count
   views: {
     type: DataTypes.INTEGER,
-    defaultValue: 0
+    defaultValue: 0,
+    comment: 'Number of times this product has been viewed'
   },
   // Soft delete flag
   isDeleted: {

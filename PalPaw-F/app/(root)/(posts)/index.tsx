@@ -92,25 +92,6 @@ const Comment: React.FC<CommentProps> = ({ author, content, timestamp, avatarUri
   );
 };
 
-// Create a local interface extending PostItem with createdAt
-interface ExtendedPostItem extends PostItem {
-  createdAt?: Date;
-  authorData?: {
-    id: string;
-    username: string;
-    avatar: string;
-  };
-  comments?: Array<{
-    id: string;
-    author: string;
-    content: string;
-    timestamp: Date;
-    avatarUri: string;
-    likes: number;
-  }>;
-  tags?: string[];
-}
-
 const PostDetail = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -123,11 +104,8 @@ const PostDetail = () => {
   const { width } = Dimensions.get('window');
   
   // Get posts context
-  const { state: postsState, likePost, unlikePost, addComment, setCurrentPost } = usePosts();
+  const { state: postsState, likePost, unlikePost, addComment, fetchPostById, isPostLiked } = usePosts();
   const { currentPost } = postsState;
-  
-  // Parse allMedia if it exists
-  const allMedia = params.allMedia ? JSON.parse(params.allMedia as string) : [];
   
   // Animation for the like button
   const likeScale = useSharedValue(1);
@@ -137,8 +115,42 @@ const PostDetail = () => {
     };
   });
 
-  // Local state for tracking likes while also using the global state
-  const [liked, setLiked] = useState(false);
+  // Local state for tracking likes
+  const [userLiked, setUserLiked] = useState(false);
+  
+  // Fetch post if not already in context
+  useEffect(() => {
+    const postId = params.id as string;
+    
+    // If we don't have the current post or it's a different post than the one we want to view
+    if (!currentPost || currentPost.id !== postId) {
+      // Fetch the post by ID
+      fetchPostById(postId);
+    }
+  }, [params.id, currentPost, fetchPostById]);
+  
+  // Initialize like state based on context
+  useEffect(() => {
+    if (currentPost && currentPost.id) {
+      setUserLiked(isPostLiked(currentPost.id));
+    }
+  }, [currentPost, isPostLiked]);
+
+  // If post is not loaded yet, show loading
+  if (!currentPost) {
+    return (
+      <View className="flex-1 items-center justify-center">
+        <ActivityIndicator size="large" color="#9333EA" />
+        <Text className="mt-4 font-rubik-medium">Loading post...</Text>
+      </View>
+    );
+  }
+
+  // Extract tags from post
+  const tags = currentPost.tags || [];
+  
+  // Now we can use currentPost directly from context
+  const post = currentPost;
 
   // Animated header style based on scroll position
   const headerAnimatedStyle = useAnimatedStyle(() => {
@@ -156,158 +168,6 @@ const PostDetail = () => {
       borderBottomColor: `rgba(229, 231, 235, ${opacity})`
     };
   });
-  
-  // Extract hashtags from the post content
-  const extractTags = (content: string) => {
-    if (!content) return [];
-    const tagRegex = /#(\w+)/g;
-    const matches = content.match(tagRegex);
-    return matches ? matches.map(tag => tag.substring(1)) : [];
-  };
-  
-  // Create post object from params or use current post from context
-  useEffect(() => {
-    // If we have a current post in context, use that
-    if (currentPost && currentPost.id === params.id) {
-      return;
-    }
-    
-    // Otherwise, create a post from URL params
-    const extractedTags = extractTags(params.content as string || "");
-    
-    const post: ExtendedPostItem = {
-      id: params.id as string,
-      title: params.title as string || "Adorable pets at the park today! 🐶",
-      content: params.content as string || "Had an amazing time at the dog park today. Met so many cute pets and their owners. It's incredible how social and playful the dogs become when they're around each other. Looking forward to our next visit! #PetLovers #DogPark #WeekendFun",
-      likes: parseInt(params.likes as string) || 143,
-      mediaType: params.mediaType as 'image' | 'video' || 'image',
-      mediaUrl: params.mediaUrl as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636",
-      thumbnailUri: params.thumbnailUri as string || "",
-      image: { uri: params.thumbnailUri as string || params.mediaUrl as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636" },
-      createdAt: new Date(params.createdAt ? params.createdAt as string : Date.now() - 2 * 60 * 60 * 1000), // Use provided date or default to 2 hours ago
-      allMedia: allMedia,
-      authorData: {
-        id: params.authorId as string || "user123",
-        username: params.authorName as string || "John Doe",
-        avatar: params.authorAvatar as string || "https://robohash.org/user123?set=set4"
-      },
-      comments: [] as Array<{
-        id: string;
-        author: string;
-        content: string;
-        timestamp: Date;
-        avatarUri: string;
-        likes: number;
-      }>,
-      tags: extractedTags.length > 0 ? extractedTags : ["PetLovers", "DogPark", "WeekendFun"]
-    };
-    
-    // Set as current post in context
-    setCurrentPost(post);
-  }, [params.id, currentPost, setCurrentPost]);
-  
-  // Use the current post from context or fall back to params
-  const post = currentPost || {
-    id: params.id as string,
-    title: params.title as string || "Adorable pets at the park today! 🐶",
-    content: params.content as string || "Had an amazing time at the dog park today. Met so many cute pets and their owners. It's incredible how social and playful the dogs become when they're around each other. Looking forward to our next visit! #PetLovers #DogPark #WeekendFun",
-    likes: parseInt(params.likes as string) || 143,
-    mediaType: params.mediaType as 'image' | 'video' || 'image',
-    mediaUrl: params.mediaUrl as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636",
-    thumbnailUri: params.thumbnailUri as string || "",
-    image: { uri: params.thumbnailUri as string || params.mediaUrl as string || "https://images.unsplash.com/photo-1560743641-3914f2c45636" },
-    createdAt: new Date(params.createdAt ? params.createdAt as string : Date.now() - 2 * 60 * 60 * 1000), // Use provided date or default to 2 hours ago
-    allMedia: allMedia,
-    authorData: {
-      id: params.authorId as string || "user123",
-      username: params.authorName as string || "John Doe",
-      avatar: params.authorAvatar as string || "https://robohash.org/user123?set=set4"
-    },
-    comments: [] as Array<{
-      id: string;
-      author: string;
-      content: string;
-      timestamp: Date;
-      avatarUri: string;
-      likes: number;
-    }>,
-    tags: extractTags(params.content as string || "Had an amazing time at the dog park today. Met so many cute pets and their owners. It's incredible how social and playful the dogs become when they're around each other. Looking forward to our next visit! #PetLovers #DogPark #WeekendFun")
-  };
-  
-  // Get tags from the current post
-  const tags = post.tags || extractTags(post.content || '');
-
-  // Local state for comments with initialization from context
-  const [comments, setComments] = useState<Array<{
-    id: string;
-    author: string;
-    content: string;
-    timestamp: Date;
-    avatarUri: string;
-    likes: number;
-  }>>(post.comments || []);
-  
-  // Generate dynamic comments based on the post content
-  useEffect(() => {
-    // Only create comments if we don't already have them
-    if (comments.length === 0) {
-      const postContent = post.content || '';
-      const mediaType = post.mediaType || 'image';
-      
-      // Generate comments relevant to the post content
-      const generatedComments = [];
-      let commentId = 1;
-      
-      // If post mentions pets/animals
-      if (postContent.toLowerCase().includes('pet') || 
-          postContent.toLowerCase().includes('dog') || 
-          postContent.toLowerCase().includes('cat')) {
-        generatedComments.push({
-          id: `comment-${commentId++}`,
-          author: 'Jane Smith',
-          content: 'Such adorable pets! I love bringing my golden retriever to that park too. Maybe we will run into each other sometime! 🐕',
-          timestamp: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
-          avatarUri: 'https://robohash.org/user456?set=set4',
-          likes: 12
-        });
-      }
-      
-      // If it's a video post
-      if (mediaType === 'video') {
-        generatedComments.push({
-          id: `comment-${commentId++}`,
-          author: 'Mark Thompson',
-          content: 'Great video quality! Which camera did you use to record this?',
-          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-          avatarUri: 'https://robohash.org/user789?set=set4',
-          likes: 5
-        });
-      }
-      
-      // Add a generic comment
-      generatedComments.push({
-        id: `comment-${commentId++}`,
-        author: 'Samantha Lee',
-        content: postContent.length > 100 
-          ? 'I love the detailed description! Thanks for sharing this wonderful moment with us.' 
-          : 'Great post! Thanks for sharing.',
-        timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000), // 3 hours ago
-        avatarUri: 'https://robohash.org/user101?set=set4',
-        likes: 8
-      });
-      
-      setComments(generatedComments);
-      
-      // Update the post with generated comments in context
-      if (currentPost) {
-        const updatedPost = {
-          ...currentPost,
-          comments: generatedComments
-        };
-        setCurrentPost(updatedPost);
-      }
-    }
-  }, [post.content, post.mediaType, comments.length, currentPost, setCurrentPost]);
   
   // Handle video playback
   const handlePlayPress = () => {
@@ -335,10 +195,10 @@ const PostDetail = () => {
     });
     
     // Toggle local liked state
-    setLiked(!liked);
+    setUserLiked(!userLiked);
     
     // Update global state
-    if (!liked) {
+    if (!userLiked) {
       likePost(post.id);
     } else {
       unlikePost(post.id);
@@ -364,9 +224,6 @@ const PostDetail = () => {
         avatarUri: 'https://robohash.org/myavatar?set=set4',
         likes: 0
       };
-      
-      // Update local state
-      setComments([comment, ...comments]);
       
       // Update global state through context
       addComment(post.id, comment);
@@ -534,17 +391,9 @@ const PostDetail = () => {
                 </View>
               ))
             ) : (
-              <>
-                <View className="bg-purple-50 px-3 py-1 rounded-full mr-2 mb-2">
-                  <Text className="text-purple-600 text-xs font-rubik-medium">#PetLovers</Text>
-                </View>
-                <View className="bg-purple-50 px-3 py-1 rounded-full mr-2 mb-2">
-                  <Text className="text-purple-600 text-xs font-rubik-medium">#DogPark</Text>
-                </View>
-                <View className="bg-purple-50 px-3 py-1 rounded-full mr-2 mb-2">
-                  <Text className="text-purple-600 text-xs font-rubik-medium">#WeekendFun</Text>
-                </View>
-              </>
+              <View className="bg-purple-50 px-3 py-1 rounded-full mr-2 mb-2">
+                <Text className="text-purple-600 text-xs font-rubik-medium">#NoTags</Text>
+              </View>
             )}
           </View>
         </View>
@@ -559,16 +408,16 @@ const PostDetail = () => {
             >
               <Animated.View style={likeAnimatedStyle}>
                 <Ionicons 
-                  name={liked ? "heart" : "heart-outline"} 
+                  name={userLiked ? "heart" : "heart-outline"} 
                   size={24} 
-                  color={liked ? "#F43F5E" : "#374151"} 
+                  color={userLiked ? "#F43F5E" : "#374151"} 
                 />
               </Animated.View>
-              <Text className="ml-2 text-gray-600 font-rubik-medium">{liked ? (post.likes || 0) + 1 : (post.likes || 0)}</Text>
+              <Text className="ml-2 text-gray-600 font-rubik-medium">{post.likes || 0}</Text>
             </TouchableOpacity>
             <TouchableOpacity className="flex-row items-center mr-6">
               <Ionicons name="chatbubble-outline" size={22} color="#374151" />
-              <Text className="ml-2 text-gray-600 font-rubik-medium">{comments.length}</Text>
+              <Text className="ml-2 text-gray-600 font-rubik-medium">{post.comments?.length || 0}</Text>
             </TouchableOpacity>
             <TouchableOpacity className="flex-row items-center">
               <Ionicons name="bookmark-outline" size={22} color="#374151" />
@@ -590,16 +439,20 @@ const PostDetail = () => {
         <View className="p-4 bg-white mt-2 mb-2 shadow-sm">
           <Text className="font-rubik-semibold text-gray-800 mb-4 text-lg">Comments</Text>
           
-          {comments.map((comment) => (
-            <Comment 
-              key={comment.id}
-              author={comment.author}
-              content={comment.content}
-              timestamp={comment.timestamp}
-              avatarUri={comment.avatarUri}
-              likes={comment.likes}
-            />
-          ))}
+          {post.comments && post.comments.length > 0 ? (
+            post.comments.map((comment) => (
+              <Comment 
+                key={comment.id}
+                author={comment.author}
+                content={comment.content}
+                timestamp={comment.timestamp}
+                avatarUri={comment.avatarUri}
+                likes={comment.likes}
+              />
+            ))
+          ) : (
+            <Text className="text-center text-gray-500 py-4 font-rubik">No comments yet. Be the first to comment!</Text>
+          )}
         </View>
         
         {/* Bottom padding for comment input */}

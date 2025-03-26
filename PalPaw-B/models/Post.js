@@ -36,6 +36,12 @@ const Post = sequelize.define('Post', {
     type: DataTypes.INTEGER,
     defaultValue: 0
   },
+  // View count
+  views: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: 'Number of times this post has been viewed'
+  },
   // Optional location data - human readable address
   location: {
     type: DataTypes.TEXT,

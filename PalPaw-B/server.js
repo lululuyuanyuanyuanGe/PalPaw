@@ -12,6 +12,8 @@ import pgAuthRoutes from './routes/pgAuth.js'; // PostgreSQL auth routes
 import uploadRoutes from './routes/upload.js'; // Upload routes
 import userRoutes from './routes/users.js'; // User routes
 import likesRoutes from './routes/likes.js'; // Likes routes
+import postsRoutes from './routes/posts.js'; // Posts routes
+import productsRoutes from './routes/products.js'; // Products routes
 
 // Load environment variables
 dotenv.config();
@@ -19,8 +21,19 @@ dotenv.config();
 const app = express();
 
 // Connect to PostgreSQL and synchronize models
-testConnection();
-syncModels(); // Force sync once to update schema
+(async () => {
+  try {
+    // Test database connection
+    await testConnection();
+    
+    // Sync models
+    await syncModels();
+    
+    console.log('Database setup completed successfully');
+  } catch (error) {
+    console.error('Database setup failed:', error);
+  }
+})();
 
 // Middleware
 app.use(cors());
@@ -62,7 +75,10 @@ app.use("/api/pg/users", userRoutes); // User routes
 console.log('- /api/pg/users');
 app.use("/api/likes", likesRoutes); // Likes routes
 console.log('- /api/likes');
-
+app.use("/api/pg/posts", postsRoutes); // Posts routes
+console.log('- /api/pg/posts');
+app.use("/api/pg/products", productsRoutes); // Products routes
+console.log('- /api/pg/products');
 
 // Home route
 app.get('/', (req, res) => {

@@ -1,11 +1,15 @@
 import React, { createContext, useReducer, useContext, ReactNode, useEffect } from 'react';
 import { PostItem } from '../app/(root)/(tabs)/(profile)/types';
-import { fetchUserPosts, fetchPostsFallback } from '../app/(root)/(tabs)/(profile)/renderService';
+import { fetchUserPosts as fetchUserPostsService, fetchPostsFallback } from '../app/(root)/(tabs)/(profile)/renderService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '../utils/apiClient';
 
 // Define the context state interface
 interface PostsState {
   posts: PostItem[];
   userPosts: PostItem[];
+  likedPosts: PostItem[];
+  likedPostIds: string[];
   currentPost: PostItem | null;
   loading: boolean;
   error: string | null;
@@ -18,10 +22,15 @@ export type PostsAction =
   | { type: 'FETCH_POSTS_FAILURE'; payload: string }
   | { type: 'FETCH_USER_POSTS_SUCCESS'; payload: PostItem[] }
   | { type: 'FETCH_USER_POSTS_FAILURE'; payload: string }
+  | { type: 'FETCH_LIKED_POSTS_SUCCESS'; payload: { posts: PostItem[], postIds: string[] } }
+  | { type: 'FETCH_LIKED_POSTS_FAILURE'; payload: string }
   | { type: 'SET_CURRENT_POST'; payload: PostItem }
   | { type: 'CLEAR_CURRENT_POST' }
-  | { type: 'LIKE_POST'; payload: string } // Post ID
-  | { type: 'UNLIKE_POST'; payload: string } // Post ID
+  | { type: 'LIKE_POST_SUCCESS'; payload: { postId: string, likedPostIds: string[] } }
+  | { type: 'UNLIKE_POST_SUCCESS'; payload: { postId: string, likedPostIds: string[] } }
+  | { type: 'LIKE_POST_FAILURE'; payload: string }
+  | { type: 'UNLIKE_POST_FAILURE'; payload: string }
+  | { type: 'INCREMENT_POST_VIEWS'; payload: { postId: string } }
   | { type: 'ADD_COMMENT'; payload: { postId: string; comment: Comment } }
   | { type: 'CLEAR_ERRORS' };
 
@@ -39,6 +48,8 @@ interface Comment {
 const initialState: PostsState = {
   posts: [],
   userPosts: [],
+  likedPosts: [],
+  likedPostIds: [],
   currentPost: null,
   loading: false,
   error: null,
@@ -79,6 +90,20 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
         loading: false,
         error: action.payload,
       };
+    case 'FETCH_LIKED_POSTS_SUCCESS':
+      return {
+        ...state,
+        likedPosts: action.payload.posts,
+        likedPostIds: action.payload.postIds,
+        loading: false,
+        error: null,
+      };
+    case 'FETCH_LIKED_POSTS_FAILURE':
+      return {
+        ...state,
+        loading: false,
+        error: action.payload,
+      };
     case 'SET_CURRENT_POST':
       return {
         ...state,
@@ -89,38 +114,80 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
         ...state,
         currentPost: null,
       };
-    case 'LIKE_POST':
+    case 'LIKE_POST_SUCCESS':
+      // Update the likedPostIds array with the new postId
       return {
         ...state,
+        likedPostIds: action.payload.likedPostIds,
         posts: state.posts.map(post =>
-          post.id === action.payload
+          post.id === action.payload.postId
             ? { ...post, likes: (post.likes || 0) + 1 }
             : post
         ),
         userPosts: state.userPosts.map(post =>
-          post.id === action.payload
+          post.id === action.payload.postId
             ? { ...post, likes: (post.likes || 0) + 1 }
             : post
         ),
-        currentPost: state.currentPost?.id === action.payload
+        likedPosts: state.likedPosts.map(post =>
+          post.id === action.payload.postId
+            ? { ...post, likes: (post.likes || 0) + 1 }
+            : post
+        ),
+        currentPost: state.currentPost?.id === action.payload.postId
           ? { ...state.currentPost, likes: (state.currentPost.likes || 0) + 1 }
           : state.currentPost,
       };
-    case 'UNLIKE_POST':
+    case 'UNLIKE_POST_SUCCESS':
+      // Remove the postId from the likedPostIds array
       return {
         ...state,
+        likedPostIds: action.payload.likedPostIds,
         posts: state.posts.map(post =>
-          post.id === action.payload && (post.likes || 0) > 0
+          post.id === action.payload.postId && (post.likes || 0) > 0
             ? { ...post, likes: (post.likes || 0) - 1 }
             : post
         ),
         userPosts: state.userPosts.map(post =>
-          post.id === action.payload && (post.likes || 0) > 0
+          post.id === action.payload.postId && (post.likes || 0) > 0
             ? { ...post, likes: (post.likes || 0) - 1 }
             : post
         ),
-        currentPost: state.currentPost?.id === action.payload && (state.currentPost.likes || 0) > 0
+        likedPosts: state.likedPosts.map(post =>
+          post.id === action.payload.postId && (post.likes || 0) > 0
+            ? { ...post, likes: (post.likes || 0) - 1 }
+            : post
+        ),
+        currentPost: state.currentPost?.id === action.payload.postId && (state.currentPost.likes || 0) > 0
           ? { ...state.currentPost, likes: (state.currentPost.likes || 0) - 1 }
+          : state.currentPost,
+      };
+    case 'LIKE_POST_FAILURE':
+    case 'UNLIKE_POST_FAILURE':
+      return {
+        ...state,
+        error: action.payload,
+      };
+    case 'INCREMENT_POST_VIEWS':
+      return {
+        ...state,
+        posts: state.posts.map(post =>
+          post.id === action.payload.postId
+            ? { ...post, views: (post.views || 0) + 1 }
+            : post
+        ),
+        userPosts: state.userPosts.map(post =>
+          post.id === action.payload.postId
+            ? { ...post, views: (post.views || 0) + 1 }
+            : post
+        ),
+        likedPosts: state.likedPosts.map(post =>
+          post.id === action.payload.postId
+            ? { ...post, views: (post.views || 0) + 1 }
+            : post
+        ),
+        currentPost: state.currentPost?.id === action.payload.postId
+          ? { ...state.currentPost, views: (state.currentPost.views || 0) + 1 }
           : state.currentPost,
       };
     case 'ADD_COMMENT':
@@ -172,9 +239,13 @@ interface PostsContextType {
   dispatch: React.Dispatch<PostsAction>;
   fetchPosts: () => Promise<void>;
   fetchUserPosts: (userId: string) => Promise<void>;
+  fetchLikedPosts: () => Promise<void>;
+  fetchPostById: (postId: string) => Promise<void>;
   setCurrentPost: (post: PostItem) => void;
-  likePost: (postId: string) => void;
-  unlikePost: (postId: string) => void;
+  likePost: (postId: string) => Promise<void>;
+  unlikePost: (postId: string) => Promise<void>;
+  isPostLiked: (postId: string) => boolean;
+  incrementPostViews: (postId: string) => Promise<void>;
   addComment: (postId: string, comment: Comment) => void;
 }
 
@@ -188,6 +259,27 @@ interface PostsProviderProps {
 
 export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(postsReducer, initialState);
+
+  // Initialize liked posts from AsyncStorage on mount
+  useEffect(() => {
+    const initLikedPosts = async () => {
+      try {
+        const storedLikedPostIds = await AsyncStorage.getItem('likedPostIds');
+        if (storedLikedPostIds) {
+          // We only initialize the IDs from storage, the actual posts will be fetched when needed
+          const likedPostIds = JSON.parse(storedLikedPostIds);
+          dispatch({ 
+            type: 'FETCH_LIKED_POSTS_SUCCESS', 
+            payload: { posts: [], postIds: likedPostIds } 
+          });
+        }
+      } catch (error) {
+        console.error('Error initializing liked posts:', error);
+      }
+    };
+
+    initLikedPosts();
+  }, []);
 
   // Function to fetch all posts
   const fetchPosts = async () => {
@@ -205,10 +297,10 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   };
 
   // Function to fetch user posts
-  const fetchUserPostsById = async (userId: string) => {
+  const fetchUserPosts = async (userId: string): Promise<void> => {
     dispatch({ type: 'FETCH_POSTS_REQUEST' });
     try {
-      const posts = await fetchUserPosts(userId);
+      const posts = await fetchUserPostsService(userId);
       dispatch({ type: 'FETCH_USER_POSTS_SUCCESS', payload: posts });
     } catch (error) {
       dispatch({
@@ -218,21 +310,330 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     }
   };
 
-  // Function to set current post
+  // Helper function to check if a URL is a video URL
+  const isVideoUrl = (url: string): boolean => {
+    if (!url) return false;
+    
+    // Check common video extensions
+    const videoExtensions = ['.mp4', '.mov', '.avi', '.wmv', '.flv', '.webm', '.mkv'];
+    const lowercasedUrl = url.toLowerCase();
+    
+    for (const ext of videoExtensions) {
+      if (lowercasedUrl.endsWith(ext)) {
+        return true;
+      }
+    }
+    
+    // Also check if the URL contains a video indicator
+    const isVideo = lowercasedUrl.includes('/video/') || 
+           lowercasedUrl.includes('video=true') || 
+           lowercasedUrl.includes('type=video');
+    
+    return isVideo;
+  };
+  
+  // Helper function to format image URLs
+  const formatImageUrl = (path: string | undefined): string => {
+    if (!path) {
+      return 'https://robohash.org/default?set=set4&bgset=bg1';
+    }
+    
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    
+    // Ensure path has a leading slash
+    if (!path.startsWith('/')) {
+      path = '/' + path;
+    }
+    
+    // Use same API base URL as in renderService
+    const API_BASE_URL = 'http://192.168.2.11:5001';
+    return `${API_BASE_URL}${path}`;
+  };
+  
+  // Function to fetch liked posts
+  const fetchLikedPosts = async () => {
+    dispatch({ type: 'FETCH_POSTS_REQUEST' });
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      
+      if (!token) {
+        throw new Error('No auth token found');
+      }
+
+      // Call the API to get liked posts
+      const response = await api.get('/likes/posts', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      let { likedPosts, likedPostIds } = response.data;
+      
+      // Process the liked posts the exact same way as in renderService's fetchUserPosts
+      likedPosts = likedPosts.map((post: any) => {
+        // Default values
+        let imageUrl = 'https://robohash.org/post' + post.id + '?set=set4';
+        let mediaType: 'image' | 'video' = 'image';
+        let mediaUrl = '';
+        let thumbnailUri = '';
+        
+        // Process media array to find the right thumbnail - exact same logic as in renderService
+        if (post.media && Array.isArray(post.media) && post.media.length > 0) {
+          // First, try to find an image to use as thumbnail
+          const firstImage = post.media.find((item: any) => {
+            if (typeof item === 'object' && item !== null && item.type) {
+              return item.type === 'image';
+            } else if (typeof item === 'string') {
+              return !isVideoUrl(item);
+            }
+            return false;
+          });
+          
+          // Now look for videos
+          const videoMedia = post.media.find((item: any) => {
+            if (typeof item === 'object' && item !== null && item.type) {
+              return item.type === 'video';
+            } else if (typeof item === 'string') {
+              return isVideoUrl(item);
+            }
+            return false;
+          });
+          
+          // If we found a video, use it for the mediaUrl and set type to video
+          if (videoMedia) {
+            mediaType = 'video';
+            
+            if (typeof videoMedia === 'object' && videoMedia !== null) {
+              // Make sure the URL is an absolute path
+              mediaUrl = formatImageUrl(videoMedia.url);
+              
+              // Check if video media has a thumbnail field first
+              if (videoMedia.thumbnail) {
+                thumbnailUri = formatImageUrl(videoMedia.thumbnail);
+                imageUrl = thumbnailUri;
+              }
+              // If no thumbnail but we found an image, use that for the thumbnail
+              else if (firstImage) {
+                if (typeof firstImage === 'object' && firstImage !== null) {
+                  imageUrl = formatImageUrl(firstImage.url);
+                } else if (typeof firstImage === 'string') {
+                  imageUrl = formatImageUrl(firstImage);
+                }
+              } else {
+                // If no image is available, use a placeholder
+                imageUrl = 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
+              }
+            } else if (typeof videoMedia === 'string') {
+              mediaUrl = formatImageUrl(videoMedia);
+              
+              // If we also found an image, use that for the thumbnail
+              if (firstImage && typeof firstImage === 'string') {
+                imageUrl = formatImageUrl(firstImage);
+              } else {
+                // If no image is available, we'll use a placeholder
+                imageUrl = 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
+              }
+            }
+          } else if (firstImage) {
+            // No videos, just use the first image
+            mediaType = 'image';
+            if (typeof firstImage === 'object' && firstImage !== null) {
+              mediaUrl = formatImageUrl(firstImage.url);
+              imageUrl = mediaUrl;
+            } else if (typeof firstImage === 'string') {
+              mediaUrl = formatImageUrl(firstImage);
+              imageUrl = mediaUrl;
+            }
+          } else {
+            // No videos or images, use the first media item whatever it is
+            const firstMedia = post.media[0];
+            if (typeof firstMedia === 'object' && firstMedia !== null) {
+              mediaUrl = formatImageUrl(firstMedia.url || '');
+              mediaType = firstMedia.type === 'video' ? 'video' : 'image';
+              // For videos, use a placeholder for the thumbnail
+              if (mediaType === 'video') {
+                imageUrl = 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
+              } else {
+                imageUrl = mediaUrl;
+              }
+            } else if (typeof firstMedia === 'string') {
+              mediaUrl = formatImageUrl(firstMedia);
+              mediaType = isVideoUrl(firstMedia) ? 'video' : 'image';
+              // For videos, use a placeholder for the thumbnail
+              if (mediaType === 'video') {
+                imageUrl = 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
+              } else {
+                imageUrl = mediaUrl;
+              }
+            }
+          }
+        }
+        
+        // Create the processed post exactly like in renderService.fetchUserPosts
+        return {
+          id: post.id,
+          title: post.title || "Untitled Post",
+          content: post.content,
+          likes: post.likes || 0,
+          image: { uri: imageUrl },
+          mediaType: mediaType,
+          mediaUrl: mediaUrl,
+          thumbnailUri: thumbnailUri,
+          // Add the full media array for reference
+          allMedia: post.media,
+          // Add imageUrl separately to ensure it's available
+          imageUrl: imageUrl,
+          // Ensure views field is present
+          views: post.views || 0,
+          // Copy over any additional fields
+          ...post
+        };
+      });
+      
+      // Save to AsyncStorage for offline access
+      await AsyncStorage.setItem('likedPostIds', JSON.stringify(likedPostIds));
+      
+      dispatch({ 
+        type: 'FETCH_LIKED_POSTS_SUCCESS', 
+        payload: { posts: likedPosts, postIds: likedPostIds }
+      });
+    } catch (error) {
+      console.error('Error fetching liked posts:', error);
+      dispatch({
+        type: 'FETCH_LIKED_POSTS_FAILURE',
+        payload: 'Failed to fetch liked posts',
+      });
+    }
+  };
+
+  // Function to set the current post
   const setCurrentPost = (post: PostItem) => {
     dispatch({ type: 'SET_CURRENT_POST', payload: post });
   };
 
-  // Function to like a post
-  const likePost = (postId: string) => {
-    dispatch({ type: 'LIKE_POST', payload: postId });
-    // In a real app, you would make an API call to like the post
+  // Function to fetch a post by ID
+  const fetchPostById = async (postId: string) => {
+    try {
+      console.log(`Fetching post with ID: ${postId}`);
+      
+      // First, check if the post exists in our current state
+      const existingPost = state.posts.find(post => post.id === postId) || 
+                          state.userPosts.find(post => post.id === postId) ||
+                          state.likedPosts.find(post => post.id === postId);
+      
+      if (existingPost) {
+        console.log('Post found in existing state');
+        dispatch({ type: 'SET_CURRENT_POST', payload: existingPost });
+        
+        // Increment the view count when viewing an existing post
+        incrementPostViews(postId);
+        return;
+      }
+      
+      // If not in our state, try to fetch from API
+      try {
+        const response = await api.get(`/pg/posts/${postId}`);
+        
+        if (response.data && response.data.post) {
+          console.log('Post fetched from API');
+          dispatch({ type: 'SET_CURRENT_POST', payload: response.data.post });
+          
+          // The view is automatically incremented by the API when we fetch the post
+        } else {
+          throw new Error('Post not found');
+        }
+      } catch (apiError) {
+        console.error('Error fetching post from API:', apiError);
+        
+        // As a fallback, look for the post in static/mock data
+        const fallbackPosts = await fetchPostsFallback('all');
+        const fallbackPost = fallbackPosts.find(post => post.id === postId);
+        
+        if (fallbackPost) {
+          console.log('Post found in fallback data');
+          dispatch({ type: 'SET_CURRENT_POST', payload: fallbackPost });
+          
+          // Increment view count for fallback posts as well
+          incrementPostViews(postId);
+        } else {
+          console.error('Post not found in any source');
+          throw new Error('Post not found in any source');
+        }
+      }
+    } catch (error) {
+      console.error('Error in fetchPostById:', error);
+    }
   };
 
-  // Function to unlike a post
-  const unlikePost = (postId: string) => {
-    dispatch({ type: 'UNLIKE_POST', payload: postId });
-    // In a real app, you would make an API call to unlike the post
+  // Function to check if a post is liked
+  const isPostLiked = (postId: string): boolean => {
+    return state.likedPostIds.includes(postId);
+  };
+
+  // Function to like a post with API call
+  const likePost = async (postId: string) => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      
+      if (!token) {
+        throw new Error('No auth token found');
+      }
+
+      // Call the API to like the post
+      const response = await api.post(`/likes/post/${postId}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const { likedPostIds } = response.data;
+
+      // Save updated liked post IDs to AsyncStorage
+      await AsyncStorage.setItem('likedPostIds', JSON.stringify(likedPostIds));
+
+      // Update state
+      dispatch({ 
+        type: 'LIKE_POST_SUCCESS', 
+        payload: { postId, likedPostIds } 
+      });
+    } catch (error) {
+      console.error('Error liking post:', error);
+      dispatch({
+        type: 'LIKE_POST_FAILURE',
+        payload: 'Failed to like post',
+      });
+    }
+  };
+
+  // Function to unlike a post with API call
+  const unlikePost = async (postId: string) => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      
+      if (!token) {
+        throw new Error('No auth token found');
+      }
+
+      // Call the API to unlike the post
+      const response = await api.delete(`/likes/post/${postId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const { likedPostIds } = response.data;
+
+      // Save updated liked post IDs to AsyncStorage
+      await AsyncStorage.setItem('likedPostIds', JSON.stringify(likedPostIds));
+
+      // Update state
+      dispatch({ 
+        type: 'UNLIKE_POST_SUCCESS', 
+        payload: { postId, likedPostIds } 
+      });
+    } catch (error) {
+      console.error('Error unliking post:', error);
+      dispatch({
+        type: 'UNLIKE_POST_FAILURE',
+        payload: 'Failed to unlike post',
+      });
+    }
   };
 
   // Function to add a comment
@@ -244,16 +645,37 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     // In a real app, you would make an API call to add the comment
   };
 
+  // Function to increment post views with API call
+  const incrementPostViews = async (postId: string) => {
+    try {
+      // Call the API to increment post views
+      await api.get(`/pg/posts/${postId}`);
+      
+      // Update state locally
+      dispatch({ 
+        type: 'INCREMENT_POST_VIEWS', 
+        payload: { postId }
+      });
+    } catch (error) {
+      console.error('Error incrementing post views:', error);
+      // We don't dispatch an error here to keep the UX smooth
+    }
+  };
+
   return (
     <PostsContext.Provider
       value={{
         state,
         dispatch,
         fetchPosts,
-        fetchUserPosts: fetchUserPostsById,
+        fetchUserPosts,
+        fetchLikedPosts,
+        fetchPostById,
         setCurrentPost,
         likePost,
         unlikePost,
+        isPostLiked,
+        incrementPostViews,
         addComment,
       }}
     >

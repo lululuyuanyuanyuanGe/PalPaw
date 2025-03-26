@@ -1,0 +1,57 @@
+import express from 'express';
+import { authenticate, optionalAuthenticate } from '../middlewares/authMiddleware.js';
+import { 
+  getAllProducts,
+  getProductById,
+  createProduct,
+  saveProduct,
+  unsaveProduct,
+  getSavedProducts
+} from '../controllers/products/index.js';
+
+const router = express.Router();
+
+/**
+ * @route GET /api/pg/products
+ * @desc Get all products with pagination, sorting and filtering
+ * @access Public
+ */
+router.get('/', optionalAuthenticate, getAllProducts);
+
+/**
+ * Note: This route must come before /:id to avoid conflicts
+ * @route GET /api/pg/products/saved
+ * @desc Get all products saved by the user
+ * @access Private
+ */
+router.get('/saved', authenticate, getSavedProducts);
+
+/**
+ * @route GET /api/pg/products/:id
+ * @desc Get a single product by ID and increment view count
+ * @access Public
+ */
+router.get('/:id', optionalAuthenticate, getProductById);
+
+/**
+ * @route POST /api/pg/products
+ * @desc Create a new product
+ * @access Private
+ */
+router.post('/', authenticate, createProduct);
+
+/**
+ * @route POST /api/pg/products/:id/save
+ * @desc Save a product to user's collection
+ * @access Private
+ */
+router.post('/:id/save', authenticate, saveProduct);
+
+/**
+ * @route DELETE /api/pg/products/:id/save
+ * @desc Remove a product from user's collection
+ * @access Private
+ */
+router.delete('/:id/save', authenticate, unsaveProduct);
+
+export default router; 

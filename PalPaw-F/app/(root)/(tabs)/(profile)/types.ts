@@ -13,6 +13,7 @@ export interface BaseItem {
 export interface PostItem extends BaseItem {
   title?: string;
   likes?: number;
+  views?: number;
   content?: string;
   createdAt?: Date;
   authorData?: {
@@ -44,6 +45,7 @@ export interface ProductItem extends BaseItem {
   price?: number;
   rating?: number;
   sold?: number;
+  views?: number;
 }
 
 // Define new product button type
@@ -91,4 +93,4 @@ export const newPostButton: ButtonItem = { id: "newPost", isButton: true, title:
 // Create new product button item
 export const newProductButton: ProductButtonItem = { id: "newProduct", isButton: true, name: "", image: null };
 
-export type ProfileTab = 'posts' | 'products'; 
+export type ProfileTab = 'posts' | 'products' | 'liked'; 

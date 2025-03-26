@@ -107,6 +107,12 @@ export const endpoints = {
     userProducts: '/upload/products',
     productById: '/upload/product',
   },
+  likes: {
+    like: '/likes/post',      // POST /likes/post/:postId
+    unlike: '/likes/post',     // DELETE /likes/post/:postId
+    likedPosts: '/likes/posts', // GET /likes/posts
+    postLikes: '/likes/post'    // GET /likes/post/:postId/users
+  }
 };
 
 // Helper function for direct fetch API calls (more reliable for debugging)
@@ -164,6 +170,14 @@ export const postsService = {
 export const productsService = {
   create: (data: ProductData) => api.post(endpoints.products.create, data),
   list: () => api.get(endpoints.products.list),
+};
+
+// Likes service
+export const likesService = {
+  likePost: (postId: string) => api.post(`${endpoints.likes.like}/${postId}`),
+  unlikePost: (postId: string) => api.delete(`${endpoints.likes.unlike}/${postId}`),
+  getLikedPosts: () => api.get(endpoints.likes.likedPosts),
+  getPostLikes: (postId: string) => api.get(`${endpoints.likes.postLikes}/${postId}/users`),
 };
 
 /**
