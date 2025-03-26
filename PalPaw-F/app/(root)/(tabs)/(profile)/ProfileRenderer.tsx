@@ -11,7 +11,7 @@ interface RenderItemProps {
   item: BaseItem;
   activeTab: ProfileTab;
   onPress: (item: BaseItem) => void;
-  onLike?: (postId: string, isLiked: boolean) => void;
+  onLike?: (postId: string) => void;
   showTabBar?: boolean;
 }
 
@@ -177,25 +177,20 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
   };
   
   // Handle like press with animation
-  const handleLikePress = (postItem: PostItem, event: any) => {
+  const handleLikePress = (postItem: BaseItem, event: any) => {
     // Stop event propagation to prevent navigating to detail
     event.stopPropagation();
+    
+    if (!isPostItem(postItem)) return;
     
     // Animate the like button
     likeScale.value = withSpring(1.3, { damping: 10 }, () => {
       likeScale.value = withSpring(1);
     });
     
-    // Check if already liked and toggle
-    if (isPostLiked(postItem.id)) {
-      unlikePost(postItem.id);
-    } else {
-      likePost(postItem.id);
-    }
-    
     // Call the onLike handler if provided
     if (onLike) {
-      onLike(postItem.id, isPostLiked(postItem.id));
+      onLike(postItem.id);
     }
   };
 

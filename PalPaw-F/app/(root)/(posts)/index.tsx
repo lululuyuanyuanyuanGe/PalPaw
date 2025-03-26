@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   View, 
   Text, 
@@ -7,14 +7,11 @@ import {
   ScrollView, 
   Dimensions, 
   TextInput,
-  Platform,
   ActivityIndicator 
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { PostItem } from '../(tabs)/(profile)/types';
 import Animated, { 
   useSharedValue, 
   useAnimatedStyle, 
@@ -23,6 +20,7 @@ import Animated, {
   Extrapolate
 } from 'react-native-reanimated';
 import { usePosts } from '../../../context';
+import MediaCarousel from '../../components/MediaCarousel';
 
 // Utility function to format the date/time
 const formatTimeAgo = (date: string | Date) => {
@@ -95,11 +93,7 @@ const Comment: React.FC<CommentProps> = ({ author, content, timestamp, avatarUri
 const PostDetail = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [isMuted, setIsMuted] = useState(false);
   const [newComment, setNewComment] = useState('');
-  const videoRef = useRef<Video>(null);
   const scrollY = useSharedValue(0);
   const { width } = Dimensions.get('window');
   
@@ -172,50 +166,6 @@ const PostDetail = () => {
     };
   });
   
-  // Handle video playback
-  const handlePlayPress = () => {
-    if (isPlaying) {
-      videoRef.current?.pauseAsync();
-    } else {
-      videoRef.current?.playAsync();
-    }
-    setIsPlaying(!isPlaying);
-  };
-  
-  // Handle video status update
-  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded) {
-      setLoading(false);
-      // Update playing state based on video status
-      setIsPlaying(status.isPlaying);
-    }
-  };
-  
-  // Handle like press with animation
-  const handleLikePress = () => {
-    likeScale.value = withSpring(1.3, { damping: 10 }, () => {
-      likeScale.value = withSpring(1);
-    });
-    
-    // Toggle local liked state
-    setUserLiked(!userLiked);
-    
-    // Update global state
-    if (!userLiked) {
-      likePost(post.id);
-    } else {
-      unlikePost(post.id);
-    }
-  };
-  
-  // Handle mute toggle
-  const handleMutePress = () => {
-    if (videoRef.current) {
-      videoRef.current.setIsMutedAsync(!isMuted);
-      setIsMuted(!isMuted);
-    }
-  };
-  
   // Handle adding a new comment
   const handleAddComment = () => {
     if (newComment.trim()) {
@@ -273,93 +223,8 @@ const PostDetail = () => {
           </View>
         </View>
 
-        {/* Media Content with Enhanced Display */}
-        <View className="w-full aspect-square">
-          {post.mediaType === 'video' ? (
-            <View className="w-full h-full bg-black">
-              {loading && (
-                <View className="absolute inset-0 items-center justify-center bg-black">
-                  <ActivityIndicator size="large" color="#9333EA" />
-                </View>
-              )}
-              
-              <Video
-                ref={videoRef}
-                source={{ uri: post.mediaUrl || '' }}
-                resizeMode={ResizeMode.COVER}
-                style={{ width: '100%', height: '100%' }}
-                shouldPlay={false}
-                isLooping
-                onPlaybackStatusUpdate={onPlaybackStatusUpdate}
-                useNativeControls={isPlaying}
-              />
-              
-              {!isPlaying && (
-                <View className="absolute inset-0">
-                  <Image
-                    source={{ uri: post.thumbnailUri || post.image?.uri || post.mediaUrl || '' }}
-                    style={{ width: '100%', height: '100%' }}
-                    resizeMode="cover"
-                  />
-                  <LinearGradient
-                    colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.4)']}
-                    className="absolute inset-0"
-                  />
-                  <TouchableOpacity
-                    onPress={handlePlayPress}
-                    className="absolute inset-0 items-center justify-center"
-                  >
-                    <LinearGradient
-                      colors={['rgba(147,51,234,0.8)', 'rgba(192,132,252,0.8)']}
-                      className="w-16 h-16 rounded-full items-center justify-center shadow-lg"
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                    >
-                      <Ionicons name="play" size={36} color="white" />
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              )}
-              
-              {/* Video Controls Overlay */}
-              {isPlaying && (
-                <View className="absolute bottom-4 right-4 flex-row">
-                  <TouchableOpacity 
-                    className="bg-black/60 rounded-full p-2 mr-2"
-                    onPress={handleMutePress}
-                  >
-                    <Ionicons name={isMuted ? "volume-mute" : "volume-medium"} size={20} color="white" />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    className="bg-black/60 rounded-full p-2"
-                    onPress={handlePlayPress}
-                  >
-                    <Ionicons name="pause" size={20} color="white" />
-                  </TouchableOpacity>
-                </View>
-              )}
-              
-              {/* Video indicator */}
-              <View className="absolute top-4 left-4 bg-black/60 px-3 py-1 rounded-full flex-row items-center">
-                <Ionicons name="videocam" size={12} color="white" />
-                <Text className="text-white text-xs ml-1 font-rubik">Video</Text>
-              </View>
-            </View>
-          ) : (
-            <View className="w-full h-full">
-              <Image
-                source={{ uri: post.image?.uri || post.mediaUrl }}
-                style={{ width: '100%', height: '100%' }}
-                resizeMode="cover"
-              />
-              {/* Image indicator */}
-              <View className="absolute top-4 left-4 bg-black/60 px-3 py-1 rounded-full flex-row items-center">
-                <Ionicons name="image" size={12} color="white" />
-                <Text className="text-white text-xs ml-1 font-rubik">Photo</Text>
-              </View>
-            </View>
-          )}
-        </View>
+        {/* Media Content with Enhanced Display - Using MediaCarousel */}
+        <MediaCarousel media={post.allMedia || []} />
 
         {/* User Info with Enhanced Design */}
         <View className="p-4 bg-white shadow-sm">
@@ -427,7 +292,23 @@ const PostDetail = () => {
           <View className="flex-row items-center">
             <TouchableOpacity 
               className="flex-row items-center mr-6" 
-              onPress={handleLikePress}
+              onPress={() => {
+                // Animate like button
+                likeScale.value = withSpring(1.3, { damping: 10 }, () => {
+                  likeScale.value = withSpring(1);
+                });
+                
+                // Toggle like state
+                if (userLiked) {
+                  unlikePost(post.id).then(success => {
+                    if (success) setUserLiked(false);
+                  });
+                } else {
+                  likePost(post.id).then(success => {
+                    if (success) setUserLiked(true);
+                  });
+                }
+              }}
               activeOpacity={0.7}
             >
               <Animated.View style={likeAnimatedStyle}>

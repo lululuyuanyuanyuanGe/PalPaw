@@ -285,12 +285,15 @@ const ProfileScreen = () => {
     };
     
     // Handle like/unlike actions
-    const handleLike = async (postId: string, isLiked: boolean) => {
-      // Call the like/unlike function from context
-      if (isLiked) {
-        unlikePost(postId);
+    const handleLike = async (postId: string) => {
+      // Check if post is already liked
+      const isCurrentlyLiked = likedPostIds.includes(postId);
+      
+      // Call the appropriate function based on current liked status
+      if (isCurrentlyLiked) {
+        await unlikePost(postId);
       } else {
-        likePost(postId);
+        await likePost(postId);
       }
       
       // Refresh the liked posts if we're on the liked tab to keep it in sync

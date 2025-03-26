@@ -27,7 +27,7 @@ const app = express();
     await testConnection();
     
     // Sync models
-    await syncModels();
+    await syncModels(true);
     
     console.log('Database setup completed successfully');
   } catch (error) {

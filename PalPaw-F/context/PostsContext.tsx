@@ -495,8 +495,8 @@ interface PostsContextType {
   fetchLikedPosts: (userId?: string) => Promise<void>;
   fetchPostById: (postId: string) => Promise<void>;
   setCurrentPost: (post: PostItem) => void;
-  likePost: (postId: string) => Promise<void>;
-  unlikePost: (postId: string) => Promise<void>;
+  likePost: (postId: string) => Promise<boolean>;
+  unlikePost: (postId: string) => Promise<boolean>;
   isPostLiked: (postId: string) => boolean;
   incrementPostViews: (postId: string) => Promise<void>;
   addComment: (postId: string, comment: Comment) => void;
@@ -795,69 +795,102 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     return state.likedPostIds.includes(postId);
   };
 
-  // Function to like a post with API call
-  const likePost = async (postId: string) => {
+  // Function to like a post
+  const likePost = async (postId: string): Promise<boolean> => {
     try {
-      const token = await AsyncStorage.getItem('authToken');
-      
-      if (!token) {
-        throw new Error('No auth token found');
+      // Check if post is already liked
+      if (state.likedPostIds.includes(postId)) {
+        console.log(`Post ${postId} is already liked, ignoring duplicate request`);
+        return true; // Already liked, so we consider this successful
       }
 
-      // Call the API to like the post
-      const response = await api.post(`/likes/post/${postId}`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      const { likedPostIds } = response.data;
-
-      // Save updated liked post IDs to AsyncStorage
-      await AsyncStorage.setItem('likedPostIds', JSON.stringify(likedPostIds));
-
-      // Update state
-      dispatch({ 
-        type: 'LIKE_POST_SUCCESS', 
-        payload: { postId, likedPostIds } 
-      });
-    } catch (error) {
+      console.log(`Sending like request for post: ${postId}`);
+      const response = await api.post(`/likes/post/${postId}`);
+      
+      console.log(`Response from /likes/post/${postId}:`, response.status, JSON.stringify(response.data));
+      
+      if (response.data?.success) {
+        // Update state with the liked post ID
+        dispatch({
+          type: 'LIKE_POST_SUCCESS',
+          payload: { 
+            postId, 
+            likedPostIds: [...state.likedPostIds, postId] 
+          }
+        });
+        
+        return true;
+      }
+      return false;
+    } catch (error: any) {
       console.error('Error liking post:', error);
+      
+      // Check if error is a duplicate constraint error (post already liked)
+      // This happens when the backend has a race condition
+      if (error.response?.status === 500 && 
+          (error.response?.data?.message?.includes('unique constraint') || 
+           error.message?.includes('already exists'))) {
+        console.log('Post was already liked on the server - considering this a success');
+        
+        // Still update our local state to reflect that the post is liked
+        if (!state.likedPostIds.includes(postId)) {
+          dispatch({
+            type: 'LIKE_POST_SUCCESS',
+            payload: { 
+              postId, 
+              likedPostIds: [...state.likedPostIds, postId] 
+            }
+          });
+        }
+        
+        return true;
+      }
+      
       dispatch({
         type: 'LIKE_POST_FAILURE',
         payload: 'Failed to like post',
       });
+      
+      return false;
     }
   };
 
-  // Function to unlike a post with API call
-  const unlikePost = async (postId: string) => {
+  // Function to unlike a post
+  const unlikePost = async (postId: string): Promise<boolean> => {
     try {
-      const token = await AsyncStorage.getItem('authToken');
-      
-      if (!token) {
-        throw new Error('No auth token found');
+      // Check if post is not liked already
+      if (!state.likedPostIds.includes(postId)) {
+        console.log(`Post ${postId} is not liked, ignoring unlike request`);
+        return true; // Not liked, so nothing to unlike
       }
 
-      // Call the API to unlike the post
-      const response = await api.delete(`/likes/post/${postId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      const { likedPostIds } = response.data;
-
-      // Save updated liked post IDs to AsyncStorage
-      await AsyncStorage.setItem('likedPostIds', JSON.stringify(likedPostIds));
-
-      // Update state
-      dispatch({ 
-        type: 'UNLIKE_POST_SUCCESS', 
-        payload: { postId, likedPostIds } 
-      });
-    } catch (error) {
+      console.log(`Sending unlike request for post: ${postId}`);
+      const response = await api.delete(`/likes/post/${postId}`);
+      
+      console.log(`Response from unlike post ${postId}:`, response.status, JSON.stringify(response.data));
+      
+      if (response.data?.success) {
+        // Update state by removing the post ID from liked posts
+        dispatch({
+          type: 'UNLIKE_POST_SUCCESS',
+          payload: { 
+            postId, 
+            likedPostIds: state.likedPostIds.filter(id => id !== postId) 
+          }
+        });
+        
+        return true;
+      }
+      return false;
+    } catch (error: any) {
       console.error('Error unliking post:', error);
+      
       dispatch({
         type: 'UNLIKE_POST_FAILURE',
         payload: 'Failed to unlike post',
       });
+      
+      return false;
     }
   };
 
