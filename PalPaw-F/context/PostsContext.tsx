@@ -546,26 +546,8 @@ interface PostsProviderProps {
 export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(postsReducer, initialState);
 
-  // Initialize liked posts from AsyncStorage on mount
-  useEffect(() => {
-    const initLikedPosts = async () => {
-      try {
-        const storedLikedPostIds = await AsyncStorage.getItem('likedPostIds');
-        if (storedLikedPostIds) {
-          // We only initialize the IDs from storage, the actual posts will be fetched when needed
-          const likedPostIds = JSON.parse(storedLikedPostIds);
-          dispatch({ 
-            type: 'FETCH_LIKED_POSTS_SUCCESS', 
-            payload: { posts: [], postIds: likedPostIds } 
-          });
-        }
-      } catch (error) {
-        console.error('Error initializing liked posts:', error);
-      }
-    };
-
-    initLikedPosts();
-  }, []);
+  // Move initialization to a separate useEffect with proper dependencies
+  // Will define the functions first, then call initialization in another useEffect
 
   // Function to fetch all posts
   const fetchPosts = async () => {
@@ -888,6 +870,8 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     }
   };
 
+  
+
   // Function to unlike a post
   const unlikePost = async (postId: string): Promise<boolean> => {
     try {
@@ -952,6 +936,66 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
       // We don't dispatch an error here to keep the UX smooth
     }
   };
+
+  // Initialize posts data from AsyncStorage after functions are defined
+  useEffect(() => {
+    const initPostsData = async () => {
+      try {
+        console.log('Initializing posts data from storage');
+        
+        // Initialize liked posts IDs from AsyncStorage
+        const storedLikedPostIds = await AsyncStorage.getItem('likedPostIds');
+        if (storedLikedPostIds) {
+          // We only initialize the IDs from storage, the actual posts will be fetched when needed
+          const likedPostIds = JSON.parse(storedLikedPostIds);
+          console.log(`Found ${likedPostIds.length} liked post IDs in storage`);
+          dispatch({ 
+            type: 'FETCH_LIKED_POSTS_SUCCESS', 
+            payload: { posts: [], postIds: likedPostIds } 
+          });
+        } else {
+          console.log('No liked posts found in storage');
+        }
+        
+        // Initialize user data to fetch user posts
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          const user = JSON.parse(userData);
+          if (user && user.id) {
+            console.log('Found user data in storage, user ID:', user.id);
+            
+            // Initialize both user posts and liked posts in parallel
+            Promise.all([
+              // Fetch user posts
+              fetchUserPosts(user.id).catch(error => {
+                console.error('Error initializing user posts:', error);
+                return null;
+              }),
+              
+              // Fetch liked posts
+              fetchLikedPosts(user.id).catch(error => {
+                console.error('Error initializing liked posts:', error);
+                return null;
+              })
+            ]).then(([userPostsResult, likedPostsResult]) => {
+              console.log('Initial data fetch complete:', {
+                userPostsFetched: userPostsResult !== null,
+                likedPostsFetched: likedPostsResult !== null
+              });
+            });
+          } else {
+            console.log('User data found but missing ID');
+          }
+        } else {
+          console.log('No user data found in storage');
+        }
+      } catch (error) {
+        console.error('Error initializing posts data:', error);
+      }
+    };
+
+    initPostsData();
+  }, [fetchUserPosts, fetchLikedPosts, dispatch]);
 
   return (
     <PostsContext.Provider
