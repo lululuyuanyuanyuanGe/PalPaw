@@ -1,5 +1,6 @@
 import api, { getUserProducts, getUserPosts } from "@/utils/apiClient";
 import { PostItem, ProductItem } from "./types";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Define API base URL for media
 const API_BASE_URL = 'http://192.168.2.11:5001';
@@ -188,6 +189,77 @@ const processMediaFiles = (mediaArray: any[]): { imageUrl: string, mediaType: 'i
   return { imageUrl, mediaType, mediaUrl, thumbnailUri };
 };
 
+// Common function to standardize post data format
+export const standardizePostFormat = (post: any): any => {
+  console.log("Standardizing post format for id:", post.id);
+  
+  // Process author data
+  let authorData = null;
+  if (post.authorData) {
+    authorData = post.authorData;
+  } else if (post.author) {
+    authorData = {
+      id: post.author.id,
+      username: post.author.username,
+      avatar: post.author.avatar || 'https://robohash.org/default?set=set4'
+    };
+  } else if (post.userId || post.user_id) {
+    const userId = post.userId || post.user_id;
+    authorData = {
+      id: userId,
+      username: 'User',
+      avatar: `https://robohash.org/${userId}?set=set4`
+    };
+  }
+  
+  // Process media for consistent format
+  let imageUrl = 'https://robohash.org/post' + post.id + '?set=set4';
+  let mediaType: 'image' | 'video' = 'image';
+  let mediaUrl = '';
+  let thumbnailUri = '';
+  
+  // Process media array to find the right thumbnail
+  if (post.media && Array.isArray(post.media) && post.media.length > 0) {
+    const mediaResult = processMediaFiles(post.media);
+    imageUrl = mediaResult.imageUrl;
+    mediaType = mediaResult.mediaType;
+    mediaUrl = mediaResult.mediaUrl;
+    thumbnailUri = mediaResult.thumbnailUri || '';
+  }
+  
+  // Format comments consistently
+  const comments = Array.isArray(post.comments) 
+    ? post.comments.map((comment: any) => ({
+        id: comment.id,
+        author: comment.author?.username || 'Unknown',
+        content: comment.content,
+        timestamp: comment.createdAt || new Date(),
+        avatarUri: comment.author?.avatar || 'https://robohash.org/unknown?set=set4',
+        likes: comment.likes || 0
+      })) 
+    : [];
+  
+  // Return standardized post object
+  return {
+    id: post.id,
+    title: post.title || "Untitled Post",
+    content: post.content || "",
+    likes: post.likes || 0,
+    views: post.views || 0,
+    tags: post.tags || [],
+    createdAt: post.createdAt,
+    updatedAt: post.updatedAt,
+    authorData: authorData,
+    image: { uri: imageUrl },
+    imageUrl: imageUrl,
+    mediaType: mediaType,
+    mediaUrl: mediaUrl,
+    thumbnailUri: thumbnailUri,
+    allMedia: post.media || [],
+    comments: comments
+  };
+};
+
 // Fetch user's posts
 export const fetchUserPosts = async (userId: string): Promise<PostItem[]> => {
   console.log("ProfileService: Fetching posts");
@@ -197,35 +269,8 @@ export const fetchUserPosts = async (userId: string): Promise<PostItem[]> => {
     const posts = await getUserPosts(userId);
     console.log(`ProfileService: Received ${posts.length} posts`);
     
-    const fetchedPosts = posts.map((post: any) => {
-      // Default values
-      let imageUrl = 'https://robohash.org/post' + post.id + '?set=set4';
-      let mediaType: 'image' | 'video' = 'image';
-      let mediaUrl = '';
-      let thumbnailUri = '';
-      
-      // Process media array to find the right thumbnail
-      if (post.media && Array.isArray(post.media) && post.media.length > 0) {
-        const mediaResult = processMediaFiles(post.media);
-        imageUrl = mediaResult.imageUrl;
-        mediaType = mediaResult.mediaType;
-        mediaUrl = mediaResult.mediaUrl;
-        thumbnailUri = mediaResult.thumbnailUri || '';
-      }
-      
-      return {
-        id: post.id,
-        title: post.title || "Untitled Post",
-        content: post.content,
-        likes: post.likes || 0,
-        image: { uri: imageUrl },
-        mediaType: mediaType,
-        mediaUrl: mediaUrl,
-        thumbnailUri: thumbnailUri,
-        // Add the full media array for reference
-        allMedia: post.media
-      };
-    });
+    // Standardize post format for each post
+    const fetchedPosts = posts.map((post: any) => standardizePostFormat(post));
     
     return fetchedPosts;
   } catch (error) {
@@ -233,6 +278,39 @@ export const fetchUserPosts = async (userId: string): Promise<PostItem[]> => {
     
     // Try fallback to old endpoints
     return fetchPostsFallback(userId);
+  }
+};
+
+// Fetch liked posts
+export const fetchLikedPosts = async (userId: string): Promise<PostItem[]> => {
+  console.log("ProfileService: Fetching liked posts");
+  
+  try {
+    // Get auth token
+    const authToken = await AsyncStorage.getItem('authToken');
+    if (!authToken) {
+      throw new Error("No auth token found");
+    }
+    
+    // Call API to get liked posts
+    const response = await api.get('/likes/posts', {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    
+    if (response?.data?.likedPosts) {
+      const { likedPosts } = response.data;
+      console.log(`ProfileService: Received ${likedPosts.length} liked posts`);
+      
+      // Process liked posts exactly the same way as regular posts
+      const fetchedPosts = likedPosts.map((post: any) => standardizePostFormat(post));
+      
+      return fetchedPosts;
+    }
+    
+    return [];
+  } catch (error) {
+    console.error("Error fetching liked posts:", error);
+    return [];
   }
 };
 
@@ -254,35 +332,8 @@ export const fetchPostsFallback = async (userId: string): Promise<PostItem[]> =>
       
       console.log(`ProfileService: Found ${userPosts.length} posts with fallback`);
       
-      const fetchedPosts = userPosts.map((post: any) => {
-        // Default values
-        let imageUrl = 'https://robohash.org/post' + post.id + '?set=set4';
-        let mediaType: 'image' | 'video' = 'image';
-        let mediaUrl = '';
-        let thumbnailUri = '';
-        
-        // Process media array to find the right thumbnail
-        if (post.media && Array.isArray(post.media) && post.media.length > 0) {
-          const mediaResult = processMediaFiles(post.media);
-          imageUrl = mediaResult.imageUrl;
-          mediaType = mediaResult.mediaType;
-          mediaUrl = mediaResult.mediaUrl;
-          thumbnailUri = mediaResult.thumbnailUri || '';
-        }
-        
-        return {
-          id: post.id,
-          title: post.title || "Untitled Post",
-          content: post.content,
-          likes: post.likes || 0,
-          image: { uri: imageUrl },
-          mediaType: mediaType,
-          mediaUrl: mediaUrl,
-          thumbnailUri: thumbnailUri,
-          // Add the full media array for reference
-          allMedia: post.media
-        };
-      });
+      // Standardize post format for each post
+      const fetchedPosts = userPosts.map((post: any) => standardizePostFormat(post));
       
       return fetchedPosts;
     }

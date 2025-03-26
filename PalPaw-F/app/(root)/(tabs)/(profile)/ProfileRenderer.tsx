@@ -11,10 +11,47 @@ interface RenderItemProps {
   item: BaseItem;
   activeTab: ProfileTab;
   onPress: (item: BaseItem) => void;
+  onLike?: (postId: string, isLiked: boolean) => void;
   showTabBar?: boolean;
 }
 
-export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress: handleItemPress, showTabBar }) => {
+// Helper function to format relative time
+const formatRelativeTime = (date?: Date): string => {
+  if (!date) return "Recent";
+  
+  // Convert to milliseconds if it's a string
+  const timestamp = typeof date === 'string' ? new Date(date).getTime() : date.getTime();
+  const now = new Date().getTime();
+  const diff = now - timestamp;
+  
+  // Calculate time difference in various units
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const weeks = Math.floor(days / 7);
+  const months = Math.floor(days / 30);
+  const years = Math.floor(days / 365);
+  
+  // Return appropriate formatted string
+  if (seconds < 60) {
+    return 'Just now';
+  } else if (minutes < 60) {
+    return `${minutes}m ago`;
+  } else if (hours < 24) {
+    return `${hours}h ago`;
+  } else if (days < 7) {
+    return `${days}d ago`;
+  } else if (weeks < 4) {
+    return `${weeks}w ago`;
+  } else if (months < 12) {
+    return `${months}mo ago`;
+  } else {
+    return `${years}y ago`;
+  }
+};
+
+export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress: handleItemPress, onLike, showTabBar }) => {
   
   // Get screen width for sizing
   const { width } = Dimensions.get('window');
@@ -51,17 +88,27 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
   
   // Function to determine if a post has video media
   const hasVideoMedia = (item: PostItem): boolean => {
+    // First check the direct mediaType property
     if (item.mediaType === 'video') return true;
     
-    // Check in allMedia array if mediaType is not set directly
+    // Then check in allMedia array
     if (item.allMedia && item.allMedia.length > 0) {
       return item.allMedia.some(media => {
         if (typeof media === 'object' && media !== null) {
           return media.type === 'video' || 
-            (media.url && media.url.match(/\.(mp4|mov|avi|wmv)$/i));
+            (media.url && typeof media.url === 'string' && media.url.match(/\.(mp4|mov|avi|wmv)$/i));
+        }
+        // If media is a string URL, check if it looks like a video URL
+        if (typeof media === 'string') {
+          return media.match(/\.(mp4|mov|avi|wmv)$/i);
         }
         return false;
       });
+    }
+    
+    // Check if mediaUrl is a video URL
+    if (item.mediaUrl && typeof item.mediaUrl === 'string') {
+      return item.mediaUrl.match(/\.(mp4|mov|avi|wmv)$/i) !== null;
     }
     
     return false;
@@ -75,32 +122,57 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
     
     // Check for thumbnail in media array
     if (item.allMedia && item.allMedia.length > 0) {
+      // First try to find an explicit thumbnail
       const videoMedia = item.allMedia.find(media => {
         if (typeof media === 'object' && media !== null) {
           return media.type === 'video' || 
-            (media.url && media.url.match(/\.(mp4|mov|avi|wmv)$/i));
+            (media.url && typeof media.url === 'string' && media.url.match(/\.(mp4|mov|avi|wmv)$/i));
         }
         return false;
       });
       
-      if (videoMedia && videoMedia.thumbnail) {
+      if (videoMedia && typeof videoMedia === 'object' && videoMedia.thumbnail) {
         return videoMedia.thumbnail;
       }
       
-      // If no thumbnail, look for an image to use as thumbnail
+      // If no explicit thumbnail, look for posterUri or thumbnailUri
+      if (videoMedia && typeof videoMedia === 'object') {
+        if (videoMedia.posterUri) return videoMedia.posterUri;
+        if (videoMedia.thumbnailUri) return videoMedia.thumbnailUri;
+      }
+      
+      // If still no thumbnail, look for an image to use as thumbnail
       const firstImage = item.allMedia.find(media => {
         if (typeof media === 'object' && media !== null) {
           return media.type === 'image';
         }
+        if (typeof media === 'string') {
+          return media.match(/\.(jpg|jpeg|png|gif|webp)$/i) !== null;
+        }
         return false;
       });
       
-      if (firstImage && typeof firstImage === 'object') {
-        return firstImage.url;
+      if (firstImage) {
+        if (typeof firstImage === 'object' && firstImage.url) {
+          return firstImage.url;
+        }
+        if (typeof firstImage === 'string') {
+          return firstImage;
+        }
       }
     }
     
-    // Fallback to the mediaUrl
+    // Fallback to the mediaUrl for image types or the image uri
+    if (item.mediaType === 'image' && item.mediaUrl) {
+      return item.mediaUrl;
+    }
+    
+    // Try the image property
+    if (item.image && item.image.uri) {
+      return item.image.uri;
+    }
+    
+    // Last resort - return whatever mediaUrl we have
     return item.mediaUrl;
   };
   
@@ -119,6 +191,11 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
       unlikePost(postItem.id);
     } else {
       likePost(postItem.id);
+    }
+    
+    // Call the onLike handler if provided
+    if (onLike) {
+      onLike(postItem.id, isPostLiked(postItem.id));
     }
   };
 
@@ -160,7 +237,7 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
       // Regular item (post or product)
       <View className="m-1 flex-1" style={{ maxWidth: width / 2 - 8 }}>
         {isPostItem(item) ? (
-          // Post Item
+          // Post Item - This is used for both regular posts and liked posts
           <TouchableOpacity 
             className="rounded-xl overflow-hidden shadow-sm bg-white border border-pink-50"
             onPress={() => navigateToPostDetail(item)}
@@ -171,7 +248,8 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
                   source={{ 
                     uri: getVideoThumbnail(item as PostItem) || 
                          (item as any).imageUrl || 
-                         item.image?.uri
+                         item.image?.uri || 
+                         'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video'
                   }}
                   style={{ width: '100%', height: 150 }}
                   resizeMode="cover"
@@ -193,7 +271,12 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
               </View>
             ) : (
               <Image 
-                source={{ uri: item.image?.uri || item.mediaUrl || (item as any).imageUrl }}
+                source={{ 
+                  uri: item.image?.uri || 
+                       item.mediaUrl || 
+                       (item as any).imageUrl || 
+                       'https://via.placeholder.com/300x200/CCCCCC/666666?text=No+Image'
+                }}
                 style={{ width: '100%', height: 150 }}
                 resizeMode="cover"
                 defaultSource={require('@/assets/images/no-result.png')}
@@ -202,7 +285,7 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
             
             <View className="p-3">
               <Text className="text-xs text-gray-400 mb-1 font-rubik">
-                {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "Recent"}
+                {formatRelativeTime(item.createdAt)}
               </Text>
               <Text numberOfLines={1} className="text-sm font-rubik-medium text-gray-800">
                 {item.title || "Untitled Post"}

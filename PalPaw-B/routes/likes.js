@@ -160,11 +160,24 @@ router.get('/posts', authenticate, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+    
+    // Transform liked posts to include author info in the expected format
+    // This ensures they match the structure returned by the posts controller
+    const formattedLikedPosts = user.likedPosts.map(post => {
+      const postJson = post.toJSON();
+      return {
+        ...postJson,
+        views: postJson.views || 0, // Ensure views field is present
+        authorData: postJson.author, // Add authorData field in the expected format
+        author: undefined, // Remove the nested author object to avoid confusion
+        isLiked: true // All posts in this list are liked by the user
+      };
+    });
 
     return res.status(200).json({
       success: true,
-      count: user.likedPosts.length,
-      likedPosts: user.likedPosts,
+      count: formattedLikedPosts.length,
+      likedPosts: formattedLikedPosts,
       likedPostIds: user.likedPostIds
     });
   } catch (error) {

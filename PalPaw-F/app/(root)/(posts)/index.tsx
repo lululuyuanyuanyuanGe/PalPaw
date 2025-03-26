@@ -133,6 +133,9 @@ const PostDetail = () => {
   useEffect(() => {
     if (currentPost && currentPost.id) {
       setUserLiked(isPostLiked(currentPost.id));
+      
+      // Debug log for post author data
+      console.log('Post detail - authorData:', JSON.stringify(currentPost.authorData));
     }
   }, [currentPost, isPostLiked]);
 

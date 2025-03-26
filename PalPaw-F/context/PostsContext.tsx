@@ -369,15 +369,27 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
 
       let { likedPosts, likedPostIds } = response.data;
       
-      // Process the liked posts the exact same way as in renderService's fetchUserPosts
+      // Process the liked posts to match the exact structure of regular posts
       likedPosts = likedPosts.map((post: any) => {
+        // Format authors the exact same way as in getPostById controller
+        let authorData = null;
+        
+        // Process author data from the nested 'author' field
+        if (post.author) {
+          authorData = {
+            id: post.author.id,
+            username: post.author.username,
+            avatar: post.author.avatar
+          };
+        }
+        
         // Default values
         let imageUrl = 'https://robohash.org/post' + post.id + '?set=set4';
         let mediaType: 'image' | 'video' = 'image';
         let mediaUrl = '';
         let thumbnailUri = '';
         
-        // Process media array to find the right thumbnail - exact same logic as in renderService
+        // Process media array to find the right thumbnail
         if (post.media && Array.isArray(post.media) && post.media.length > 0) {
           // First, try to find an image to use as thumbnail
           const firstImage = post.media.find((item: any) => {
@@ -469,25 +481,37 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
           }
         }
         
-        // Create the processed post exactly like in renderService.fetchUserPosts
-        return {
+        // Create a new post object with the exact same structure as posts from the getPostById API endpoint
+        const formattedPost = {
           id: post.id,
           title: post.title || "Untitled Post",
-          content: post.content,
+          content: post.content || "",
           likes: post.likes || 0,
+          views: post.views || 0,
+          tags: post.tags || [],
+          createdAt: post.createdAt,
+          updatedAt: post.updatedAt,
+          // Author data in the exact format expected by the UI
+          authorData: authorData,
+          // Media handling
           image: { uri: imageUrl },
+          imageUrl: imageUrl,
           mediaType: mediaType,
           mediaUrl: mediaUrl,
           thumbnailUri: thumbnailUri,
-          // Add the full media array for reference
-          allMedia: post.media,
-          // Add imageUrl separately to ensure it's available
-          imageUrl: imageUrl,
-          // Ensure views field is present
-          views: post.views || 0,
-          // Copy over any additional fields
-          ...post
+          allMedia: post.media || [],
+          // Comments in the right format
+          comments: Array.isArray(post.comments) ? post.comments.map((comment: any) => ({
+            id: comment.id,
+            author: comment.author?.username || 'Unknown',
+            content: comment.content,
+            timestamp: comment.createdAt || new Date(),
+            avatarUri: comment.author?.avatar || 'https://robohash.org/unknown?set=set4',
+            likes: comment.likes || 0
+          })) : []
         };
+        
+        return formattedPost;
       });
       
       // Save to AsyncStorage for offline access
@@ -506,9 +530,70 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     }
   };
 
-  // Function to set the current post
-  const setCurrentPost = (post: PostItem) => {
-    dispatch({ type: 'SET_CURRENT_POST', payload: post });
+  // Helper function to standardize post format
+  const standardizePostFormat = (post: any): PostItem => {
+    // Ensure authorData is in the correct format
+    let authorData = post.authorData || null;
+    
+    // If there's no authorData but there is an author field, create authorData from it
+    if (!authorData && post.author) {
+      authorData = {
+        id: post.author.id,
+        username: post.author.username,
+        avatar: post.author.avatar
+      };
+    }
+    
+    // If there's still no authorData but there is a userId, create a placeholder
+    if (!authorData && (post.userId || post.user_id)) {
+      const userId = post.userId || post.user_id;
+      authorData = {
+        id: userId,
+        username: 'User',
+        avatar: `https://robohash.org/${userId}?set=set4`
+      };
+    }
+    
+    // Make sure comments are in the correct format
+    let comments = [];
+    if (Array.isArray(post.comments)) {
+      comments = post.comments.map((comment: any) => {
+        if (typeof comment.author === 'string') {
+          // Already in the correct format
+          return comment;
+        } else {
+          // Need to convert from API format
+          return {
+            id: comment.id,
+            author: comment.author?.username || 'Unknown',
+            content: comment.content,
+            timestamp: comment.createdAt || new Date(),
+            avatarUri: comment.author?.avatar || 'https://robohash.org/unknown?set=set4',
+            likes: comment.likes || 0
+          };
+        }
+      });
+    }
+    
+    // Create a new standardized post object
+    return {
+      id: post.id,
+      title: post.title || "Untitled Post",
+      content: post.content || "",
+      likes: post.likes || 0,
+      views: post.views || 0,
+      tags: post.tags || [],
+      createdAt: post.createdAt,
+      image: post.image || { uri: post.imageUrl || 'https://robohash.org/default?set=set4' },
+      mediaType: post.mediaType || 'image',
+      mediaUrl: post.mediaUrl || post.imageUrl,
+      thumbnailUri: post.thumbnailUri || post.imageUrl,
+      allMedia: post.allMedia || post.media || [],
+      authorData: authorData,
+      comments: comments,
+      // Only include other fields if they exist in the PostItem type
+      ...(post.isLiked !== undefined ? { isLiked: post.isLiked } : {})
+    } as PostItem;
   };
 
   // Function to fetch a post by ID
@@ -523,7 +608,10 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
       
       if (existingPost) {
         console.log('Post found in existing state');
-        dispatch({ type: 'SET_CURRENT_POST', payload: existingPost });
+        
+        // Standardize the post format before setting as current post
+        const formattedPost = standardizePostFormat(existingPost);
+        dispatch({ type: 'SET_CURRENT_POST', payload: formattedPost });
         
         // Increment the view count when viewing an existing post
         incrementPostViews(postId);
@@ -536,7 +624,10 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         
         if (response.data && response.data.post) {
           console.log('Post fetched from API');
-          dispatch({ type: 'SET_CURRENT_POST', payload: response.data.post });
+          
+          // Standardize the post format
+          const formattedPost = standardizePostFormat(response.data.post);
+          dispatch({ type: 'SET_CURRENT_POST', payload: formattedPost });
           
           // The view is automatically incremented by the API when we fetch the post
         } else {
@@ -551,7 +642,10 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         
         if (fallbackPost) {
           console.log('Post found in fallback data');
-          dispatch({ type: 'SET_CURRENT_POST', payload: fallbackPost });
+          
+          // Standardize the post format
+          const formattedPost = standardizePostFormat(fallbackPost);
+          dispatch({ type: 'SET_CURRENT_POST', payload: formattedPost });
           
           // Increment view count for fallback posts as well
           incrementPostViews(postId);
@@ -563,6 +657,13 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('Error in fetchPostById:', error);
     }
+  };
+
+  // Function to set the current post
+  const setCurrentPost = (post: PostItem) => {
+    // Standardize the post format before setting as current post
+    const formattedPost = standardizePostFormat(post);
+    dispatch({ type: 'SET_CURRENT_POST', payload: formattedPost });
   };
 
   // Function to check if a post is liked

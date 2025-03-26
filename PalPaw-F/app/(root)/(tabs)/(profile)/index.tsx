@@ -19,7 +19,9 @@ import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { 
-  formatImageUrl 
+  formatImageUrl, 
+  fetchUserPosts as fetchUserPostsService,
+  fetchLikedPosts as fetchLikedPostsService
 } from "./renderService";
 import {
   BaseItem,
@@ -123,8 +125,11 @@ const useUserData = () => {
 const ProfileScreen = () => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
+  const [userPosts, setUserPosts] = useState<PostItem[]>([]);
+  const [likedPosts, setLikedPosts] = useState<PostItem[]>([]);
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [postsLoading, setPostsLoading] = useState<boolean>(false);
   
   // Get status bar height for proper spacing
   const statusBarHeight = Constants.statusBarHeight || 0;
@@ -141,12 +146,13 @@ const ProfileScreen = () => {
   
   // Use PostsContext for post data
   const { 
-    fetchUserPosts, 
-    fetchLikedPosts, 
     state: postsState,
-    setCurrentPost
+    setCurrentPost,
+    likePost,
+    unlikePost,
+    isPostLiked,
   } = usePosts();
-  const { userPosts, likedPosts, likedPostIds, loading: postsLoading } = postsState;
+  const { likedPostIds } = postsState;
   
   // Ref to track last data fetch time to prevent too frequent refreshes
   const lastFetchTime = useRef(0);
@@ -156,14 +162,36 @@ const ProfileScreen = () => {
     const initUser = async () => {
       const userId = await loadUser();
       if (userId) {
-        // Initial data load from contexts
-        fetchUserPosts(userId);
-        fetchLikedPosts();
+        // Initial data load
+        fetchUserData(userId);
       }
     };
     
     initUser();
   }, []);
+  
+  // Fetch user data (posts and liked posts)
+  const fetchUserData = async (userId: string) => {
+    setPostsLoading(true);
+    
+    try {
+      // Fetch user posts
+      const posts = await fetchUserPostsService(userId);
+      setUserPosts(posts);
+      
+      // Fetch liked posts
+      const liked = await fetchLikedPostsService(userId);
+      setLikedPosts(liked);
+      
+      // Update user stats
+      updateUserStats(posts.length, products.length);
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    } finally {
+      setPostsLoading(false);
+      lastFetchTime.current = Date.now();
+    }
+  };
   
   // Update user stats when post data changes
   useEffect(() => {
@@ -191,21 +219,17 @@ const ProfileScreen = () => {
     }, [user?.id, isAuthenticated, isLoading, refreshing, postsLoading])
   );
   
-  // Refresh all data from contexts
+  // Refresh all data
   const refreshData = useCallback(() => {
     if (refreshing || postsLoading || !user?.id) return;
     
     setRefreshing(true);
     
-    Promise.all([
-      fetchUserPosts(user.id),
-      fetchLikedPosts()
-    ])
-    .catch(err => console.error("Error refreshing data:", err))
-    .finally(() => {
-      setRefreshing(false);
-      lastFetchTime.current = Date.now();
-    });
+    fetchUserData(user.id)
+      .catch(err => console.error("Error refreshing data:", err))
+      .finally(() => {
+        setRefreshing(false);
+      });
   }, [user?.id, refreshing, postsLoading]);
   
   // Handle tab change
@@ -245,8 +269,8 @@ const ProfileScreen = () => {
   const renderItem = ({ item }: { item: BaseItem }) => {
     if (!item) return null;
     
-    // Special handling for liked tab to ensure proper navigation
-    const onPress = () => {
+    // Create a proper onPress handler that takes the item as parameter
+    const onPress = (item: BaseItem) => {
       if (isPostItem(item)) {
         // Set the current post in context before navigation
         setCurrentPost(item);
@@ -262,12 +286,29 @@ const ProfileScreen = () => {
       }
     };
     
+    // Handle like/unlike actions
+    const handleLike = async (postId: string, isLiked: boolean) => {
+      // Call the like/unlike function from context
+      if (isLiked) {
+        await unlikePost(postId);
+      } else {
+        await likePost(postId);
+      }
+      
+      // Refresh the liked posts if we're on the liked tab to keep it in sync
+      if (activeTab === 'liked' && user?.id) {
+        const liked = await fetchLikedPostsService(user.id);
+        setLikedPosts(liked);
+      }
+    };
+    
     // Pass all handling to the RenderItem component
     return (
       <RenderItem 
         item={item} 
         activeTab={activeTab} 
         onPress={onPress}
+        onLike={handleLike}
         showTabBar={false}
       />
     );
@@ -428,7 +469,7 @@ const ProfileScreen = () => {
                   className={`px-6 py-2 rounded-full mx-1 ${activeTab === 'liked' ? 'bg-purple-100' : 'bg-transparent'}`}
                   onPress={() => handleTabChange('liked')}
                 >
-                  <Text className={`font-rubik-medium ${activeTab === 'liked' ? 'text-purple-700' : 'text-gray-500'}`}>Liked ({likedPostIds.length || 0})</Text>
+                  <Text className={`font-rubik-medium ${activeTab === 'liked' ? 'text-purple-700' : 'text-gray-500'}`}>Liked ({likedPosts.length || 0})</Text>
                 </TouchableOpacity>
               </View>
               
