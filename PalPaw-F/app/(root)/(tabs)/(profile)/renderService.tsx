@@ -1,6 +1,7 @@
 import api, { getUserProducts, getUserPosts } from "@/utils/apiClient";
 import { PostItem, ProductItem } from "./types";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { usePosts } from "@/context";
 
 // Define API base URL for media
 const API_BASE_URL = 'http://192.168.2.11:5001';
@@ -239,16 +240,25 @@ export const standardizePostFormat = (post: any): any => {
       })) 
     : [];
   
-  // Return standardized post object
+  // Ensure tags is always an array
+  const tags = Array.isArray(post.tags) ? post.tags : [];
+  
+  // Return standardized post object matching ALL fields from the Post model
   return {
     id: post.id,
+    userId: post.userId || post.user_id,
     title: post.title || "Untitled Post",
     content: post.content || "",
+    media: post.media || [],
     likes: post.likes || 0,
     views: post.views || 0,
-    tags: post.tags || [],
+    location: post.location || null,
+    tags: tags,
+    visibility: post.visibility || 'public',
+    isDeleted: post.isDeleted || false,
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
+    // UI specific fields
     authorData: authorData,
     image: { uri: imageUrl },
     imageUrl: imageUrl,
@@ -260,9 +270,40 @@ export const standardizePostFormat = (post: any): any => {
   };
 };
 
-// Fetch user's posts
+// Fetch user's posts - now a wrapper around the PostsContext method
 export const fetchUserPosts = async (userId: string): Promise<PostItem[]> => {
-  console.log("ProfileService: Fetching posts");
+  console.log("ProfileService: Fetching user posts via PostsContext");
+  
+  try {
+    // Get posts from the context
+    const { fetchUserPosts, state } = usePosts();
+    
+    // Call the context method to fetch and update state
+    await fetchUserPosts(userId);
+    
+    // Make sure we have author data for all posts
+    const postsWithAuthor = state.userPosts.map(post => {
+      // Log any missing author data
+      if (!post.authorData) {
+        console.warn(`ProfileService: Post ${post.id} still missing authorData after context fetch`);
+      }
+      
+      return post;
+    });
+    
+    // Return the posts from the state
+    return postsWithAuthor;
+  } catch (error: any) {
+    console.error("Error in fetchUserPosts wrapper:", error);
+    
+    // Fall back to direct API call if context fails
+    return fetchUserPostsDirect(userId);
+  }
+};
+
+// Direct API call implementation as fallback
+const fetchUserPostsDirect = async (userId: string): Promise<PostItem[]> => {
+  console.log("ProfileService: Falling back to direct API call for user posts");
   
   try {
     // Use the getUserPosts function from apiClient
@@ -270,20 +311,52 @@ export const fetchUserPosts = async (userId: string): Promise<PostItem[]> => {
     console.log(`ProfileService: Received ${posts.length} posts`);
     
     // Standardize post format for each post
-    const fetchedPosts = posts.map((post: any) => standardizePostFormat(post));
+    const fetchedPosts = posts.map((post: any) => {
+      // Make sure post has all required fields
+      if (!post.media) {
+        console.warn(`User post ${post.id} is missing media field`);
+      }
+      
+      if (!post.tags) {
+        console.warn(`User post ${post.id} is missing tags field`);
+      }
+      
+      return standardizePostFormat(post);
+    });
     
     return fetchedPosts;
-  } catch (error) {
-    console.error("Error fetching posts from new API:", error);
+  } catch (error: any) {
+    console.error("Error fetching user posts directly:", error);
     
     // Try fallback to old endpoints
     return fetchPostsFallback(userId);
   }
 };
 
-// Fetch liked posts
+// Fetch liked posts - now a wrapper around the PostsContext method
 export const fetchLikedPosts = async (userId: string): Promise<PostItem[]> => {
-  console.log("ProfileService: Fetching liked posts");
+  console.log("ProfileService: Fetching liked posts via PostsContext");
+  
+  try {
+    // Get methods from the context
+    const { fetchLikedPosts, state } = usePosts();
+    
+    // Call the context method to fetch and update state
+    await fetchLikedPosts(userId);
+    
+    // Return the posts from the state
+    return state.likedPosts;
+  } catch (error: any) {
+    console.error("Error in fetchLikedPosts wrapper:", error);
+    
+    // Fall back to direct API call if context fails
+    return fetchLikedPostsDirect(userId);
+  }
+};
+
+// Direct API call implementation as fallback
+const fetchLikedPostsDirect = async (userId: string): Promise<PostItem[]> => {
+  console.log("ProfileService: Falling back to direct API call for liked posts");
   
   try {
     // Get auth token
@@ -297,19 +370,33 @@ export const fetchLikedPosts = async (userId: string): Promise<PostItem[]> => {
       headers: { Authorization: `Bearer ${authToken}` }
     });
     
+    console.log("Liked posts API response structure:", Object.keys(response.data));
+    
     if (response?.data?.likedPosts) {
       const { likedPosts } = response.data;
       console.log(`ProfileService: Received ${likedPosts.length} liked posts`);
       
       // Process liked posts exactly the same way as regular posts
-      const fetchedPosts = likedPosts.map((post: any) => standardizePostFormat(post));
+      const fetchedPosts = likedPosts.map((post: any) => {
+        // Make sure post has all required fields
+        if (!post.media) {
+          console.warn(`Liked post ${post.id} is missing media field`);
+        }
+        
+        if (!post.tags) {
+          console.warn(`Liked post ${post.id} is missing tags field`);
+        }
+        
+        return standardizePostFormat(post);
+      });
       
       return fetchedPosts;
     }
     
+    console.warn("No likedPosts field in API response");
     return [];
-  } catch (error) {
-    console.error("Error fetching liked posts:", error);
+  } catch (error: any) {
+    console.error("Error fetching liked posts directly:", error);
     return [];
   }
 };
@@ -317,6 +404,7 @@ export const fetchLikedPosts = async (userId: string): Promise<PostItem[]> => {
 // Fallback function for posts if new endpoint fails
 export const fetchPostsFallback = async (userId: string): Promise<PostItem[]> => {
   try {
+    console.log("ProfileService: Attempting fallback for user posts");
     const postsResponse = await api.get('/pg/posts');
     
     if (postsResponse?.data) {
@@ -333,12 +421,25 @@ export const fetchPostsFallback = async (userId: string): Promise<PostItem[]> =>
       console.log(`ProfileService: Found ${userPosts.length} posts with fallback`);
       
       // Standardize post format for each post
-      const fetchedPosts = userPosts.map((post: any) => standardizePostFormat(post));
+      const fetchedPosts = userPosts.map((post: any) => {
+        // Make sure post has all required fields
+        if (!post.media) {
+          console.warn(`Fallback post ${post.id} is missing media field`);
+        }
+        
+        if (!post.tags) {
+          console.warn(`Fallback post ${post.id} is missing tags field`);
+        }
+        
+        return standardizePostFormat(post);
+      });
       
       return fetchedPosts;
     }
+    
+    console.warn("No posts data in fallback API response");
     return [];
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in post fallback:", error);
     return [];
   }

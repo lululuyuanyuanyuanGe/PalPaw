@@ -11,11 +11,18 @@ export interface BaseItem {
 
 // Define post type
 export interface PostItem extends BaseItem {
+  userId?: string;
   title?: string;
   likes?: number;
   views?: number;
   content?: string;
   createdAt?: Date;
+  updatedAt?: Date;
+  location?: string | null;
+  visibility?: 'public' | 'private' | 'followers';
+  isDeleted?: boolean;
+  media?: any[];
+  imageUrl?: string;
   authorData?: {
     id: string;
     username: string;

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, Image, TouchableOpacity, ActivityIndicator, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Image, TouchableOpacity, ActivityIndicator, StyleSheet, Dimensions, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Feather, Ionicons, FontAwesome } from '@expo/vector-icons';
+import { Feather, Ionicons, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BaseItem, PostItem, ProductItem, isButtonItem, isPostItem, isProductItem, ProfileTab } from './types';
 import { usePosts } from '../../../../context';
@@ -287,12 +287,34 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
               <Text className="text-xs text-gray-400 mb-1 font-rubik">
                 {formatRelativeTime(item.createdAt)}
               </Text>
+              
               <Text numberOfLines={1} className="text-sm font-rubik-medium text-gray-800">
                 {item.title || "Untitled Post"}
               </Text>
               <Text numberOfLines={2} className="text-xs text-gray-500 mt-1 font-rubik">
                 {item.content || "No description available"}
               </Text>
+              
+              {/* Tags - horizontal scrollable row */}
+              {item.tags && item.tags.length > 0 && (
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  className="mt-2"
+                >
+                  {item.tags.map((tag: string, index: number) => (
+                    <View 
+                      key={index} 
+                      className="bg-purple-50 rounded-full px-2 py-1 mr-1 flex-row items-center"
+                    >
+                      <MaterialCommunityIcons name="tag" size={10} color="#9333EA" />
+                      <Text className="text-purple-700 text-xs ml-1">
+                        {tag}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
               
               {/* Like interaction area */}
               <View className="flex-row justify-between items-center mt-3">

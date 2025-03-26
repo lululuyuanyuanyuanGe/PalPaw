@@ -11,7 +11,7 @@ import {
   Alert,
   RefreshControl,
 } from "react-native";
-import { Feather, Ionicons, MaterialCommunityIcons, FontAwesome } from "@expo/vector-icons";
+import { Feather} from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import Constants from "expo-constants";
@@ -20,8 +20,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { 
   formatImageUrl, 
-  fetchUserPosts as fetchUserPostsService,
-  fetchLikedPosts as fetchLikedPostsService
+  fetchUserProducts,
 } from "./renderService";
 import {
   BaseItem,
@@ -146,13 +145,14 @@ const ProfileScreen = () => {
   
   // Use PostsContext for post data
   const { 
-    state: postsState,
+    fetchUserPosts,
+    fetchLikedPosts,
+    state,
     setCurrentPost,
     likePost,
-    unlikePost,
-    isPostLiked,
+    unlikePost
   } = usePosts();
-  const { likedPostIds } = postsState;
+  const { likedPostIds } = state;
   
   // Ref to track last data fetch time to prevent too frequent refreshes
   const lastFetchTime = useRef(0);
@@ -176,15 +176,13 @@ const ProfileScreen = () => {
     
     try {
       // Fetch user posts
-      const posts = await fetchUserPostsService(userId);
-      setUserPosts(posts);
+      await fetchUserPosts(userId);
       
       // Fetch liked posts
-      const liked = await fetchLikedPostsService(userId);
-      setLikedPosts(liked);
+      await fetchLikedPosts(userId);
       
       // Update user stats
-      updateUserStats(posts.length, products.length);
+      updateUserStats(state.userPosts.length, products.length);
     } catch (error) {
       console.error("Error fetching user data:", error);
     } finally {
@@ -195,10 +193,10 @@ const ProfileScreen = () => {
   
   // Update user stats when post data changes
   useEffect(() => {
-    if (user && (userPosts.length > 0 || products.length > 0)) {
-      updateUserStats(userPosts.length, products.length);
+    if (user && (state.userPosts.length > 0 || products.length > 0)) {
+      updateUserStats(state.userPosts.length, products.length);
     }
-  }, [userPosts.length, products.length, user?.id]);
+  }, [state.userPosts.length, products.length, user?.id]);
   
   // Use focus effect to refresh data when returning to the screen
   useFocusEffect(
@@ -255,13 +253,13 @@ const ProfileScreen = () => {
   const getDisplayItems = (): BaseItem[] => {
     switch(activeTab) {
       case 'posts':
-        return [...userPosts, newPostButton];
+        return [...state.userPosts, newPostButton];
       case 'products':
         return [...products, newProductButton];
       case 'liked':
-        return likedPosts.length > 0 ? likedPosts : [];
+        return state.likedPosts.length > 0 ? state.likedPosts : [];
       default:
-        return [...userPosts, newPostButton];
+        return [...state.userPosts, newPostButton];
     }
   };
   
@@ -290,15 +288,14 @@ const ProfileScreen = () => {
     const handleLike = async (postId: string, isLiked: boolean) => {
       // Call the like/unlike function from context
       if (isLiked) {
-        await unlikePost(postId);
+        unlikePost(postId);
       } else {
-        await likePost(postId);
+        likePost(postId);
       }
       
       // Refresh the liked posts if we're on the liked tab to keep it in sync
       if (activeTab === 'liked' && user?.id) {
-        const liked = await fetchLikedPostsService(user.id);
-        setLikedPosts(liked);
+        await fetchLikedPosts(user.id);
       }
     };
     
@@ -434,7 +431,7 @@ const ProfileScreen = () => {
               {/* Stats Row */}
               <View className="flex-row justify-around px-5 py-4 border-t border-b border-purple-100 mb-4 bg-white">
                 <View className="items-center">
-                  <Text className="text-purple-700 font-bold text-lg">{user.stats?.posts || userPosts.length || 0}</Text>
+                  <Text className="text-purple-700 font-bold text-lg">{user.stats?.posts || state.userPosts.length || 0}</Text>
                   <Text className="text-gray-500 text-xs">Posts</Text>
                 </View>
                 <View className="items-center">
@@ -457,7 +454,7 @@ const ProfileScreen = () => {
                   className={`px-6 py-2 rounded-full mx-1 ${activeTab === 'posts' ? 'bg-purple-100' : 'bg-transparent'}`}
                   onPress={() => handleTabChange('posts')}
                 >
-                  <Text className={`font-rubik-medium ${activeTab === 'posts' ? 'text-purple-700' : 'text-gray-500'}`}>Posts ({userPosts.length || 0})</Text>
+                  <Text className={`font-rubik-medium ${activeTab === 'posts' ? 'text-purple-700' : 'text-gray-500'}`}>Posts ({state.userPosts.length || 0})</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                   className={`px-6 py-2 rounded-full mx-1 ${activeTab === 'products' ? 'bg-purple-100' : 'bg-transparent'}`}
@@ -469,7 +466,7 @@ const ProfileScreen = () => {
                   className={`px-6 py-2 rounded-full mx-1 ${activeTab === 'liked' ? 'bg-purple-100' : 'bg-transparent'}`}
                   onPress={() => handleTabChange('liked')}
                 >
-                  <Text className={`font-rubik-medium ${activeTab === 'liked' ? 'text-purple-700' : 'text-gray-500'}`}>Liked ({likedPosts.length || 0})</Text>
+                  <Text className={`font-rubik-medium ${activeTab === 'liked' ? 'text-purple-700' : 'text-gray-500'}`}>Liked ({state.likedPosts.length || 0})</Text>
                 </TouchableOpacity>
               </View>
               

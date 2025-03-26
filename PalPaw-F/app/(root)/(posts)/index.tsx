@@ -378,6 +378,27 @@ const PostDetail = () => {
           </View>
         </View>
 
+        {/* Location information - beautiful design */}
+        {post.location && (
+          <View className="mt-2 bg-white p-4 shadow-sm">
+            <LinearGradient
+              colors={['rgba(147,51,234,0.05)', 'rgba(192,132,252,0.1)']}
+              className="p-3 rounded-xl flex-row items-center"
+            >
+              <View className="bg-purple-100 p-2 rounded-full mr-3">
+                <Ionicons name="location" size={20} color="#9333EA" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-xs text-purple-600 font-rubik-medium mb-1">LOCATION</Text>
+                <Text className="text-sm text-gray-800 font-rubik">{post.location}</Text>
+              </View>
+              <TouchableOpacity className="bg-white p-2 rounded-full shadow-sm">
+                <Ionicons name="navigate-outline" size={20} color="#9333EA" />
+              </TouchableOpacity>
+            </LinearGradient>
+          </View>
+        )}
+
         {/* Post Content with Enhanced Typography */}
         <View className="p-4 bg-white mt-2 shadow-sm">
           {post.title && (
