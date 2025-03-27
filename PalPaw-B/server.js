@@ -15,6 +15,9 @@ import likesRoutes from './routes/likes.js'; // Likes routes
 import postsRoutes from './routes/posts.js'; // Posts routes
 import productsRoutes from './routes/products.js'; // Products routes
 
+// Import WebSocket server
+import { initializeWebSocket } from './websocket/websocket.js';
+import http from 'http';
 // Load environment variables
 dotenv.config();
 
@@ -35,7 +38,10 @@ const app = express();
   }
 })();
 
-// Middleware
+// Initialize WebSocket server
+const server = http.createServer(app);
+const websocket = initializeWebSocket(server);
+
 app.use(cors());
 
 // Add request logging middleware
