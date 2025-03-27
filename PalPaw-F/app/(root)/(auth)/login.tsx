@@ -1,9 +1,7 @@
 import React, {useState, useEffect, useRef} from "react";
 import { View, Text, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator, StatusBar, Modal, Animated, Easing } from "react-native";
 import { Feather, MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
-import images from "@/constants/images";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from '@/context/AuthContext';
 

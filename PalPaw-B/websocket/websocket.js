@@ -53,8 +53,7 @@ export const initializeWebSocket = (httpServer) => {
             message: 'Successfully connected to real-time updates'
           });
           
-          // Subscribe to updates for this user
-          socket.join(`user:${userId}`);
+          // No rooms needed - we'll broadcast to everyone
         } else {
           throw new Error('User ID is required for authentication');
         }
@@ -87,12 +86,11 @@ export const initializeWebSocket = (httpServer) => {
   });
 
   /**
-   * Send update to specific users
+   * Send update to all connected clients (broadcast)
    * @param {string} event - Event name/type
    * @param {any} data - Data to send
-   * @param {string|string[]|null} targetUserIds - User ID(s) to send to, or null for broadcast
    */
-  const sendUpdate = (event, data, targetUserIds = null) => {
+  const sendUpdate = (event, data) => {
     try {
       // Add timestamp to all messages
       const payload = {
@@ -100,27 +98,14 @@ export const initializeWebSocket = (httpServer) => {
         timestamp: new Date().toISOString()
       };
       
-      // Case 1: Send to specific users
-      if (targetUserIds) {
-        const userIdArray = Array.isArray(targetUserIds) ? targetUserIds : [targetUserIds];
-        
-        userIdArray.forEach(userId => {
-          // Emit to the user's room
-          io.to(`user:${userId}`).emit(event, payload);
-          
-          // Log the event
-          console.log(`Sent '${event}' to user ${userId}:`, 
-            JSON.stringify(payload).substring(0, 100) + '...');
-        });
-      }
-      // Case 2: Broadcast to all users
-      else {
-        io.emit(event, payload);
-        console.log(`Broadcast '${event}' to all users:`, 
-          JSON.stringify(payload).substring(0, 100) + '...');
-      }
+      // Always broadcast to all users
+      io.emit(event, payload);
+      console.log(`Broadcast '${event}' to all users:`, 
+        JSON.stringify(payload).substring(0, 100) + 
+        (JSON.stringify(payload).length > 100 ? '...' : ''));
+      
     } catch (error) {
-      console.error(`Error sending '${event}' update:`, error);
+      console.error(`Error broadcasting '${event}' update:`, error);
     }
   };
 

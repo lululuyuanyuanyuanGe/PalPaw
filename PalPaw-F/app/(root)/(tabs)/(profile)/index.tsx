@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -17,9 +17,6 @@ import { useRouter } from "expo-router";
 import Constants from "expo-constants";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useFocusEffect } from "@react-navigation/native";
-import { 
-  formatImageUrl, 
-} from "./renderService";
 import {
   BaseItem,
   PostItem,
@@ -33,6 +30,7 @@ import {
 import { RenderItem } from './ProfileRenderer';
 import { usePosts, useUser, useAuth } from "@/context";
 import AuthPrompt from "@/app/components/AuthPrompt";
+import { formatImageUrl } from "@/utils/mediaUtils";
 
 const ProfileScreen = () => {
   const router = useRouter();
@@ -184,15 +182,6 @@ const ProfileScreen = () => {
     );
   };
   
-  // Show loading state
-  if (authState.loading || userState.loading) {
-    return (
-      <SafeAreaView className="flex-1 bg-blue-50 items-center justify-center">
-        <ActivityIndicator size="large" color="#9333EA" />
-        <Text className="mt-4 text-gray-600">Loading profile...</Text>
-      </SafeAreaView>
-    );
-  }
 
   // Show not authenticated state
   if (!authState.isAuthenticated) {

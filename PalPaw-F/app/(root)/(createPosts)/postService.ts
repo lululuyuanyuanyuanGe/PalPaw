@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getApiBaseUrl } from '../../../utils/mediaUtils';
+import { usePosts } from '@/context';
 
 // Define interfaces
 export interface Media {
@@ -37,7 +39,7 @@ export interface PetTagCategory {
 }
 
 // Base URL for the API
-const API_BASE_URL = 'http://192.168.2.11:5001/api'; // Updated to match the original port
+const API_BASE_URL = getApiBaseUrl()+'/api';
 
 /**
  * Converts a Media object to a FormData-compatible object
@@ -122,6 +124,8 @@ export const createPost = async (data: PostData): Promise<{ success: boolean; me
     console.log('Response data:', responseData);
     
     if (response.ok) {
+      // We can't use hooks inside a regular function,
+      // so we'll return success and let the component handle refreshing posts
       return { 
         success: true, 
         message: 'Post created successfully!',

@@ -21,6 +21,7 @@ import { useRouter } from 'expo-router';
 import { createPost, Media as ServiceMedia, PostData, getPetTagSuggestions, PetTagCategory } from './postService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RestoreDraftModal, SuccessModal, ErrorModal, TagModal } from './modals';
+import { usePosts, useAuth } from '@/context';
 
 interface Media {
   uri: string;
@@ -94,6 +95,11 @@ const CreatePostScreen: React.FC = () => {
   const [errorTitle, setErrorTitle] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const videoRef = useRef<Video>(null);
+
+  // Get the auth context to access user ID
+  const { state: authState } = useAuth();
+  // Get the posts context to refresh posts
+  const { fetchUserPosts } = usePosts();
 
   // Helper function to check if form has any data entered
   const hasFormData = () => {
@@ -431,9 +437,15 @@ const CreatePostScreen: React.FC = () => {
         // Clear the draft after successful submission
         await clearDraft();
         
+        // Refresh user posts if authenticated
+        if (authState.isAuthenticated && authState.user?.id) {
+          fetchUserPosts(authState.user.id);
+        }
+        
         // Show custom success modal instead of default alert
         setSuccessMessage(result.message || 'Post created successfully!');
         setSuccessModalVisible(true);
+        
       } else {
         showErrorModal('Error', result.message);
       }

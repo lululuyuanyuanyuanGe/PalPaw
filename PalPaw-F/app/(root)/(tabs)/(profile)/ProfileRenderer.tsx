@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BaseItem, PostItem, ProductItem, isButtonItem, isPostItem, isProductItem, ProfileTab } from './types';
 import { usePosts } from '../../../../context';
 import Animated, { useSharedValue, withSpring } from 'react-native-reanimated';
+import { formatImageUrl, isVideoUrl, processMediaFiles } from '../../../../utils/mediaUtils';
 
 interface RenderItemProps {
   item: BaseItem;
@@ -86,94 +87,56 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
     }
   };
   
-  // Function to determine if a post has video media
+  // Function to check if post has video media
   const hasVideoMedia = (item: PostItem): boolean => {
-    // First check the direct mediaType property
-    if (item.mediaType === 'video') return true;
+    // First check mediaType
+    if (item.mediaType === 'video') {
+      return true;
+    }
     
-    // Then check in allMedia array
-    if (item.allMedia && item.allMedia.length > 0) {
+    // Then check mediaUrl using isVideoUrl from mediaUtils
+    if (item.mediaUrl && typeof item.mediaUrl === 'string') {
+      return isVideoUrl(item.mediaUrl);
+    }
+    
+    // Check media array for videos
+    if (item.allMedia && Array.isArray(item.allMedia) && item.allMedia.length > 0) {
       return item.allMedia.some(media => {
         if (typeof media === 'object' && media !== null) {
-          return media.type === 'video' || 
-            (media.url && typeof media.url === 'string' && media.url.match(/\.(mp4|mov|avi|wmv)$/i));
+          return media.type === 'video';
         }
-        // If media is a string URL, check if it looks like a video URL
         if (typeof media === 'string') {
-          return media.match(/\.(mp4|mov|avi|wmv)$/i);
+          return isVideoUrl(media);
         }
         return false;
       });
-    }
-    
-    // Check if mediaUrl is a video URL
-    if (item.mediaUrl && typeof item.mediaUrl === 'string') {
-      return item.mediaUrl.match(/\.(mp4|mov|avi|wmv)$/i) !== null;
     }
     
     return false;
   };
   
   // Function to get thumbnail for video
-  const getVideoThumbnail = (item: PostItem): string | undefined => {
+  const getVideoThumbnail = (item: PostItem): string => {
     // Use explicit thumbnail if available
-    if (item.thumbnailUri) return item.thumbnailUri;
-    if ((item as any).imageUrl) return (item as any).imageUrl;
+    if (item.thumbnailUri) return formatImageUrl(item.thumbnailUri);
+    if (item.imageUrl) return formatImageUrl(item.imageUrl);
     
-    // Check for thumbnail in media array
+    // If we have a media array, process it using the utility function
     if (item.allMedia && item.allMedia.length > 0) {
-      // First try to find an explicit thumbnail
-      const videoMedia = item.allMedia.find(media => {
-        if (typeof media === 'object' && media !== null) {
-          return media.type === 'video' || 
-            (media.url && typeof media.url === 'string' && media.url.match(/\.(mp4|mov|avi|wmv)$/i));
-        }
-        return false;
-      });
-      
-      if (videoMedia && typeof videoMedia === 'object' && videoMedia.thumbnail) {
-        return videoMedia.thumbnail;
-      }
-      
-      // If no explicit thumbnail, look for posterUri or thumbnailUri
-      if (videoMedia && typeof videoMedia === 'object') {
-        if (videoMedia.posterUri) return videoMedia.posterUri;
-        if (videoMedia.thumbnailUri) return videoMedia.thumbnailUri;
-      }
-      
-      // If still no thumbnail, look for an image to use as thumbnail
-      const firstImage = item.allMedia.find(media => {
-        if (typeof media === 'object' && media !== null) {
-          return media.type === 'image';
-        }
-        if (typeof media === 'string') {
-          return media.match(/\.(jpg|jpeg|png|gif|webp)$/i) !== null;
-        }
-        return false;
-      });
-      
-      if (firstImage) {
-        if (typeof firstImage === 'object' && firstImage.url) {
-          return firstImage.url;
-        }
-        if (typeof firstImage === 'string') {
-          return firstImage;
-        }
+      try {
+        const result = processMediaFiles(item.allMedia);
+        return result.imageUrl;
+      } catch (error) {
+        console.error('Error processing media:', error);
       }
     }
     
-    // Fallback to the mediaUrl for image types or the image uri
-    if (item.mediaType === 'image' && item.mediaUrl) {
-      return item.mediaUrl;
-    }
+    // Fallback to whatever image URL we have
+    if (item.image?.uri) return item.image.uri;
+    if (item.mediaUrl) return formatImageUrl(item.mediaUrl);
     
-    // Try the image property
-    if (item.image && item.image.uri) {
-      return item.image.uri;
-    }
-    
-    // Last resort - return whatever mediaUrl we have
-    return item.mediaUrl;
+    // Last resort - placeholder
+    return 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
   };
   
   // Handle like press with animation

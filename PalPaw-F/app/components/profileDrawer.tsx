@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { formatImageUrl } from '@/utils/mediaUtils';
 
 // Define colors directly since we don't have access to constants/Colors
 const colors = {
@@ -155,7 +156,7 @@ export default function ProfileDrawer() {
       >
         <Image 
           source={user.avatar 
-            ? { uri: `http://192.168.2.11:5001${user.avatar}` } 
+            ? { uri: formatImageUrl(user.avatar) } 
             : require('../../assets/images/loginPic.jpg')} 
           style={styles.profileImage} 
         />

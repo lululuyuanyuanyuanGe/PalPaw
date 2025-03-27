@@ -1,159 +1,9 @@
 import React, { createContext, useReducer, useContext, ReactNode, useEffect } from 'react';
 import { PostItem } from '../app/(root)/(tabs)/(profile)/types';
-import { fetchUserPosts as fetchUserPostsService, fetchPostsFallback } from '../app/(root)/(tabs)/(profile)/renderService';
+import { fetchUserPosts as fetchPostsFallback } from '../app/(root)/(tabs)/(profile)/renderService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../utils/apiClient';
-
-// Define API base URL for media
-const API_BASE_URL = 'http://192.168.2.11:5001';
-
-// Format image URL function
-const formatImageUrl = (path: string | undefined): string => {
-  if (!path) {
-    return 'https://robohash.org/default?set=set4&bgset=bg1';
-  }
-  
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
-  }
-  
-  // Ensure path has a leading slash
-  if (!path.startsWith('/')) {
-    path = '/' + path;
-  }
-  
-  return `${API_BASE_URL}${path}`;
-};
-
-// Helper function to check if URL is a video
-const isVideoUrl = (url: string): boolean => {
-  if (!url) return false;
-  
-  // Check common video extensions
-  const videoExtensions = ['.mp4', '.mov', '.avi', '.wmv', '.flv', '.webm', '.mkv'];
-  const lowercasedUrl = url.toLowerCase();
-  
-  for (const ext of videoExtensions) {
-    if (lowercasedUrl.endsWith(ext)) {
-      return true;
-    }
-  }
-  
-  // Also check if the URL contains a video indicator
-  const isVideo = lowercasedUrl.includes('/video/') || 
-         lowercasedUrl.includes('video=true') || 
-         lowercasedUrl.includes('type=video');
-         
-  return isVideo;
-};
-
-// Helper function to process media files and select appropriate thumbnail
-const processMediaFiles = (mediaArray: any[]): { imageUrl: string, mediaType: 'image' | 'video', mediaUrl: string, thumbnailUri?: string } => {
-  let imageUrl = '';
-  let mediaType: 'image' | 'video' = 'image';
-  let mediaUrl = '';
-  let thumbnailUri = '';
-  
-  // Default to placeholder if no media
-  imageUrl = 'https://robohash.org/default?set=set4&bgset=bg1';
-  
-  if (!mediaArray || !Array.isArray(mediaArray) || mediaArray.length === 0) {
-    return { imageUrl, mediaType, mediaUrl };
-  }
-  
-  // First, try to find an image to use as thumbnail
-  const firstImage = mediaArray.find(item => {
-    if (typeof item === 'object' && item !== null && item.type) {
-      return item.type === 'image';
-    } else if (typeof item === 'string') {
-      return !isVideoUrl(item);
-    }
-    return false;
-  });
-  
-  // Now look for videos
-  const videoMedia = mediaArray.find(item => {
-    if (typeof item === 'object' && item !== null && item.type) {
-      return item.type === 'video';
-    } else if (typeof item === 'string') {
-      return isVideoUrl(item);
-    }
-    return false;
-  });
-  
-  // If we found a video, use it for the mediaUrl and set type to video
-  if (videoMedia) {
-    mediaType = 'video';
-    
-    if (typeof videoMedia === 'object' && videoMedia !== null) {
-      // Make sure the URL is an absolute path
-      mediaUrl = formatImageUrl(videoMedia.url);
-      
-      // Check if video media has a thumbnail field first
-      if (videoMedia.thumbnail) {
-        thumbnailUri = formatImageUrl(videoMedia.thumbnail);
-        imageUrl = thumbnailUri;
-      }
-      // If no thumbnail but we found an image, use that for the thumbnail
-      else if (firstImage) {
-        if (typeof firstImage === 'object' && firstImage !== null) {
-          imageUrl = formatImageUrl(firstImage.url);
-        } else if (typeof firstImage === 'string') {
-          imageUrl = formatImageUrl(firstImage);
-        }
-      } else {
-        // If no image is available, we still need to set the imageUrl
-        // but we'll set it to a placeholder instead of the video URL
-        // since using the video URL directly doesn't work well as a thumbnail
-        imageUrl = 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
-      }
-    } else if (typeof videoMedia === 'string') {
-      mediaUrl = formatImageUrl(videoMedia);
-      
-      // If we also found an image, use that for the thumbnail
-      if (firstImage && typeof firstImage === 'string') {
-        imageUrl = formatImageUrl(firstImage);
-      } else {
-        // If no image is available, we'll use a placeholder
-        imageUrl = 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
-      }
-    }
-  } else if (firstImage) {
-    // No videos, just use the first image
-    mediaType = 'image';
-    if (typeof firstImage === 'object' && firstImage !== null) {
-      mediaUrl = formatImageUrl(firstImage.url);
-      imageUrl = mediaUrl;
-    } else if (typeof firstImage === 'string') {
-      mediaUrl = formatImageUrl(firstImage);
-      imageUrl = mediaUrl;
-    }
-  } else {
-    // No videos or images, use the first media item whatever it is
-    const firstMedia = mediaArray[0];
-    if (typeof firstMedia === 'object' && firstMedia !== null) {
-      mediaUrl = formatImageUrl(firstMedia.url || '');
-      mediaType = firstMedia.type === 'video' ? 'video' : 'image';
-      // For videos, use a placeholder for the thumbnail
-      if (mediaType === 'video') {
-        imageUrl = 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
-      } else {
-        imageUrl = mediaUrl;
-      }
-    } else if (typeof firstMedia === 'string') {
-      mediaUrl = formatImageUrl(firstMedia);
-      mediaType = isVideoUrl(firstMedia) ? 'video' : 'image';
-      // For videos, use a placeholder for the thumbnail
-      if (mediaType === 'video') {
-        imageUrl = 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
-      } else {
-        imageUrl = mediaUrl;
-      }
-    }
-  }
-  
-  return { imageUrl, mediaType, mediaUrl, thumbnailUri };
-};
+import { processMediaFiles } from '../utils/mediaUtils';
 
 // Helper function to fetch user data directly
 const fetchUserData = async (userId: string) => {
@@ -314,7 +164,7 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
     case 'FETCH_POSTS_REQUEST':
       return {
         ...state,
-        loading: true,
+        loading: false,
         error: null,
       };
     case 'FETCH_POSTS_SUCCESS':
@@ -869,8 +719,6 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
       return false;
     }
   };
-
-  
 
   // Function to unlike a post
   const unlikePost = async (postId: string): Promise<boolean> => {
