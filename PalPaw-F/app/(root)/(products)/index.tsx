@@ -156,7 +156,6 @@ const ProductDetail = () => {
   
   // Get context values
   const { state: authState } = useAuth();
-  /* Commented out backend interactions
   const { 
     state: productsState, 
     fetchProductById, 
@@ -164,13 +163,12 @@ const ProductDetail = () => {
     saveProduct,
     unsaveProduct
   } = useProducts();
-  */
   
   // Get the current product from context
-  // const product = productsState.currentProduct;
+  const product = productsState.currentProduct;
   
-  // Mock product data for UI preview
-  const product = {
+  // Mock product data for UI preview - will only be used if product is not loaded
+  const mockProduct = {
     id: '123',
     userId: 'user456',
     name: 'Premium Pet Carrier - Perfect for Small Dogs',
@@ -196,7 +194,6 @@ const ProductDetail = () => {
     }
   };
   
-  /* Commented out backend data loading
   // Load the product data when the component mounts
   useEffect(() => {
     const loadProduct = async () => {
@@ -215,38 +212,61 @@ const ProductDetail = () => {
     
     loadProduct();
   }, [productId]);
-  */
 
-  // Mock function for save state
-  const isProductSaved = (id: string) => {
-    // For UI purposes, return false or true randomly
-    return Math.random() > 0.5;
-  };
+  // Use either loaded product from backend or fallback to mock data
+  const displayProduct = product || mockProduct;
   
   // Handle save/unsave product
   const handleToggleSave = async () => {
-    /* Commented out backend interaction
     if (!authState.isAuthenticated) {
       Alert.alert("Authentication Required", "Please login to save products");
       return;
     }
     
-    if (!product) return;
+    if (!displayProduct) return;
     
     try {
-      if (isProductSaved(product.id)) {
-        await unsaveProduct(product.id);
+      if (isProductSaved(displayProduct.id)) {
+        await unsaveProduct(displayProduct.id);
       } else {
-        await saveProduct(product.id);
+        await saveProduct(displayProduct.id);
       }
     } catch (error) {
       console.error('Error toggling save status:', error);
       Alert.alert('Error', 'Failed to update product save status');
     }
-    */
+  };
+  
+  // Handle contact seller
+  const handleContactSeller = () => {
+    if (!authState.isAuthenticated) {
+      Alert.alert("Authentication Required", "Please login to contact sellers");
+      return;
+    }
     
-    // For UI preview only
-    Alert.alert("UI Preview", "Save/unsave functionality would happen here");
+    if (!displayProduct || !displayProduct.sellerData) {
+      Alert.alert("Error", "Seller information is not available");
+      return;
+    }
+    
+    Alert.alert(
+      "Contact Seller",
+      `Would you like to contact ${displayProduct.sellerData?.username} about "${displayProduct.name}"?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Contact",
+          onPress: () => {
+            // Navigate to chat or messenger screen
+            // This would be implemented based on your app's messaging system
+            Alert.alert("Coming Soon", "Messaging functionality will be available soon!");
+          }
+        }
+      ]
+    );
   };
   
   // Animated header style based on scroll position
@@ -273,41 +293,7 @@ const ProductDetail = () => {
     };
   });
   
-  // Handle contact seller
-  const handleContactSeller = () => {
-    /* Commented out backend authentication check
-    if (!authState.isAuthenticated) {
-      Alert.alert("Authentication Required", "Please login to contact sellers");
-      return;
-    }
-    
-    if (!product || !product.sellerData) {
-      Alert.alert("Error", "Seller information is not available");
-      return;
-    }
-    */
-    
-    // For UI preview only
-    Alert.alert(
-      "Contact Seller",
-      `Would you like to contact ${product.sellerData?.username} about "${product.name}"?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        {
-          text: "Contact",
-          onPress: () => {
-            // For UI preview only
-            Alert.alert("UI Preview", "Messaging functionality would happen here");
-          }
-        }
-      ]
-    );
-  };
-  
-  if (loading || !product) {
+  if (loading || !displayProduct) {
     return (
       <View className="flex-1 justify-center items-center bg-gray-50">
         <ActivityIndicator size="large" color="#9333EA" />
@@ -317,12 +303,12 @@ const ProductDetail = () => {
   }
 
   // Prepare media array for the carousel
-  const mediaItems = product.media && product.media.length > 0 
-    ? product.media.map(media => ({
+  const mediaItems = displayProduct.media && displayProduct.media.length > 0 
+    ? displayProduct.media.map(media => ({
         url: formatImageUrl(media.url || ''),
         type: media.type || 'image'
       }))
-    : [{ url: formatImageUrl(product.imageUrl || ''), type: 'image' }];
+    : [{ url: formatImageUrl(displayProduct.imageUrl || ''), type: 'image' }];
 
   // Handle scroll to detect when at bottom
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -362,13 +348,13 @@ const ProductDetail = () => {
           <Ionicons name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
         <Text className="flex-1 text-lg font-rubik-medium text-gray-800 ml-2">
-          {product.name?.substring(0, 20)}{product.name && product.name.length > 20 ? '...' : ''}
+          {displayProduct.name?.substring(0, 20)}{displayProduct.name && displayProduct.name.length > 20 ? '...' : ''}
         </Text>
         <TouchableOpacity onPress={handleToggleSave} className="p-2">
           <FontAwesome 
-            name={isProductSaved(product.id) ? "bookmark" : "bookmark-o"} 
+            name={isProductSaved(displayProduct.id) ? "bookmark" : "bookmark-o"} 
             size={22} 
-            color={isProductSaved(product.id) ? "#9333EA" : "#374151"} 
+            color={isProductSaved(displayProduct.id) ? "#9333EA" : "#374151"} 
           />
         </TouchableOpacity>
       </Animated.View>
@@ -388,9 +374,9 @@ const ProductDetail = () => {
             <Text className="flex-1 text-lg font-rubik-medium text-gray-800 ml-2">Product Details</Text>
             <TouchableOpacity onPress={handleToggleSave} className="p-2">
               <FontAwesome 
-                name={isProductSaved(product.id) ? "bookmark" : "bookmark-o"} 
+                name={isProductSaved(displayProduct.id) ? "bookmark" : "bookmark-o"} 
                 size={22} 
-                color={isProductSaved(product.id) ? "#9333EA" : "#374151"} 
+                color={isProductSaved(displayProduct.id) ? "#9333EA" : "#374151"} 
               />
             </TouchableOpacity>
           </View>
@@ -403,26 +389,26 @@ const ProductDetail = () => {
         <View className="p-4 bg-white mt-2 shadow-sm">
           <View className="flex-row items-center justify-between mb-2">
             <View className="flex-row items-center">
-              <View className={`px-3 py-1 rounded-full ${product.status === 'sold' ? 'bg-red-100' : 'bg-green-100'}`}>
-                <Text className={`text-xs font-rubik-medium ${product.status === 'sold' ? 'text-red-700' : 'text-green-700'}`}>
-                  {product.status === 'active' ? 'Available' : product.status === 'sold' ? 'Sold' : 'Archived'}
+              <View className={`px-3 py-1 rounded-full ${displayProduct.status === 'sold' ? 'bg-red-100' : 'bg-green-100'}`}>
+                <Text className={`text-xs font-rubik-medium ${displayProduct.status === 'sold' ? 'text-red-700' : 'text-green-700'}`}>
+                  {displayProduct.status === 'active' ? 'Available' : displayProduct.status === 'sold' ? 'Sold' : 'Archived'}
                 </Text>
               </View>
               <Text className="text-xs text-gray-500 ml-2 font-rubik">
-                {formatTimeAgo(product.createdAt)}
+                {formatTimeAgo(displayProduct.createdAt)}
               </Text>
             </View>
             <View className="flex-row items-center">
               <Ionicons name="eye-outline" size={16} color="#6B7280" />
-              <Text className="ml-1 text-gray-500 text-xs font-rubik">{product.views || 0} views</Text>
+              <Text className="ml-1 text-gray-500 text-xs font-rubik">{displayProduct.views || 0} views</Text>
             </View>
           </View>
           
-          <Text className="text-xl font-rubik-semibold text-gray-800 mb-1">{product.name}</Text>
+          <Text className="text-xl font-rubik-semibold text-gray-800 mb-1">{displayProduct.name}</Text>
           
           <View className="mt-2">
             <Text className="text-2xl font-rubik-semibold text-purple-700">
-              {formatCurrency(product.price)}
+              {formatCurrency(displayProduct.price)}
             </Text>
           </View>
         </View>
@@ -434,11 +420,11 @@ const ProductDetail = () => {
             <View className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-purple-400 to-purple-600 rounded-r-full" />
             
             <Image
-              source={{ uri: product.sellerData?.avatar || `https://robohash.org/${product.userId}?set=set4` }}
+              source={{ uri: displayProduct.sellerData?.avatar || `https://robohash.org/${displayProduct.userId}?set=set4` }}
               className="w-12 h-12 rounded-full border-2 border-purple-100"
             />
             <View className="ml-3 flex-1">
-              <Text className="font-rubik-semibold text-gray-800">{product.sellerData?.username || 'User'}</Text>
+              <Text className="font-rubik-semibold text-gray-800">{displayProduct.sellerData?.username || 'User'}</Text>
               <View className="flex-row items-center">
                 <Ionicons name="time-outline" size={12} color="#9CA3AF" />
                 <Text className="text-xs text-gray-500 font-rubik ml-1">Member since {new Date().getFullYear()}</Text>
@@ -465,7 +451,7 @@ const ProductDetail = () => {
             </View>
             <Text className="font-rubik-semibold text-gray-800">Description</Text>
           </View>
-          <Text className="text-gray-700 leading-6 font-rubik mb-4 pl-1">{product.description}</Text>
+          <Text className="text-gray-700 leading-6 font-rubik mb-4 pl-1">{displayProduct.description}</Text>
           
           <View className="border-t border-gray-100 pt-4 mt-2">
             <View className="flex-row items-center mb-3">
@@ -478,26 +464,26 @@ const ProductDetail = () => {
             <ProductInfoItem 
               icon={<MaterialCommunityIcons name="shape-outline" size={20} color="#9333EA" />}
               label="Category"
-              value={product.category || 'General'}
+              value={displayProduct.category || 'General'}
               isCategory={true}
             />
             
             <ProductInfoItem 
               icon={<MaterialCommunityIcons name="tag-outline" size={20} color="#9333EA" />}
               label="Condition"
-              value={product.condition || 'Not specified'}
+              value={displayProduct.condition || 'Not specified'}
             />
             
             <ProductInfoItem 
               icon={<MaterialCommunityIcons name="package-variant" size={20} color="#9333EA" />}
               label="Quantity Available"
-              value={product.quantity || 1}
+              value={displayProduct.quantity || 1}
             />
           </View>
         </View>
         
         {/* Shipping Information */}
-        {product.shipping && Object.keys(product.shipping).length > 0 && (
+        {displayProduct.shipping && Object.keys(displayProduct.shipping).length > 0 && (
           <View className="p-4 bg-white mt-2 mb-24 shadow-sm">
             {/* Decorative elements */}
             <View className="absolute left-0 bottom-0 h-24 w-24 rounded-tr-full bg-purple-50 opacity-30" style={{ left: 0, bottom: 0 }} />
@@ -509,10 +495,10 @@ const ProductDetail = () => {
               <Text className="font-rubik-semibold text-gray-800">Shipping Details</Text>
             </View>
             
-            {product.shipping.options && Array.isArray(product.shipping.options) && product.shipping.options.length > 0 ? (
+            {displayProduct.shipping.options && Array.isArray(displayProduct.shipping.options) && displayProduct.shipping.options.length > 0 ? (
               <View>
                 <View className="flex-row flex-wrap mt-2">
-                  {product.shipping.options.includes('Pickup') && (
+                  {displayProduct.shipping.options.includes('Pickup') && (
                     <View 
                       style={{ backgroundColor: getShippingOptionBgColor('Pickup') }} 
                       className="p-3 px-5 rounded-xl mb-2 flex-row items-center mr-2 shadow-sm"
@@ -530,7 +516,7 @@ const ProductDetail = () => {
                       >Pickup</Text>
                     </View>
                   )}
-                  {product.shipping.options.includes('Delivery') && (
+                  {displayProduct.shipping.options.includes('Delivery') && (
                     <View 
                       style={{ backgroundColor: getShippingOptionBgColor('Delivery') }} 
                       className="p-3 px-5 rounded-xl mb-2 flex-row items-center shadow-sm"
@@ -549,7 +535,7 @@ const ProductDetail = () => {
                     </View>
                   )}
                 </View>
-                {product.shipping.options.includes('Delivery') && (
+                {displayProduct.shipping.options.includes('Delivery') && (
                   <View className="bg-gray-50 p-3 rounded-lg mt-2 border-l-2 border-amber-300">
                     <Text className="text-xs text-gray-600 font-rubik flex-row items-center">
                       <View style={{ width: 16, height: 16, justifyContent: 'center', alignItems: 'center', marginRight: 4 }}>
@@ -645,6 +631,17 @@ const ProductDetail = () => {
           </View>
         </LinearGradient>
       </Animated.View>
+
+      {/* Bottom Action Bar */}
+      <View className="bg-white border-t border-gray-100 px-4 py-3 absolute bottom-0 left-0 right-0 shadow-up">
+        <View className="flex-row items-center justify-center">
+          {/* Price */}
+          <View className="items-center">
+            <Text className="text-xs text-gray-500 font-rubik">Price</Text>
+            <Text className="text-xl font-rubik-semibold text-purple-700">{formatCurrency(displayProduct.price)}</Text>
+          </View>
+        </View>
+      </View>
     </>
   );
 };
