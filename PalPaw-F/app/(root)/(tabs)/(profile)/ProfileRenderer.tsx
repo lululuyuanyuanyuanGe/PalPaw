@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Feather, Ionicons, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BaseItem, PostItem, ProductItem, isButtonItem, isPostItem, isProductItem, ProfileTab } from './types';
-import { usePosts } from '../../../../context';
+import { usePosts, useProducts } from '../../../../context';
 import Animated, { useSharedValue, withSpring } from 'react-native-reanimated';
 import { formatImageUrl, isVideoUrl, processMediaFiles } from '../../../../utils/mediaUtils';
 
@@ -13,6 +13,7 @@ interface RenderItemProps {
   activeTab: ProfileTab;
   onPress: (item: BaseItem) => void;
   onLike?: (postId: string) => void;
+  onSave?: (productId: string) => void;
   showTabBar?: boolean;
 }
 
@@ -52,16 +53,25 @@ const formatRelativeTime = (date?: Date): string => {
   }
 };
 
-export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress: handleItemPress, onLike, showTabBar }) => {
+export const RenderItem: React.FC<RenderItemProps> = ({ 
+  item, 
+  activeTab, 
+  onPress: handleItemPress, 
+  onLike, 
+  onSave,
+  showTabBar 
+}) => {
   
   // Get screen width for sizing
   const { width } = Dimensions.get('window');
   
   const router = useRouter();
   const { setCurrentPost, isPostLiked } = usePosts();
+  const { isProductSaved } = useProducts();
   
   // Animation for the like button
   const likeScale = useSharedValue(1);
+  const saveScale = useSharedValue(1);
   
   if (!item) {
     return <View style={{ padding: 10, width: `${100 / 2}%` }} />;
@@ -154,6 +164,24 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
     // Call the onLike handler if provided
     if (onLike) {
       onLike(postItem.id);
+    }
+  };
+
+  // Handle save press with animation
+  const handleSavePress = (productItem: BaseItem, event: any) => {
+    // Stop event propagation to prevent navigating to detail
+    event.stopPropagation();
+    
+    if (!isProductItem(productItem)) return;
+    
+    // Animate the save button
+    saveScale.value = withSpring(1.3, { damping: 10 }, () => {
+      saveScale.value = withSpring(1);
+    });
+    
+    // Call the onSave handler if provided
+    if (onSave) {
+      onSave(productItem.id);
     }
   };
 
@@ -310,40 +338,53 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
         ) : isProductItem(item) ? (
           // Product Item
           <TouchableOpacity 
-            className="rounded-xl overflow-hidden shadow-sm bg-white border border-blue-50"
-            onPress={() => handleItemPress(item)}
+            className="rounded-xl overflow-hidden shadow-sm bg-white border border-purple-50"
+            onPress={() => navigateToPostDetail(item)}
           >
             <Image 
-              source={{ uri: item.image?.uri || item.mediaUrl }}
+              source={{ 
+                uri: item.image?.uri || 
+                    item.mediaUrl || 
+                    (item as any).imageUrl || 
+                    'https://via.placeholder.com/300x200/CCCCCC/666666?text=No+Image'
+              }}
               style={{ width: '100%', height: 150 }}
               resizeMode="cover"
               defaultSource={require('@/assets/images/no-result.png')}
             />
             
             <View className="p-3">
-              <Text numberOfLines={1} className="text-sm font-rubik-medium text-gray-800">
+              <Text numberOfLines={1} className="text-sm font-rubik-medium text-gray-800 mb-1">
                 {(item as ProductItem).name || "Untitled Product"}
               </Text>
-              <Text className="text-xs text-purple-600 mt-1 font-rubik-bold">
-                ${(item as ProductItem).price?.toFixed(2) || "0.00"}
-              </Text>
-              <Text numberOfLines={2} className="text-xs text-gray-500 mt-1 font-rubik">
-                No description available
-              </Text>
               
-              <View className="flex-row justify-between items-center mt-3">
-                <View className="flex-row items-center">
-                  <Feather name="shopping-cart" size={14} color="#374151" />
-                  <Text className="ml-1 text-xs text-gray-600">
-                    {(item as ProductItem).sold ? `${(item as ProductItem).sold} sold` : "0 sold"}
-                  </Text>
-                </View>
+              <View className="flex-row justify-between items-center">
+                <Text className="text-purple-700 font-bold">
+                  ${(item as ProductItem).price?.toFixed(2) || '0.00'}
+                </Text>
                 
-                {/* View count for products */}
-                <View className="flex-row items-center">
-                  <Ionicons name="eye-outline" size={14} color="#374151" />
-                  <Text className="ml-1 text-xs text-gray-600">{(item as ProductItem).views || 0}</Text>
-                </View>
+                <TouchableOpacity
+                  onPress={(event) => handleSavePress(item, event)}
+                  hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                >
+                  <Animated.View style={{ transform: [{ scale: saveScale }] }}>
+                    <FontAwesome 
+                      name={isProductSaved(item.id) ? "bookmark" : "bookmark-o"} 
+                      size={18} 
+                      color={isProductSaved(item.id) ? "#9333EA" : "#666"} 
+                    />
+                  </Animated.View>
+                </TouchableOpacity>
+              </View>
+              
+              {/* Product Stats */}
+              <View className="flex-row mt-2">
+                <Text className="text-xs text-gray-500 mr-3">
+                  <Feather name="eye" size={10} color="#777" /> {item.views || 0}
+                </Text>
+                <Text className="text-xs text-gray-500">
+                  <Feather name="check-circle" size={10} color="#777" /> {(item as ProductItem).sold || 0} sold
+                </Text>
               </View>
             </View>
           </TouchableOpacity>

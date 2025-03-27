@@ -6,9 +6,11 @@ import {
   getUserPosts,
   getPostById,
   getUserProducts,
-  getProductById 
+  getProductById,
+  createProductWithMedia
 } from '../controllers/upload/uploadController.js';
 import { authenticate } from '../middlewares/authMiddleware.js';
+import { createProduct } from '../controllers/products/productController.js';
 
 const router = express.Router();
 
@@ -17,7 +19,7 @@ const router = express.Router();
  * @desc Upload media files and create a post
  * @access Private
  */
-router.post('/post', authenticate, upload.array('media'), handlePostMulterError, createPostWithMedia);
+router.post('/post', authenticate, upload.array('media', 10), handlePostMulterError, createPostWithMedia);
 
 /**
  * @route GET /api/upload/posts
@@ -29,7 +31,7 @@ router.get('/posts', authenticate, getUserPosts);
 /**
  * @route GET /api/upload/posts/:userId
  * @desc Get all posts for a specific user
- * @access Private
+ * @access Public
  */
 router.get('/posts/:userId', getUserPosts);
 
@@ -45,21 +47,28 @@ router.get('/post/:postId', getPostById);
  * @desc Upload media files and create a product
  * @access Private
  */
-// router.post('/product', authenticate, productUpload.array('media'), handleProductMulterError, createProductWithFormData);
+// router.post('/product', authenticate, productUpload.array('media'), handlePostMulterError, createProductWithFormData);
+
+/**
+ * @route POST /api/products/upload
+ * @desc Upload media files and create a product - endpoint that frontend expects
+ * @access Private
+ */
+router.post('/products/upload', authenticate, upload.array('media', 10), handlePostMulterError, createProductWithMedia);
 
 /**
  * @route GET /api/upload/products
  * @desc Get all products for the authenticated user
  * @access Private
  */
-router.get('/products', authenticate, getUserProducts);
+router.get('/products/:userId', authenticate, getUserProducts);
 
 /**
  * @route GET /api/upload/products/:userId
  * @desc Get all products for a specific user
  * @access Private
  */
-router.get('/products/:userId', getUserProducts);
+router.post('/products', authenticate, createProduct);
 
 /**
  * @route GET /api/upload/product/:productId

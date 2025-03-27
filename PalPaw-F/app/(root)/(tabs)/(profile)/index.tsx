@@ -28,16 +28,17 @@ import {
   ProfileTab
 } from "./types";
 import { RenderItem } from './ProfileRenderer';
-import { usePosts, useUser, useAuth } from "@/context";
+import { usePosts, useUser, useAuth, useProducts } from "@/context";
 import AuthPrompt from "@/app/components/AuthPrompt";
 import { formatImageUrl } from "@/utils/mediaUtils";
+import { ProductItem as ContextProductItem } from "@/context/ProductsContext";
 
 const ProfileScreen = () => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
-  const [products, setProducts] = useState<ProductItem[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [postsLoading, setPostsLoading] = useState<boolean>(false);
+  const [productsLoading, setProductsLoading] = useState<boolean>(false);
   const [lastFetchTime, setLastFetchTime] = useState(0);
   
   // Get status bar height for proper spacing
@@ -64,6 +65,15 @@ const ProfileScreen = () => {
     isPostLiked
   } = usePosts();
   
+  // Use ProductsContext for product data
+  const {
+    state: productsState,
+    fetchUserProducts,
+    setCurrentProduct,
+    saveProduct,
+    unsaveProduct,
+    isProductSaved
+  } = useProducts();
   
   // Use focus effect to refresh data when returning to the screen
   useFocusEffect(
@@ -73,7 +83,7 @@ const ProfileScreen = () => {
       const now = Date.now();
       const timeSinceLastFetch = now - lastFetchTime;
       // Only refresh if significant time has passed
-      if (authState.user?.id && timeSinceLastFetch > 30000 && !refreshing && !postsLoading) {
+      if (authState.user?.id && timeSinceLastFetch > 30000 && !refreshing && !postsLoading && !productsLoading) {
         console.log("Refreshing data on focus after", Math.round(timeSinceLastFetch/1000), "seconds");
         refreshData();
       }
@@ -81,26 +91,27 @@ const ProfileScreen = () => {
       return () => {
         // Cleanup on blur
       };
-    }, [authState.user?.id, authState.isAuthenticated, authState.loading, refreshing, postsLoading])
+    }, [authState.user?.id, authState.isAuthenticated, authState.loading, refreshing, postsLoading, productsLoading])
   );
   
   // Refresh all data
   const refreshData = useCallback(() => {
-    if (refreshing || postsLoading || !authState.user?.id) return;
+    if (refreshing || postsLoading || productsLoading || !authState.user?.id) return;
     
     setRefreshing(true);
     
     Promise.all([
       fetchUserProfile(),
       fetchUserPosts(authState.user.id),
-      fetchLikedPosts(authState.user.id)
+      fetchLikedPosts(authState.user.id),
+      fetchUserProducts(authState.user.id)
     ])
       .catch(err => console.error("Error refreshing data:", err))
       .finally(() => {
         setRefreshing(false);
         setLastFetchTime(Date.now());
       });
-  }, [authState.user?.id, refreshing, postsLoading]);
+  }, [authState.user?.id, refreshing, postsLoading, productsLoading]);
   
   // Handle tab change
   const handleTabChange = (tab: ProfileTab) => {
@@ -127,7 +138,7 @@ const ProfileScreen = () => {
       case 'posts':
         return [...postsState.userPosts, newPostButton];
       case 'products':
-        return [...products, newProductButton];
+        return [...productsState.userProducts, newProductButton];
       case 'liked':
         return postsState.likedPosts.length > 0 ? postsState.likedPosts : [];
       default:
@@ -143,15 +154,15 @@ const ProfileScreen = () => {
     const onPress = (item: BaseItem) => {
       if (isPostItem(item)) {
         // Set the current post in context before navigation
-        setCurrentPost(item);
+        setCurrentPost(item as PostItem);
         
       } else if (isProductItem(item)) {
-        // Future: Handle product navigation
+        setCurrentProduct(item as unknown as ContextProductItem);
         console.log('Product item clicked');
       }
     };
     
-    // Handle like/unlike actions
+    // Handle like/unlike actions for posts
     const handleLike = async (postId: string) => {
       // Check if post is already liked using PostsContext's isPostLiked function
       const isCurrentlyLiked = isPostLiked(postId);
@@ -170,6 +181,20 @@ const ProfileScreen = () => {
       }
     };
     
+    // Handle save/unsave actions for products
+    const handleSave = async (productId: string) => {
+      // Check if product is already saved
+      const isCurrentlySaved = isProductSaved(productId);
+      console.log("isCurrentlySaved", isCurrentlySaved);
+      
+      // Call the appropriate function based on current saved status
+      if (isCurrentlySaved) {
+        await unsaveProduct(productId);
+      } else {
+        await saveProduct(productId);
+      }
+    };
+    
     // Pass all handling to the RenderItem component
     return (
       <RenderItem 
@@ -177,6 +202,7 @@ const ProfileScreen = () => {
         activeTab={activeTab} 
         onPress={onPress}
         onLike={handleLike}
+        onSave={handleSave}
         showTabBar={false}
       />
     );
@@ -209,7 +235,7 @@ const ProfileScreen = () => {
         renderItem={renderItem}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing || postsLoading}
+            refreshing={refreshing || postsLoading || productsLoading}
             onRefresh={refreshData}
             colors={['#9333EA']}
             tintColor="#9333EA"
@@ -307,7 +333,7 @@ const ProfileScreen = () => {
                   <Text className="text-gray-500 text-xs">Following</Text>
                 </View>
                 <View className="items-center">
-                  <Text className="text-purple-700 font-bold text-lg">{products.length || 0}</Text>
+                  <Text className="text-purple-700 font-bold text-lg">{productsState.userProducts.length || 0}</Text>
                   <Text className="text-gray-500 text-xs">Products</Text>
                 </View>
               </View>
@@ -321,16 +347,16 @@ const ProfileScreen = () => {
                   <Text className={`font-rubik-medium ${activeTab === 'posts' ? 'text-purple-700' : 'text-gray-500'}`}>Posts ({postsState.userPosts.length || 0})</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
-                  className={`px-6 py-2 rounded-full mx-1 ${activeTab === 'products' ? 'bg-purple-100' : 'bg-transparent'}`}
-                  onPress={() => handleTabChange('products')}
-                >
-                  <Text className={`font-rubik-medium ${activeTab === 'products' ? 'text-purple-700' : 'text-gray-500'}`}>Products ({products.length || 0})</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
                   className={`px-6 py-2 rounded-full mx-1 ${activeTab === 'liked' ? 'bg-purple-100' : 'bg-transparent'}`}
                   onPress={() => handleTabChange('liked')}
                 >
                   <Text className={`font-rubik-medium ${activeTab === 'liked' ? 'text-purple-700' : 'text-gray-500'}`}>Liked ({postsState.likedPosts.length || 0})</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  className={`px-6 py-2 rounded-full mx-1 ${activeTab === 'products' ? 'bg-purple-100' : 'bg-transparent'}`}
+                  onPress={() => handleTabChange('products')}
+                >
+                  <Text className={`font-rubik-medium ${activeTab === 'products' ? 'text-purple-700' : 'text-gray-500'}`}>Products ({productsState.userProducts.length || 0})</Text>
                 </TouchableOpacity>
               </View>
               
@@ -339,10 +365,16 @@ const ProfileScreen = () => {
                 <Text className="text-lg font-bold text-gray-800">
                   {activeTab === 'posts' ? 'My Posts' : activeTab === 'products' ? 'My Products' : 'Liked Posts'}
                 </Text>
-                {postsLoading && activeTab !== 'products' && (
+                {(postsLoading && activeTab !== 'products') && (
                   <View className="flex-row items-center mt-1">
                     <ActivityIndicator size="small" color="#9333EA" />
-                    <Text className="ml-2 text-xs text-gray-500">Updating...</Text>
+                    <Text className="ml-2 text-xs text-gray-500">Updating posts...</Text>
+                  </View>
+                )}
+                {(productsLoading && activeTab === 'products') && (
+                  <View className="flex-row items-center mt-1">
+                    <ActivityIndicator size="small" color="#9333EA" />
+                    <Text className="ml-2 text-xs text-gray-500">Updating products...</Text>
                   </View>
                 )}
               </View>

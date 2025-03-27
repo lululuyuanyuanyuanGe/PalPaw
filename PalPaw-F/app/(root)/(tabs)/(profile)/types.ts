@@ -48,11 +48,34 @@ export interface ButtonItem extends BaseItem {
 
 // Define product type
 export interface ProductItem extends BaseItem {
-  name?: string;
-  price?: number;
+  userId: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  condition: 'New' | 'Like New' | 'Good' | 'Fair';
+  media: any[];
+  quantity: number;
+  status: 'active' | 'sold' | 'archived';
+  tags: string[];
+  shipping: any;
+  views: number;
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  sellerData?: {
+    id: string;
+    username: string;
+    avatar: string;
+  };
+  imageUrl?: string;
+  mediaType?: 'image' | 'video';
+  mediaUrl?: string;
+  thumbnailUri?: string;
+  allMedia?: any[];
+  isSaved?: boolean;
   rating?: number;
   sold?: number;
-  views?: number;
 }
 
 // Define new product button type

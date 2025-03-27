@@ -3,7 +3,6 @@ import { authenticate, optionalAuthenticate } from '../middlewares/authMiddlewar
 import { 
   getAllProducts,
   getProductById,
-  createProduct,
   saveProduct,
   unsaveProduct,
   getSavedProducts
@@ -31,14 +30,13 @@ router.get('/saved', authenticate, getSavedProducts);
  * @desc Get a single product by ID and increment view count
  * @access Public
  */
-router.get('/:id', optionalAuthenticate, getProductById);
+router.get('/:id', authenticate, getProductById);
 
 /**
  * @route POST /api/pg/products
  * @desc Create a new product
  * @access Private
  */
-router.post('/', authenticate, createProduct);
 
 /**
  * @route POST /api/pg/products/:id/save

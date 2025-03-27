@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
+import { getApiBaseUrl } from '../../../utils/mediaUtils';
 
 // Define interfaces
 export interface Media {
@@ -26,7 +27,7 @@ export interface ProductData {
 }
 
 // Base URL for the API
-const API_BASE_URL = 'http://192.168.2.11:5001/api'; // Updated to match the original port
+const API_BASE_URL = getApiBaseUrl()+'/api';
 
 /**
  * Basic check to estimate if an image might be too large
@@ -54,15 +55,7 @@ const shouldProcessImage = async (uri: string): Promise<boolean> => {
 /**
  * Converts a Media object to a FormData-compatible object
  */
-const mediaToFormData = async (item: Media, index: number) => {
-  // Check if image might need special handling
-  const needsProcessing = await shouldProcessImage(item.uri);
-  if (needsProcessing) {
-    console.log(`Image ${index} might be large, consider implementing compression`);
-    // Note: For proper compression, you would need to add
-    // expo-image-manipulator to your dependencies
-  }
-  
+const mediaToFormData = (item: Media, index: number) => {
   // Get file extension based on uri or type
   const fileExtension = item.type === 'image' 
     ? (item.uri.match(/\.([^.]+)$/) || [, 'jpg'])[1] 
@@ -74,7 +67,10 @@ const mediaToFormData = async (item: Media, index: number) => {
   // Create object with properties needed for FormData
   return {
     uri: Platform.OS === 'ios' ? item.uri.replace('file://', '') : item.uri,
-    type: item.type === 'image' ? 'image/jpeg' : 'video/mp4',
+    type: item.type === 'image' ? 
+      (fileExtension === 'png' ? 'image/png' : 
+       fileExtension === 'webp' ? 'image/webp' : 'image/jpeg') : 
+      'video/mp4',
     name: fileName
   };
 };
@@ -98,15 +94,10 @@ export const createProduct = async (data: ProductData): Promise<{ success: boole
       mediaCount: data.media?.length || 0
     });
     
-    // For debugging only - unique identifier for this form submission
-    const requestId = `req_${Date.now().toString(36)}`;
-    console.log(`Request ID: ${requestId}`);
-    
     // Add base product data
     formData.append('name', data.name);
     formData.append('description', data.description);
     formData.append('price', data.price.toString());
-    formData.append('requestId', requestId);
     
     // Add optional fields if they exist
     if (data.category) formData.append('category', data.category);
@@ -123,67 +114,33 @@ export const createProduct = async (data: ProductData): Promise<{ success: boole
       formData.append('tags', JSON.stringify(data.tags));
     }
     
-    // Process and add media files one by one to avoid overwhelming the form data
-    let processedImages = 0;
+    // Add media files using the same pattern as createPost
     if (data.media && data.media.length > 0) {
-      const mediaCount = Math.min(data.media.length, 10); // Limit to 10 images
+      const mediaCount = Math.min(data.media.length, 10); // Limit to 10 media items
       console.log(`Processing ${mediaCount} media items (limited to 10 max)`);
       
-      // Process each media file sequentially
-      for (let i = 0; i < mediaCount; i++) {
-        try {
-          const item = data.media[i];
-          
-          // Skip invalid items
-          if (!item || !item.uri) {
-            console.log(`Skipping invalid media item at index ${i}`);
-            continue;
-          }
-          
-          // Check for potential size issues
-          const needsHandling = await shouldProcessImage(item.uri);
-          if (needsHandling) {
-            console.log(`Image ${i} might be large - consider compressing before upload`);
-          }
-          
-          // Get file extension and type
-          const fileExtension = (item.uri.match(/\.([^.]+)$/) || [, 'jpg'])[1].toLowerCase();
-          const mimeType = item.type === 'image' ? 
-            (fileExtension === 'png' ? 'image/png' : 
-             fileExtension === 'webp' ? 'image/webp' : 'image/jpeg') : 
-            'video/mp4';
-          
-          // Create file object for FormData
-          const fileObj = {
-            uri: Platform.OS === 'ios' ? item.uri.replace('file://', '') : item.uri,
-            type: mimeType,
-            name: `product_image_${i}_${requestId}.${fileExtension}`
-          };
-          
-          console.log(`Adding image ${i}: ${fileObj.name} (${mimeType})`);
-          // Use 'media' as the field name to match the posts controller approach
-          formData.append('media', fileObj as any);
-          processedImages++;
-        } catch (error) {
-          console.error(`Error adding image ${i}:`, error);
+      // Add media files
+      data.media.forEach((item, index) => {
+        if (!item || !item.uri) {
+          console.log(`Skipping invalid media item at index ${index}`);
+          return;
         }
-      }
+        
+        formData.append('media', mediaToFormData(item, index) as any);
+      });
     } else {
       console.log('No media to upload');
     }
     
-    console.log(`Successfully added ${processedImages} images to form data`);
-    
     // Get auth token from AsyncStorage
-    const token = await AsyncStorage.getItem('authToken');
+    const token = await AsyncStorage.getItem('token');
     console.log('Auth token retrieved:', token ? 'Yes' : 'No');
     
-    // Use the simpler upload endpoint that matches how posts are uploaded
-    console.log('Making product create request to:', `${API_BASE_URL}/products/upload`);
+    // Use the upload endpoint that matches backend implementation
+    console.log('Making product create request to:', `${API_BASE_URL}/upload/products/upload`);
     
-    // Make the API request with a longer timeout and chunked transfer
-    // Note: We're using the exact same pattern as the post upload
-    const response = await fetch(`${API_BASE_URL}/products/upload`, {
+    // Make the API request with the same pattern as createPost
+    const response = await fetch(`${API_BASE_URL}/upload/products/upload`, {
       method: 'POST',
       body: formData,
       headers: {

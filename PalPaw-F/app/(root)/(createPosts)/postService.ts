@@ -1,7 +1,6 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiBaseUrl } from '../../../utils/mediaUtils';
-import { usePosts } from '@/context';
 
 // Define interfaces
 export interface Media {

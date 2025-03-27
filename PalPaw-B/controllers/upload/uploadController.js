@@ -369,3 +369,151 @@ export const getProductById = async (req, res) => {
     });
   }
 };
+
+/**
+ * Create a product with media uploads
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const createProductWithMedia = async (req, res) => {
+  try {
+    console.log('createProductWithMedia called');
+    console.log('Request body:', req.body);
+    console.log('Request files:', req.files);
+
+    // Extract product information from the form fields
+    const { 
+      name, 
+      description, 
+      price, 
+      category, 
+      condition = 'New',
+      quantity = 1,
+      shippingOptions,
+      tags: tagsJson 
+    } = req.body;
+    
+    // Validate required fields
+    if (!name || !price) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Name and price are required' 
+      });
+    }
+    
+    // Parse tags if they exist
+    let tags = [];
+    if (tagsJson) {
+      try {
+        tags = typeof tagsJson === 'string' ? JSON.parse(tagsJson) : tagsJson;
+      } catch (e) {
+        console.error('Error parsing tags:', e);
+      }
+    }
+
+    // Parse shipping options if they exist
+    let parsedShippingOptions = [];
+    if (shippingOptions) {
+      try {
+        parsedShippingOptions = typeof shippingOptions === 'string' ? 
+          JSON.parse(shippingOptions) : shippingOptions;
+      } catch (e) {
+        console.error('Error parsing shipping options:', e);
+      }
+    }
+    
+    // Get user ID from authenticated request
+    const userId = req.user.id;
+    
+    // Process media files - exactly as done for posts
+    const mediaObjects = [];
+    
+    if (req.files && req.files.length > 0) {
+      // Create thumbnails directory if it doesn't exist
+      const thumbnailDir = path.join(process.cwd(), 'uploads', userId.toString(), 'thumbnails');
+      if (!fs.existsSync(thumbnailDir)) {
+        fs.mkdirSync(thumbnailDir, { recursive: true });
+      }
+      
+      // Process each file (includes thumbnail generation for videos)
+      for (const file of req.files) {
+        // Log each file for debugging
+        console.log('Processing file:', {
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size,
+          filename: file.filename
+        });
+        
+        // Get the file path relative to the server - now includes user ID in path
+        const fileUrl = `/uploads/${userId}/posts/${file.filename}`;
+        
+        // Determine media type based on mimetype
+        const mediaType = file.mimetype.startsWith('image/') ? 'image' : 
+                        file.mimetype.startsWith('video/') ? 'video' : 'image'; // Default to image if unknown
+        
+        // Create media object compatible with the model's JSONB structure
+        const mediaObject = {
+          url: fileUrl,
+          type: mediaType,
+          size: file.size,
+          filename: file.filename
+        };
+        
+        // Generate thumbnail for video files
+        if (mediaType === 'video') {
+          try {
+            // Full path to the uploaded video
+            const videoPath = path.join(process.cwd(), 'uploads', userId.toString(), 'posts', file.filename);
+            
+            // Generate unique thumbnail filename
+            const thumbnailFilename = `thumbnail_${uuidv4()}.jpg`;
+            const thumbnailPath = path.join(thumbnailDir, thumbnailFilename);
+            
+            // Generate thumbnail (at 2 seconds into the video)
+            await generateVideoThumbnail(videoPath, thumbnailPath, 0, '320x240');
+            
+            // Add thumbnail URL to the media object
+            mediaObject.thumbnail = `/uploads/${userId}/thumbnails/${thumbnailFilename}`;
+            console.log(`Created thumbnail at ${thumbnailPath} for video ${file.filename}`);
+          } catch (thumbnailError) {
+            console.error('Error generating thumbnail:', thumbnailError);
+            // Continue without thumbnail if generation fails
+          }
+        }
+        
+        mediaObjects.push(mediaObject);
+      }
+    }
+
+    console.log('Media objects to save:', mediaObjects);
+    
+    // Create product with media
+    const product = await Product.create({
+      userId,
+      name,
+      description: description || '',
+      price: parseFloat(price),
+      media: mediaObjects,
+      category: category || 'Other',
+      condition,
+      quantity: parseInt(quantity) || 1,
+      tags: tags,
+      shipping: { options: parsedShippingOptions }
+    });
+    
+    return res.status(201).json({
+      success: true,
+      message: 'Product created successfully',
+      productId: product.id,
+      product
+    });
+  } catch (error) {
+    console.error('Error creating product with media:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while creating product',
+      error: error.message
+    });
+  }
+};

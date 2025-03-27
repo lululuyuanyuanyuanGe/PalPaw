@@ -396,7 +396,7 @@ export const ProductsProvider: React.FC<ProductsProviderProps> = ({ children }) 
   const fetchUserProducts = async (userId: string): Promise<void> => {
     dispatch({ type: 'FETCH_PRODUCTS_REQUEST' });
     try {
-      const response = await api.get(`/pg/products/user/${userId}`);
+      const response = await api.get(`/upload/products/${userId}`);
       
       if (response?.data?.success && response.data.products) {
         const products = response.data.products;
@@ -428,7 +428,7 @@ export const ProductsProvider: React.FC<ProductsProviderProps> = ({ children }) 
       } else {
         // Fallback to general products and filter by userId
         try {
-          const fallbackResponse = await api.get('/pg/products');
+          const fallbackResponse = await api.get(`/upload/products/${userId}`);
           let userProducts = [];
           
           if (Array.isArray(fallbackResponse.data)) {
