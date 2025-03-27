@@ -92,8 +92,12 @@ export const RenderItem: React.FC<RenderItemProps> = ({
         }
       } as any);
     } else if (isProductItem(post)) {
-      console.log('Product item clicked');
-      // Future implementation for product detail navigation
+      router.push({
+        pathname: "/(root)/(products)",
+        params: {
+          id: post.id
+        }
+      } as any);
     }
   };
   

@@ -101,7 +101,7 @@ export const getProductById = async (req, res) => {
       attributes: [
         'id', 'userId', 'name', 'description', 'price', 'media', 
         'category', 'condition', 'status', 'tags', 'savedCount', 
-        'isDeleted', 'createdAt', 'updatedAt'
+        'isDeleted', 'createdAt', 'updatedAt', 'shipping'
       ],
       include: [
         {
