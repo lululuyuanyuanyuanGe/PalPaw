@@ -563,7 +563,9 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         });
         
         // Save to AsyncStorage for offline access
-        await AsyncStorage.setItem('likedPostIds', JSON.stringify(likedPostIds));
+        // await AsyncStorage.setItem('likedPostIds', JSON.stringify(likedPostIds));
+        // await AsyncStorage.removeItem('likedPostIds');
+
         
         dispatch({ 
           type: 'FETCH_LIKED_POSTS_SUCCESS', 

@@ -13,11 +13,11 @@ import {
   Switch,
   BackHandler
 } from 'react-native';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { Video } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { createProduct, getProductCategories } from './productService';
+import { createProduct } from './productService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   Media, 
@@ -32,6 +32,7 @@ import {
   SuccessModal,
   ErrorModal
 } from './modals';
+import { useProducts, useAuth } from '@/context';
 
 const PRODUCT_DRAFT_KEY = 'product_draft';
 
@@ -63,6 +64,8 @@ const VideoPreview: React.FC<{ uri: string }> = ({ uri }) => {
 
 const CreateProductScreen: React.FC = () => {
   const router = useRouter();
+  const { fetchUserProducts } = useProducts();
+  const { state: authState } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
@@ -350,6 +353,7 @@ const CreateProductScreen: React.FC = () => {
         // Show custom success modal instead of default alert
         setSuccessMessage(result.message || 'Product listed successfully!');
         setSuccessModalVisible(true);
+        fetchProducts();
       } else {
         showErrorModal('Error', result.message);
       }
@@ -393,6 +397,17 @@ const CreateProductScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
     );
+  };
+
+  // Function to fetch and update products
+  const fetchProducts = async () => {
+    try {
+      if (authState.isAuthenticated && authState.user) {
+        await fetchUserProducts(authState.user.id);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    }
   };
 
   return (

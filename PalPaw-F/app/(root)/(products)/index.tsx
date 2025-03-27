@@ -26,7 +26,7 @@ import Animated, {
 import { usePosts, useAuth, useProducts } from "@/context";
 import MediaCarousel from '../../components/MediaCarousel';
 import { formatImageUrl } from '@/utils/mediaUtils';
-import { getCategoryIcon, getCategoryColor, getCategoryBgColor } from './categoryIcons';
+import { getCategoryIcon, getCategoryColor, getCategoryBgColor } from './decorations';
 
 // Utility function to format the date/time
 const formatTimeAgo = (date: string | Date) => {

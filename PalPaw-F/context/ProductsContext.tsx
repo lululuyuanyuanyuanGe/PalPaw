@@ -499,7 +499,8 @@ export const ProductsProvider: React.FC<ProductsProviderProps> = ({ children }) 
         const standardizedProducts = savedProducts.map((product: any) => standardizeProductFormat(product));
         
         // Save to AsyncStorage for offline access
-        await AsyncStorage.setItem('savedProductIds', JSON.stringify(savedProductIds));
+        // await AsyncStorage.setItem('savedProductIds', JSON.stringify(savedProductIds));
+        await AsyncStorage.removeItem('savedProductIds');
         
         dispatch({ 
           type: 'FETCH_SAVED_PRODUCTS_SUCCESS', 
