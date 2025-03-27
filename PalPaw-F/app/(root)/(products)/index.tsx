@@ -632,16 +632,6 @@ const ProductDetail = () => {
         </LinearGradient>
       </Animated.View>
 
-      {/* Bottom Action Bar */}
-      <View className="bg-white border-t border-gray-100 px-4 py-3 absolute bottom-0 left-0 right-0 shadow-up">
-        <View className="flex-row items-center justify-center">
-          {/* Price */}
-          <View className="items-center">
-            <Text className="text-xs text-gray-500 font-rubik">Price</Text>
-            <Text className="text-xl font-rubik-semibold text-purple-700">{formatCurrency(displayProduct.price)}</Text>
-          </View>
-        </View>
-      </View>
     </>
   );
 };
