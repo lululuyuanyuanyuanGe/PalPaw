@@ -428,7 +428,7 @@ const ProfileScreen = () => {
               {/* Stats Row */}
               <View className="flex-row justify-around px-5 py-4 border-t border-b border-purple-100 mb-4 bg-white">
                 <View className="items-center">
-                  <Text className="text-purple-700 font-bold text-lg">{user.stats?.posts || state.userPosts.length || 0}</Text>
+                  <Text className="text-purple-700 font-bold text-lg">{state.userPosts.length || 0}</Text>
                   <Text className="text-gray-500 text-xs">Posts</Text>
                 </View>
                 <View className="items-center">

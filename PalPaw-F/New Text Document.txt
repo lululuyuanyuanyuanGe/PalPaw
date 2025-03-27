@@ -1,1 +1,1 @@
-emulator -avd P8pro -accel auto
+emulator -avd 8pro -accel auto

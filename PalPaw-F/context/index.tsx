@@ -2,9 +2,10 @@ import React, { ReactNode } from 'react';
 import { AuthProvider, useAuth } from './AuthContext';
 import { PostsProvider, usePosts } from './PostsContext';
 import { AppProvider, useApp } from './AppContext';
+import { UserProvider, useUser } from './UserContext';
 
 // Export all context hooks for easy import elsewhere
-export { useAuth, usePosts, useApp };
+export { useAuth, usePosts, useApp, useUser };
 
 // Create a combined provider component
 interface RootProviderProps {
@@ -20,9 +21,11 @@ export const RootProvider: React.FC<RootProviderProps> = ({ children }) => {
   return (
     <AppProvider>
       <AuthProvider>
-        <PostsProvider>
-          {children}
-        </PostsProvider>
+        <UserProvider>
+          <PostsProvider>
+            {children}
+          </PostsProvider>
+        </UserProvider>
       </AuthProvider>
     </AppProvider>
   );

@@ -16,10 +16,7 @@ export const login = async (req, res) => {
     // Check if user exists (using either username or email)
     const user = await User.findOne({
       where: {
-        [Op.or]: [
-          { username: login },
-          { email: login }
-        ]
+          email: login
       }
     });
     

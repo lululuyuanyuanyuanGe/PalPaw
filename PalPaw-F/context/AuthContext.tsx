@@ -171,7 +171,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     dispatch({ type: 'LOGIN_REQUEST' });
 
     try {
-      const response = await api.post('/auth/login', credentials);
+      const response = await api.post('pg/auth/login', credentials);
       
       if (response.data && response.data.token) {
         const { token, user } = response.data;

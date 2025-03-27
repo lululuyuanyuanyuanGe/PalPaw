@@ -5,13 +5,14 @@ import images from "@/constants/images";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { authService } from '@/utils/apiClient';
+import { useAuth } from '@/context/AuthContext';
 
 const LoginScreen: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { login, state: authState, clearError } = useAuth();
   
   // Modal states
   const [errorModalVisible, setErrorModalVisible] = useState(false);
@@ -43,6 +44,24 @@ const LoginScreen: React.FC = () => {
       StatusBar.setBarStyle('dark-content', true);
     };
   }, []);
+  
+  // Watch for auth state changes
+  useEffect(() => {
+    if (authState.isAuthenticated && !loading) {
+      // Show success message
+      showSuccess("Login successful");
+      
+      // Navigate after a short delay
+      setTimeout(() => {
+        router.replace("/(root)/(tabs)/(profile)");
+      }, 1000);
+    }
+
+    if (authState.error && !loading) {
+      showError("Login Failed", authState.error);
+      clearError();
+    }
+  }, [authState.isAuthenticated, authState.error, loading]);
   
   // Derive animated properties from the single animation value
   const translateY = animation.interpolate({
@@ -93,52 +112,15 @@ const LoginScreen: React.FC = () => {
     setLoading(true);
 
     try {
-      // Backend now expects { email: "user_email", password: "password" }
-      const loginData = {
-        login: email.trim(),
+      // Use AuthContext login function
+      await login({ 
         email: email.trim(),
-        password
-      };
 
-      console.log('Sending login data:', JSON.stringify(loginData));
-      
-      const response = await authService.login(loginData);
-      
-      console.log('Login successful:', JSON.stringify(response.data));
-
-      if (response.data && response.data.token) {
-        await AsyncStorage.setItem("authToken", response.data.token);
-        await AsyncStorage.setItem("userData", JSON.stringify(response.data.user));
-        
-        // Show success message
-        showSuccess("Login successful");
-        
-        // Navigate after a short delay
-        setTimeout(() => {
-          router.replace("/(root)/(tabs)/(profile)");
-        }, 1000);
-      }
+        password 
+      });
     } catch (error: any) {
-      console.error('Login error details:', JSON.stringify(error, null, 2));
-      
-      let errorMsg = "Failed to login. Please try again.";
-      
-      if (error.response) {
-        // Server responded with an error status code
-        const { status, data } = error.response;
-        console.log(`Server responded with status ${status}:`, data);
-        
-        if (status === 400 || status === 401) {
-          errorMsg = data?.message || "Invalid email or password";
-        } else if (status === 500) {
-          errorMsg = "Server error. Please try again later.";
-        }
-      } else if (error.request) {
-        // Request was made but no response was received
-        errorMsg = "Unable to connect to the server. Please check your internet connection.";
-      }
-      
-      showError("Login Failed", errorMsg);
+      // Most errors will be handled by the useEffect watching authState.error
+      console.error('Login error:', error);
     } finally {
       setLoading(false);
     }
