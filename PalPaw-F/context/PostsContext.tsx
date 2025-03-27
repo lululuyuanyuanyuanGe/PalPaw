@@ -682,7 +682,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     dispatch({ type: 'FETCH_POSTS_REQUEST' });
     try {
       // Get auth token
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await AsyncStorage.getItem('token');
       
       if (!token) {
         throw new Error('No auth token found');
@@ -995,7 +995,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     };
 
     initPostsData();
-  }, [fetchUserPosts, fetchLikedPosts, dispatch]);
+  }, []);
 
   return (
     <PostsContext.Provider

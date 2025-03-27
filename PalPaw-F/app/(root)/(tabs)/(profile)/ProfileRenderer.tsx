@@ -57,7 +57,7 @@ export const RenderItem: React.FC<RenderItemProps> = ({ item, activeTab, onPress
   const { width } = Dimensions.get('window');
   
   const router = useRouter();
-  const { setCurrentPost, isPostLiked, likePost, unlikePost } = usePosts();
+  const { setCurrentPost, isPostLiked } = usePosts();
   
   // Animation for the like button
   const likeScale = useSharedValue(1);

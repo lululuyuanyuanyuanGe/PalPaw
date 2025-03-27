@@ -13,10 +13,10 @@ import {
   Dimensions,
   BackHandler
 } from 'react-native';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { Video } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { Ionicons, MaterialCommunityIcons, Feather, AntDesign } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { createPost, Media as ServiceMedia, PostData, getPetTagSuggestions, PetTagCategory } from './postService';
 import AsyncStorage from '@react-native-async-storage/async-storage';

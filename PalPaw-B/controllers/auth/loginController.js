@@ -11,12 +11,12 @@ import { User } from '../../models/index.js';
  */
 export const login = async (req, res) => {
   try {
-    const { login, password } = req.body;
+    const { email, password } = req.body;
     
     // Check if user exists (using either username or email)
     const user = await User.findOne({
       where: {
-          email: login
+          email: email
       }
     });
     

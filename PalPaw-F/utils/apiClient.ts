@@ -17,7 +17,7 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config) => {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await AsyncStorage.getItem('token');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -155,7 +155,7 @@ export const authService = {
   register: (data: RegisterData) => fetchApi(endpoints.auth.register, 'POST', data),
   getProfile: () => api.get(endpoints.auth.profile),
   logout: async () => {
-    await AsyncStorage.removeItem('authToken');
+    await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('userData');
   },
 };

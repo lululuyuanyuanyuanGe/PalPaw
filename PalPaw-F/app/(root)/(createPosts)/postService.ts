@@ -105,7 +105,7 @@ export const createPost = async (data: PostData): Promise<{ success: boolean; me
     });
     
     // Get auth token from AsyncStorage
-    const token = await AsyncStorage.getItem('authToken');
+    const token = await AsyncStorage.getItem('token');
     
     // Make the API request
     console.log('Making POST request to:', `${API_BASE_URL}/upload/post`);
