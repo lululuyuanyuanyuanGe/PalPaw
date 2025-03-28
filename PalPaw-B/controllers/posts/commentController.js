@@ -3,7 +3,7 @@ import { Comment, User, Post } from '../../models/index.js';
 // Create a new comment
 export const createComment = async (req, res, next) => {
   try {
-    const { postId, content, parentId } = req.body;
+    const { postId, content } = req.body;
     const userId = req.user.id;
 
     // Validate post exists
@@ -12,23 +12,10 @@ export const createComment = async (req, res, next) => {
       throw new ApiError(404, 'Post not found');
     }
 
-    // If this is a reply, validate parent comment exists
-    if (parentId) {
-      const parentComment = await Comment.findByPk(parentId);
-      if (!parentComment) {
-        throw new ApiError(404, 'Parent comment not found');
-      }
-      // Make sure parent comment belongs to the same post
-      if (parentComment.postId !== postId) {
-        throw new ApiError(400, 'Parent comment does not belong to this post');
-      }
-    }
-
-    // Create comment
+    // Create comment (without parentId)
     const comment = await Comment.create({
       userId,
       postId,
-      parentId: parentId || null,
       content,
     });
 
@@ -37,19 +24,14 @@ export const createComment = async (req, res, next) => {
       attributes: ['id', 'username', 'avatar']
     });
 
-    // Format the response
+    // Format the response to match frontend's Comment interface
     const formattedComment = {
       id: comment.id,
+      author: user.username,
       content: comment.content,
-      createdAt: comment.createdAt,
-      likes: 0,
-      author: {
-        id: user.id,
-        username: user.username,
-        avatar: user.avatar
-      },
-      isReply: !!parentId,
-      parentId: parentId || null
+      timestamp: comment.createdAt,
+      avatarUri: user.avatar || `https://robohash.org/${userId}?set=set4`,
+      likes: 0
     };
 
     res.status(201).json({

@@ -23,6 +23,62 @@ const fetchUserData = async (userId: string) => {
   }
 };
 
+// Comment interface
+interface Comment {
+  id: string;
+  author: string; // Just a string, not an object
+  content: string;
+  timestamp: Date;
+  avatarUri: string;
+  likes: number;
+}
+
+// Helper function to fetch and format comments for a post
+const fetchAndFormatComments = async (postId: string): Promise<Comment[]> => {
+  try {
+    console.log(`Fetching comments for post ${postId}`);
+    const commentsResponse = await api.get(`/comments/post/${postId}`);
+    
+    if (commentsResponse.data && commentsResponse.data.success) {
+      const fetchedComments = commentsResponse.data.comments || [];
+      const formattedComments: Comment[] = [];
+      
+      // Process each comment to match our Comment interface
+      fetchedComments.forEach((comment: any) => {
+        formattedComments.push({
+          id: comment.id,
+          author: comment.author || 'Unknown', // Backend returns author as string
+          content: comment.content,
+          timestamp: new Date(comment.timestamp || comment.createdAt || Date.now()),
+          avatarUri: comment.avatarUri || `https://robohash.org/${comment.author}?set=set4`,
+          likes: comment.likes || 0
+        });
+        
+        // Then add all replies as separate comments in the flat array
+        if (Array.isArray(comment.replies) && comment.replies.length > 0) {
+          comment.replies.forEach((reply: any) => {
+            formattedComments.push({
+              id: reply.id,
+              author: reply.author || 'Unknown', // Backend returns author as string
+              content: reply.content,
+              timestamp: new Date(reply.timestamp || reply.createdAt || Date.now()),
+              avatarUri: reply.avatarUri || `https://robohash.org/${reply.author}?set=set4`,
+              likes: reply.likes || 0
+            });
+          });
+        }
+      });
+      
+      console.log(`Added ${formattedComments.length} comments to post ${postId}`);
+      return formattedComments;
+    }
+    return [];
+  } catch (error) {
+    console.warn(`Failed to fetch comments for post ${postId}:`, error);
+    return [];
+  }
+};
+
 // Helper function to standardize post format
 const standardizePostFormat = (post: any): PostItem => {
   console.log("Standardizing post format for id:", post.id);
@@ -72,10 +128,10 @@ const standardizePostFormat = (post: any): PostItem => {
   const comments = Array.isArray(post.comments) 
     ? post.comments.map((comment: any) => ({
         id: comment.id,
-        author: comment.author?.username || 'Unknown',
+        author: comment.author || 'Unknown', // Backend returns author as string
         content: comment.content,
-        timestamp: comment.createdAt || new Date(),
-        avatarUri: comment.author?.avatar || 'https://robohash.org/unknown?set=set4',
+        timestamp: new Date(comment.timestamp || comment.createdAt || Date.now()),
+        avatarUri: comment.avatarUri || `https://robohash.org/${comment.author}?set=set4`,
         likes: comment.likes || 0
       })) 
     : [];
@@ -107,6 +163,50 @@ const standardizePostFormat = (post: any): PostItem => {
   };
 };
 
+// Helper function to process post data from API or fallback
+const processPost = async (post: any, postId: string): Promise<PostItem> => {
+  // Ensure post has comments
+  if (!post.comments || post.comments.length === 0) {
+    try {
+      post.comments = await fetchAndFormatComments(postId);
+    } catch (commentsError) {
+      console.warn(`Failed to fetch comments for post ${postId}:`, commentsError);
+      post.comments = [];
+    }
+  } else {
+    // Format existing comments to match our interface
+    post.comments = post.comments.map((comment: any) => {
+      // Handle different author formats
+      let authorName = 'Unknown';
+      let authorAvatar = null;
+      
+      if (comment.author) {
+        if (typeof comment.author === 'object') {
+          authorName = comment.author.username || 'Unknown';
+          authorAvatar = comment.author.avatar;
+        } else {
+          authorName = comment.author;
+        }
+      }
+      
+      // Use explicit avatarUri if available, or author's avatar, or generate from author name
+      const avatarUri = comment.avatarUri || authorAvatar || `https://robohash.org/${authorName}?set=set4`;
+      
+      return {
+        id: comment.id,
+        author: comment.author, // Keep original author format for the Comment component to handle
+        content: comment.content,
+        timestamp: comment.timestamp || comment.createdAt || new Date(),
+        avatarUri: avatarUri,
+        likes: comment.likes || 0
+      };
+    });
+  }
+  
+  // Standardize and return the post
+  return standardizePostFormat(post);
+};
+
 // Define the context state interface
 interface PostsState {
   posts: PostItem[];
@@ -136,16 +236,6 @@ export type PostsAction =
   | { type: 'INCREMENT_POST_VIEWS'; payload: { postId: string } }
   | { type: 'ADD_COMMENT'; payload: { postId: string; comment: Comment } }
   | { type: 'CLEAR_ERRORS' };
-
-// Comment interface
-interface Comment {
-  id: string;
-  author: string;
-  content: string;
-  timestamp: Date;
-  avatarUri: string;
-  likes: number;
-}
 
 // Define initial state
 const initialState: PostsState = {
@@ -382,7 +472,7 @@ interface PostsContextType {
   unlikePost: (postId: string) => Promise<boolean>;
   isPostLiked: (postId: string) => boolean;
   incrementPostViews: (postId: string) => Promise<void>;
-  addComment: (postId: string, comment: Comment) => void;
+  addComment: (postId: string, comment: Comment) => Promise<boolean>;
 }
 
 // Create the context with default values
@@ -441,7 +531,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
           console.log("Sample post tags:", JSON.stringify(posts[0].tags));
         }
         
-        // Enhance posts with author data if missing
+        // Enhance posts with author data and comments if missing
         const enhancedPosts = await Promise.all(posts.map(async (post: any) => {
           // Check for missing fields and add warnings
           if (!post.media) {
@@ -463,6 +553,18 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
               console.log(`Added author data to post ${post.id}:`, JSON.stringify(userData));
             } else {
               console.warn(`Failed to fetch author data for post ${post.id}`);
+            }
+          }
+          
+          // Fetch comments if not included or empty
+          if (!post.comments || post.comments.length === 0) {
+            try {
+              // Use helper function to fetch and format comments
+              post.comments = await fetchAndFormatComments(post.id);
+            } catch (commentsError) {
+              console.warn(`Failed to fetch comments for post ${post.id}:`, commentsError);
+              // Initialize with empty array if fetch fails
+              post.comments = [];
             }
           }
           
@@ -493,7 +595,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
             console.log("Sample fallback post tags:", JSON.stringify(userPosts[0].tags));
           }
           
-          // Enhance fallback posts with author data if missing
+          // Enhance fallback posts with author data and comments if missing
           const enhancedFallbackPosts = await Promise.all(userPosts.map(async (post: any) => {
             // If post is missing author data, try to fetch it
             if (!post.author && !post.authorData && (post.userId || post.user_id)) {
@@ -506,6 +608,18 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
                 console.log(`Added author data to fallback post ${post.id}:`, JSON.stringify(userData));
               } else {
                 console.warn(`Failed to fetch author data for fallback post ${post.id}`);
+              }
+            }
+            
+            // Fetch comments if not included or empty
+            if (!post.comments || post.comments.length === 0) {
+              try {
+                // Use helper function to fetch and format comments
+                post.comments = await fetchAndFormatComments(post.id);
+              } catch (commentsError) {
+                console.warn(`Failed to fetch comments for fallback post ${post.id}:`, commentsError);
+                // Initialize with empty array if fetch fails
+                post.comments = [];
               }
             }
             
@@ -549,8 +663,8 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         const { likedPosts, likedPostIds } = response.data;
         console.log(`PostsContext: Received ${likedPosts.length} liked posts`);
         
-        // Standardize post format for each post
-        const standardizedPosts = likedPosts.map((post: any) => {
+        // Enhance posts with comments if missing
+        const enhancedPosts = await Promise.all(likedPosts.map(async (post: any) => {
           if (!post.media) {
             console.warn(`Liked post ${post.id} is missing media field`);
           }
@@ -559,8 +673,23 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
             console.warn(`Liked post ${post.id} is missing tags field`);
           }
           
-          return standardizePostFormat(post);
-        });
+          // Fetch comments if not included or empty
+          if (!post.comments || post.comments.length === 0) {
+            try {
+              // Use helper function to fetch and format comments
+              post.comments = await fetchAndFormatComments(post.id);
+            } catch (commentsError) {
+              console.warn(`Failed to fetch comments for liked post ${post.id}:`, commentsError);
+              // Initialize with empty array if fetch fails
+              post.comments = [];
+            }
+          }
+          
+          return post;
+        }));
+        
+        // Standardize post format for each post
+        const standardizedPosts = enhancedPosts.map((post: any) => standardizePostFormat(post));
         
         // Save to AsyncStorage for offline access
         // await AsyncStorage.setItem('likedPostIds', JSON.stringify(likedPostIds));
@@ -592,38 +721,24 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     try {
       console.log(`Fetching post with ID: ${postId}`);
       
-      // First, check if the post exists in our current state
-      const existingPost = state.posts.find(post => post.id === postId) || 
-                          state.userPosts.find(post => post.id === postId) ||
-                          state.likedPosts.find(post => post.id === postId);
-      
-      if (existingPost) {
-        console.log('Post found in existing state');
-        
-        // Standardize the post format before setting as current post
-        const formattedPost = standardizePostFormat(existingPost);
-        dispatch({ type: 'SET_CURRENT_POST', payload: formattedPost });
-        
-        // Increment the view count when viewing an existing post
-        incrementPostViews(postId);
-        return;
-      }
-      
-      // If not in our state, try to fetch from API
+      // Make API call to fetch the post
       try {
         const response = await api.get(`/pg/posts/${postId}`);
         
-        if (response.data && response.data.post) {
+        if (response.data && response.data.success) {
           console.log('Post fetched from API');
           
-          // Standardize the post format
-          const formattedPost = standardizePostFormat(response.data.post);
+          // Process the post data with our helper function
+          const formattedPost = await processPost(response.data.post, postId);
+          
+          // Update state with the post data
           dispatch({ type: 'SET_CURRENT_POST', payload: formattedPost });
           
-          // The view is automatically incremented by the API when we fetch the post
-        } else {
-          throw new Error('Post not found');
+          // Increment view count
+          incrementPostViews(postId);
+          return;
         }
+        throw new Error('Post not found or response format incorrect');
       } catch (apiError) {
         console.error('Error fetching post from API:', apiError);
         
@@ -634,8 +749,10 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         if (fallbackPost) {
           console.log('Post found in fallback data');
           
-          // Standardize the post format
-          const formattedPost = standardizePostFormat(fallbackPost);
+          // Process the fallback post data with our helper function
+          const formattedPost = await processPost(fallbackPost, postId);
+          
+          // Update state with the post data
           dispatch({ type: 'SET_CURRENT_POST', payload: formattedPost });
           
           // Increment view count for fallback posts as well
@@ -647,6 +764,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
       }
     } catch (error) {
       console.error('Error in fetchPostById:', error);
+      throw error;
     }
   };
 
@@ -762,12 +880,48 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   };
 
   // Function to add a comment
-  const addComment = (postId: string, comment: Comment) => {
-    dispatch({
-      type: 'ADD_COMMENT',
-      payload: { postId, comment },
-    });
-    // In a real app, you would make an API call to add the comment
+  const addComment = async (postId: string, comment: Comment): Promise<boolean> => {
+    try {
+      // Make API call to add the comment
+      const response = await api.post('/comments', {
+        postId,
+        content: comment.content,
+      });
+      
+      console.log('Server response from adding comment:', JSON.stringify(response.data));
+      
+      if (response.data && response.data.success) {
+        // Backend returns comment in the format that matches our interface
+        const serverComment = response.data.comment;
+        console.log('Server comment data:', JSON.stringify(serverComment));
+        
+        // Create comment directly from the server response which already matches our format
+        const transformedComment: Comment = {
+          id: serverComment.id,
+          author: serverComment.author,
+          content: serverComment.content,
+          timestamp: new Date(serverComment.timestamp || serverComment.createdAt || Date.now()),
+          avatarUri: serverComment.avatarUri, // Use the avatarUri directly from the server
+          likes: serverComment.likes || 0
+        };
+        
+        console.log('Transformed comment:', JSON.stringify(transformedComment));
+        
+        dispatch({
+          type: 'ADD_COMMENT',
+          payload: { 
+            postId, 
+            comment: transformedComment
+          },
+        });
+        return true;
+      } else {
+        throw new Error('Failed to add comment');
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      return false;
+    }
   };
 
   // Function to increment post views with API call

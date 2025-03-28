@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -10,6 +10,7 @@ import {
   ActivityIndicator 
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { 
@@ -19,8 +20,10 @@ import Animated, {
   interpolate,
   Extrapolate
 } from 'react-native-reanimated';
-import { usePosts } from '../../../context';
-import MediaCarousel from '../../components/MediaCarousel';
+import { usePosts } from '@/context';
+import MediaCarousel from '@/app/components/MediaCarousel';
+import { useAuth } from '@/context';
+import { FontAwesome5 } from '@expo/vector-icons';
 
 // Utility function to format the date/time
 const formatTimeAgo = (date: string | Date) => {
@@ -55,7 +58,7 @@ const formatTimeAgo = (date: string | Date) => {
 
 // Comment component with proper timestamp
 interface CommentProps {
-  author: string;
+  author: string | { id: string; username: string; avatar: string };
   content: string;
   timestamp: string | Date;
   avatarUri: string;
@@ -63,29 +66,27 @@ interface CommentProps {
 }
 
 const Comment: React.FC<CommentProps> = ({ author, content, timestamp, avatarUri, likes = 0 }) => {
+  // Extract author name based on whether it's a string or object
+  const authorName = typeof author === 'string' ? author : author?.username || 'Unknown';
+  
+  // Use author's avatar if author is an object and has avatar property
+  const displayAvatarUri = typeof author === 'object' && author?.avatar 
+    ? author.avatar 
+    : avatarUri || `https://robohash.org/${authorName}?set=set4`;
+  
   return (
     <View className="bg-white p-4 rounded-xl mb-3 shadow-sm border border-gray-50">
       <View className="flex-row items-center mb-3">
         <Image
-          source={{ uri: avatarUri }}
+          source={{ uri: displayAvatarUri }}
           className="w-9 h-9 rounded-full border-2 border-purple-100"
         />
         <View className="ml-3 flex-1">
-          <Text className="font-rubik-semibold text-gray-800">{author}</Text>
+          <Text className="font-rubik-semibold text-gray-800">{authorName}</Text>
           <Text className="font-rubik text-xs text-gray-500">{formatTimeAgo(timestamp)}</Text>
         </View>
       </View>
       <Text className="font-rubik text-gray-700 leading-5 mb-2">{content}</Text>
-      <View className="flex-row items-center mt-1">
-        <TouchableOpacity className="flex-row items-center mr-4">
-          <Ionicons name="heart-outline" size={16} color="#9CA3AF" />
-          <Text className="ml-1 text-xs text-gray-500 font-rubik">{likes}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity className="flex-row items-center">
-          <Ionicons name="chatbubble-outline" size={14} color="#9CA3AF" />
-          <Text className="ml-1 text-xs text-gray-500 font-rubik">Reply</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 };
@@ -109,16 +110,26 @@ const PostDetail = () => {
     };
   });
   
-  // Fetch post if not already in context
-  useEffect(() => {
-    const postId = params.id as string;
-    
-    // If we don't have the current post or it's a different post than the one we want to view
-    if (!currentPost || currentPost.id !== postId) {
-      // Fetch the post by ID
-      fetchPostById(postId);
-    }
-  }, [params.id, currentPost, fetchPostById]);
+  // Get auth context
+  const { state: authState } = useAuth();
+  
+  // Use useFocusEffect to ensure the post is fetched every time the screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      const postId = params.id as string;
+      if (postId) {
+        console.log('Post screen focused - fetching post with ID:', postId);
+        // Only fetch if needed
+        if (!currentPost || currentPost.id !== postId) {
+          fetchPostById(postId);
+        }
+      }
+      
+      return () => {
+        // Optional cleanup if needed
+      };
+    }, [params.id, currentPost, fetchPostById])
+  );
   
   // If post is not loaded yet, show loading
   if (!currentPost) {
@@ -154,22 +165,37 @@ const PostDetail = () => {
   });
   
   // Handle adding a new comment
-  const handleAddComment = () => {
+  const handleAddComment = async () => {
+    if (!authState.isAuthenticated) {
+      // Redirect to login if not authenticated
+      router.push('/(root)/(auth)/login');
+      return;
+    }
+    
     if (newComment.trim()) {
+      // Create a temporary comment object for optimistic UI
       const comment = {
-        id: `comment-${Date.now()}`, // Use timestamp for unique ID
-        author: 'You',
+        id: `temp-${Date.now()}`, // Temporary ID that will be replaced by server response
+        author: authState.user?.username || 'You',
         content: newComment.trim(),
         timestamp: new Date(),
-        avatarUri: 'https://robohash.org/myavatar?set=set4',
+        avatarUri: authState.user?.avatar || '',
         likes: 0
       };
       
-      // Update global state through context
-      addComment(post.id, comment);
-      
-      // Clear input
+      // Clear input right away for better UX
       setNewComment('');
+      
+      // Update global state through context
+      const success = await addComment(post.id, comment);
+      
+      if (!success) {
+        // Handle failure - possibly show an error toast/notification
+        console.error('Failed to add comment');
+        
+        // Could restore the comment text if desired
+        // setNewComment(comment.content);
+      }
     }
   };
 
@@ -359,10 +385,22 @@ const PostDetail = () => {
       {/* Comment Input with Enhanced UI */}
       <View className="bg-white border-t border-gray-100 px-4 py-3 absolute bottom-0 left-0 right-0 shadow-up">
         <View className="flex-row items-center">
-          <Image
-            source={{ uri: 'https://robohash.org/myavatar?set=set4' }}
-            className="w-8 h-8 rounded-full mr-3"
-          />
+          {authState.isAuthenticated && authState.user && authState.user.avatar ? (
+            <Image
+              source={{ uri: authState.user.avatar }}
+              className="w-8 h-8 rounded-full mr-3"
+            />
+          ) : (
+            <View className="w-8 h-8 bg-purple-100 rounded-full mr-3 items-center justify-center">
+              {authState.isAuthenticated && authState.user ? (
+                <Text className="text-purple-700 font-bold text-xs">
+                  {authState.user.username.substring(0, 1).toUpperCase()}
+                </Text>
+              ) : (
+                <FontAwesome5 name="paw" size={12} color="#9333EA" />
+              )}
+            </View>
+          )}
           <View className="flex-1 flex-row items-center bg-gray-100 rounded-full px-4 py-2">
             <TextInput
               placeholder="Add a comment..."
