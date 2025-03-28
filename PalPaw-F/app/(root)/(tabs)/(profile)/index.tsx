@@ -117,7 +117,7 @@ const ProfileScreen = () => {
     setRefreshing(true);
     
     Promise.all([
-      fetchUserProfile(),
+      fetchUserProfile(authState.user.id),
       fetchUserPosts(authState.user.id),
       fetchLikedPosts(authState.user.id),
       fetchUserProducts(authState.user.id)

@@ -14,7 +14,7 @@ import likesRoutes from './routes/likes.js'; // Likes routes
 import postsRoutes from './routes/posts.js'; // Posts routes
 import productsRoutes from './routes/products.js'; // Products
 import commentRoutes from './routes/commentRoutes.js'; // Comments routes
-
+import userRoutes from './routes/user.js'; // User routes
 // Import WebSocket server
 import { initializeWebSocket } from './websocket/websocket.js';
 import http from 'http';
@@ -85,6 +85,9 @@ app.use("/api/pg/products", productsRoutes); // Products routes
 console.log('- /api/pg/products');
 app.use("/api/comments", commentRoutes); // Comments routes
 console.log('- /api/comments');
+app.use("/api/users", userRoutes); // User routes
+console.log('- /api/users');
+
 
 // Home route
 app.get('/', (req, res) => {

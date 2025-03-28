@@ -66,7 +66,7 @@ export const RenderItem: React.FC<RenderItemProps> = ({
   const { width } = Dimensions.get('window');
   
   const router = useRouter();
-  const { setCurrentPost, isPostLiked } = usePosts();
+  const { fetchPostById, isPostLiked } = usePosts();
   const { isProductSaved } = useProducts();
   
   // Animation for the like button
@@ -81,7 +81,7 @@ export const RenderItem: React.FC<RenderItemProps> = ({
   const navigateToPostDetail = (post: BaseItem) => {
     if (isPostItem(post)) {
       // Set current post in context first
-      setCurrentPost(post);
+      fetchPostById(post.id);
       
       // Navigate to posts detail screen with just the post ID
       // Context will provide all the other data

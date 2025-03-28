@@ -2,7 +2,6 @@ import React, { createContext, useReducer, useContext, ReactNode, useEffect } fr
 import api from '../utils/apiClient';
 import { useAuth } from './AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../constants/api';
 
 // Define user profile interface based on User model fields
 interface UserProfile {
@@ -240,7 +239,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
   // Fetch the current user's profile when authenticated
   useEffect(() => {
     if (authState.isAuthenticated && authState.user) {
-      fetchUserProfile();
+      fetchUserProfile(authState.user.id);
     }
   }, [authState.isAuthenticated, authState.user]);
 
@@ -249,18 +248,24 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     dispatch({ type: 'FETCH_PROFILE_REQUEST' });
 
     try {
-      const endpoint = userId ? `/users/${userId}` : `/users/${authState.user?.id}`;
+      // Use 'me' as the ID when fetching the current user's profile
+      const endpoint = `/users/${userId || 'me'}`;
+      
+      console.log(`Fetching user profile from endpoint: ${endpoint}`);
       const response = await api.get(endpoint);
       
       if (response.data && response.data.success) {
+        console.log('Profile fetch successful:', response.data.user);
         dispatch({
           type: 'FETCH_PROFILE_SUCCESS',
           payload: response.data.user,
         });
+        return response.data.user;
       } else {
         throw new Error('Failed to fetch user profile');
       }
     } catch (error) {
+      console.error('Error fetching user profile:', error);
       let errorMessage = 'Failed to fetch user profile';
       
       if (error instanceof Error) {
@@ -271,6 +276,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         type: 'FETCH_PROFILE_FAILURE',
         payload: errorMessage,
       });
+      throw error;
     }
   };
 
@@ -287,17 +293,20 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     dispatch({ type: 'UPDATE_PROFILE_REQUEST' });
 
     try {
-      const response = await api.put(`/users/${authState.user?.id}`, data);
+      // Use the standard profile update endpoint
+      const response = await api.put('/users/profile/update', data);
       
       if (response.data && response.data.success) {
         dispatch({
           type: 'UPDATE_PROFILE_SUCCESS',
           payload: response.data.user,
         });
+        return response.data.user;
       } else {
         throw new Error('Failed to update profile');
       }
     } catch (error) {
+      console.error('Error updating profile:', error);
       let errorMessage = 'Failed to update profile';
       
       if (error instanceof Error) {
@@ -308,6 +317,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         type: 'UPDATE_PROFILE_FAILURE',
         payload: errorMessage,
       });
+      throw error;
     }
   };
 
@@ -620,7 +630,14 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
   };
 
   const getUserProfile = async () => {
-    await fetchUserProfile();
+    try {
+      dispatch({ type: 'FETCH_PROFILE_REQUEST' });
+      const userData = await fetchUserProfile(authState.user?.id);
+      return userData;
+    } catch (error) {
+      console.error('Error in getUserProfile:', error);
+      return null;
+    }
   };
 
   const updateUserProfile = async (formData: FormData) => {
@@ -632,22 +649,25 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         throw new Error('No authentication token found');
       }
       
-      const response = await fetch(`${API_URL}/api/users/profile/update`, {
-        method: 'PUT',
+      console.log('Updating user profile with form data:', Object.fromEntries(formData.entries()));
+      
+      // Use the API client instead of fetch for consistency
+      const response = await api.put('/users/profile/update', formData, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'multipart/form-data',
         },
-        body: formData
       });
       
-      const data = await response.json();
+      console.log('Profile update response:', response.data);
       
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to update profile');
+      if (response.data?.success) {
+        dispatch({ type: 'UPDATE_PROFILE_SUCCESS', payload: response.data.user });
+        // Refresh the profile after update
+        await fetchUserProfile(authState.user?.id);
+        return response.data.user;
+      } else {
+        throw new Error(response.data?.message || 'Failed to update profile');
       }
-      
-      dispatch({ type: 'UPDATE_PROFILE_SUCCESS', payload: data.user });
-      
     } catch (error: any) {
       console.error('Error updating user profile:', error);
       dispatch({ type: 'UPDATE_PROFILE_FAILURE', payload: error.message });

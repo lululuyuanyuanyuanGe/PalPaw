@@ -96,7 +96,6 @@ const PostDetail = () => {
   const params = useLocalSearchParams();
   const [newComment, setNewComment] = useState('');
   const scrollY = useSharedValue(0);
-  const { width } = Dimensions.get('window');
   
   // Get posts context
   const { state: postsState, likePost, unlikePost, addComment, fetchPostById, isPostLiked } = usePosts();
