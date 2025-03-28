@@ -7,6 +7,7 @@ import Product from '../../models/Product.js';
 import User from '../../models/User.js';
 import { generateVideoThumbnail } from '../../utils/videoThumbnail.js';
 import { promisify } from 'util';
+import Comment from '../../models/Comment.js';
 
 // Configure multer storage
 const storage = multer.diskStorage({
@@ -243,15 +244,49 @@ export const getUserPosts = async (req, res) => {
     // Get user ID from params or from authenticated user
     const userId = req.params.userId || req.user.id;
 
-    // Fetch posts for the user
+    // Fetch posts for the user with author and comments included
     const posts = await Post.findAll({
       where: { userId },
+      include: [
+        {
+          model: User,
+          as: 'author',
+          attributes: ['id', 'username', 'avatar']
+        },
+        {
+          model: Comment,
+          as: 'comments',
+          include: [
+            {
+              model: User,
+              as: 'author',
+              attributes: ['id', 'username', 'avatar']
+            }
+          ]
+        }
+      ],
       order: [['createdAt', 'DESC']]
+    });
+
+    // Transform posts to ensure proper data structure
+    const formattedPosts = posts.map(post => {
+      const postJSON = post.toJSON();
+      
+      // Ensure author data is in the expected format
+      if (postJSON.author) {
+        postJSON.authorData = {
+          id: postJSON.author.id,
+          username: postJSON.author.username || 'User',
+          avatar: postJSON.author.avatar || `https://robohash.org/${postJSON.author.id}?set=set4`
+        };
+      }
+      
+      return postJSON;
     });
 
     return res.status(200).json({
       success: true,
-      posts
+      posts: formattedPosts
     });
   } catch (error) {
     console.error('Error fetching user posts:', error);
@@ -312,15 +347,38 @@ export const getUserProducts = async (req, res) => {
     // Get user ID from params or from authenticated user
     const userId = req.params.userId || req.user.id;
 
-    // Fetch products for the user
+    // Fetch products for the user with user data included
     const products = await Product.findAll({
       where: { userId },
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      include: [
+        {
+          model: User,
+          as: 'author',
+          attributes: ['id', 'username', 'avatar']
+        }
+      ]
+    });
+
+    // Transform products to include sellerData in a consistent format
+    const transformedProducts = products.map(product => {
+      const productJson = product.toJSON();
+      
+      // Add sellerData object for consistent format with posts
+      if (productJson.author) {
+        productJson.sellerData = {
+          id: productJson.author.id,
+          username: productJson.author.username,
+          avatar: productJson.author.avatar
+        };
+      }
+      
+      return productJson;
     });
 
     return res.status(200).json({
       success: true,
-      products
+      products: transformedProducts
     });
   } catch (error) {
     console.error('Error fetching user products:', error);

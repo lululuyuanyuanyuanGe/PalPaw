@@ -97,9 +97,17 @@ const PostDetail = () => {
   const [newComment, setNewComment] = useState('');
   const scrollY = useSharedValue(0);
   
-  // Get posts context
+  // Get posts context with all post arrays
   const { state: postsState, likePost, unlikePost, addComment, fetchPostById, isPostLiked } = usePosts();
-  const { currentPost } = postsState;
+  const { currentPost, userPosts, posts, likedPosts } = postsState;
+  
+  // Find post in all collections in priority order
+  const postId = params.id as string;
+  const post = currentPost?.id === postId 
+    ? currentPost 
+    : userPosts.find(p => p.id === postId) 
+      || posts.find(p => p.id === postId)
+      || likedPosts.find(p => p.id === postId);
   
   // Animation for the like button
   const likeScale = useSharedValue(1);
@@ -115,11 +123,10 @@ const PostDetail = () => {
   // Use useFocusEffect to ensure the post is fetched every time the screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      const postId = params.id as string;
       if (postId) {
         console.log('Post screen focused - fetching post with ID:', postId);
-        // Only fetch if needed
-        if (!currentPost || currentPost.id !== postId) {
+        // If we don't have the post in any of our collections, fetch it
+        if (!post) {
           fetchPostById(postId);
         }
       }
@@ -127,11 +134,11 @@ const PostDetail = () => {
       return () => {
         // Optional cleanup if needed
       };
-    }, [params.id, currentPost, fetchPostById])
+    }, [postId, post, fetchPostById])
   );
   
   // If post is not loaded yet, show loading
-  if (!currentPost) {
+  if (!post) {
     return (
       <View className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color="#9333EA" />
@@ -141,10 +148,7 @@ const PostDetail = () => {
   }
 
   // Extract tags from post
-  const tags = currentPost.tags || [];
-  
-  // Now we can use currentPost directly from context
-  const post = currentPost;
+  const tags = post.tags || [];
 
   // Animated header style based on scroll position
   const headerAnimatedStyle = useAnimatedStyle(() => {
@@ -174,7 +178,7 @@ const PostDetail = () => {
     if (newComment.trim()) {
       // Create a temporary comment object for optimistic UI
       const comment = {
-        id: `temp-${Date.now()}`, // Temporary ID that will be replaced by server response
+        id: `temp-${Date.now()}`,
         author: authState.user?.username || 'You',
         content: newComment.trim(),
         timestamp: new Date(),
@@ -186,7 +190,7 @@ const PostDetail = () => {
       setNewComment('');
       
       // Update global state through context
-      const success = await addComment(post.id, comment);
+      const success = await addComment(post.id, comment as any);
       
       if (!success) {
         // Handle failure - possibly show an error toast/notification
@@ -198,7 +202,7 @@ const PostDetail = () => {
     }
   };
 
-  // Handle interactions
+  // Handle like toggle
   const handleLikeToggle = async () => {
     // Animate like button
     likeScale.value = withSpring(1.3, { damping: 10 }, () => {
@@ -262,10 +266,13 @@ const PostDetail = () => {
         {/* User Info with Enhanced Design */}
         <View className="p-4 bg-white shadow-sm">
           <View className="flex-row items-center">
-            <Image
-              source={{ uri: post.authorData?.avatar || 'https://robohash.org/user123?set=set4' }}
-              className="w-12 h-12 rounded-full border-2 border-purple-100"
-            />
+            <View className="w-12 h-12 rounded-full border-2 border-purple-100 overflow-hidden">
+              <Image
+                source={{ uri: post.authorData?.avatar || 'https://robohash.org/user123?set=set4' }}
+                className="w-full h-full"
+                resizeMode="cover"
+              />
+            </View>
             <View className="ml-3 flex-1">
               <Text className="font-rubik-semibold text-gray-800">{post.authorData?.username || 'Unknown User'}</Text>
               <Text className="text-xs text-gray-500 font-rubik">{formatTimeAgo(post.createdAt || new Date())}</Text>

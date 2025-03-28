@@ -151,7 +151,7 @@ const ProductDetail = () => {
   const scrollY = useSharedValue(0);
   const footerOpacity = useSharedValue(0);
   const { width } = Dimensions.get('window');
-  const [loading, setLoading] = useState(false); // Changed to false to skip loading state
+  const [loading, setLoading] = useState(true);
   const [isAtBottom, setIsAtBottom] = useState(false);
   
   // Get context values
@@ -164,41 +164,35 @@ const ProductDetail = () => {
     unsaveProduct
   } = useProducts();
   
-  // Get the current product from context
-  const product = productsState.currentProduct;
-  
-  // Mock product data for UI preview - will only be used if product is not loaded
-  const mockProduct = {
-    id: '123',
-    userId: 'user456',
-    name: 'Premium Pet Carrier - Perfect for Small Dogs',
-    description: 'A comfortable and stylish pet carrier suitable for small dogs and cats. Features breathable mesh windows, padded interior, and secure closures. Ideal for travel or vet visits.',
-    price: 89.99,
-    media: [
-      { url: 'https://example.com/pet-carrier-1.jpg', type: 'image' },
-      { url: 'https://example.com/pet-carrier-2.jpg', type: 'image' },
-    ],
-    imageUrl: 'https://example.com/pet-carrier-main.jpg',
-    status: 'active',
-    createdAt: new Date().toISOString(),
-    views: 42,
-    category: 'Carriers & Travel',
-    condition: 'New',
-    quantity: 3,
-    sellerData: {
-      username: 'PetLover2023',
-      avatar: 'https://robohash.org/user456?set=set4'
-    },
-    shipping: {
-      options: ['Pickup', 'Delivery']
+  // Using memoized product to avoid unnecessary re-renders
+  const product = React.useMemo(() => {
+    // First check if product already exists in any collection
+    if (productId) {
+      // Check currentProduct first (highest priority)
+      if (productsState.currentProduct && productsState.currentProduct.id === productId) {
+        return productsState.currentProduct;
+      }
+      
+      // Then check userProducts
+      const userProduct = productsState.userProducts.find(p => p.id === productId);
+      if (userProduct) return userProduct;
+      
+      // Then check general products
+      const regularProduct = productsState.products.find(p => p.id === productId);
+      if (regularProduct) return regularProduct;
+      
+      // Finally check saved products
+      const savedProduct = productsState.savedProducts.find(p => p.id === productId);
+      if (savedProduct) return savedProduct;
     }
-  };
+    
+    return null;
+  }, [productId, productsState.currentProduct, productsState.userProducts, productsState.products, productsState.savedProducts]);
   
-  // Load the product data when the component mounts
+  // Load product data if not already in state
   useEffect(() => {
     const loadProduct = async () => {
-      if (productId) {
-        setLoading(true);
+      if (productId && !product) {
         try {
           await fetchProductById(productId);
         } catch (error) {
@@ -207,14 +201,13 @@ const ProductDetail = () => {
         } finally {
           setLoading(false);
         }
+      } else {
+        setLoading(false);
       }
     };
     
     loadProduct();
-  }, [productId]);
-
-  // Use either loaded product from backend or fallback to mock data
-  const displayProduct = product || mockProduct;
+  }, [productId, product]);
   
   // Handle save/unsave product
   const handleToggleSave = async () => {
@@ -223,13 +216,13 @@ const ProductDetail = () => {
       return;
     }
     
-    if (!displayProduct) return;
+    if (!product) return;
     
     try {
-      if (isProductSaved(displayProduct.id)) {
-        await unsaveProduct(displayProduct.id);
+      if (isProductSaved(product.id)) {
+        await unsaveProduct(product.id);
       } else {
-        await saveProduct(displayProduct.id);
+        await saveProduct(product.id);
       }
     } catch (error) {
       console.error('Error toggling save status:', error);
@@ -244,14 +237,14 @@ const ProductDetail = () => {
       return;
     }
     
-    if (!displayProduct || !displayProduct.sellerData) {
+    if (!product || !product.sellerData) {
       Alert.alert("Error", "Seller information is not available");
       return;
     }
     
     Alert.alert(
       "Contact Seller",
-      `Would you like to contact ${displayProduct.sellerData?.username} about "${displayProduct.name}"?`,
+      `Would you like to contact ${product.sellerData?.username} about "${product.name}"?`,
       [
         {
           text: "Cancel",
@@ -261,7 +254,6 @@ const ProductDetail = () => {
           text: "Contact",
           onPress: () => {
             // Navigate to chat or messenger screen
-            // This would be implemented based on your app's messaging system
             Alert.alert("Coming Soon", "Messaging functionality will be available soon!");
           }
         }
@@ -293,7 +285,7 @@ const ProductDetail = () => {
     };
   });
   
-  if (loading || !displayProduct) {
+  if (loading) {
     return (
       <View className="flex-1 justify-center items-center bg-gray-50">
         <ActivityIndicator size="large" color="#9333EA" />
@@ -302,13 +294,28 @@ const ProductDetail = () => {
     );
   }
 
+  if (!product) {
+    return (
+      <View className="flex-1 justify-center items-center bg-gray-50">
+        <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#9333EA" />
+        <Text className="mt-4 text-gray-700 font-rubik-medium">Product not found</Text>
+        <TouchableOpacity 
+          onPress={() => router.back()}
+          className="mt-6 bg-purple-600 px-6 py-2 rounded-full"
+        >
+          <Text className="text-white font-rubik">Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   // Prepare media array for the carousel
-  const mediaItems = displayProduct.media && displayProduct.media.length > 0 
-    ? displayProduct.media.map(media => ({
+  const mediaItems = product.media && product.media.length > 0 
+    ? product.media.map((media: any) => ({
         url: formatImageUrl(media.url || ''),
         type: media.type || 'image'
       }))
-    : [{ url: formatImageUrl(displayProduct.imageUrl || ''), type: 'image' }];
+    : [{ url: formatImageUrl(product.imageUrl || ''), type: 'image' }];
 
   // Handle scroll to detect when at bottom
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -318,8 +325,7 @@ const ProductDetail = () => {
     const contentHeight = event.nativeEvent.contentSize.height;
     const scrollViewHeight = event.nativeEvent.layoutMeasurement.height;
     
-    // Check if scrolled to bottom with a very small threshold (5px instead of 50px)
-    // This ensures the footer only appears when truly at the bottom
+    // Check if scrolled to bottom with a very small threshold
     const isScrolledToBottom = offsetY + scrollViewHeight > contentHeight - 5;
     
     if (isScrolledToBottom && !isAtBottom) {
@@ -348,13 +354,13 @@ const ProductDetail = () => {
           <Ionicons name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
         <Text className="flex-1 text-lg font-rubik-medium text-gray-800 ml-2">
-          {displayProduct.name?.substring(0, 20)}{displayProduct.name && displayProduct.name.length > 20 ? '...' : ''}
+          {product.name?.substring(0, 20)}{product.name && product.name.length > 20 ? '...' : ''}
         </Text>
         <TouchableOpacity onPress={handleToggleSave} className="p-2">
           <FontAwesome 
-            name={isProductSaved(displayProduct.id) ? "bookmark" : "bookmark-o"} 
+            name={isProductSaved(product.id) ? "bookmark" : "bookmark-o"} 
             size={22} 
-            color={isProductSaved(displayProduct.id) ? "#9333EA" : "#374151"} 
+            color={isProductSaved(product.id) ? "#9333EA" : "#374151"} 
           />
         </TouchableOpacity>
       </Animated.View>
@@ -374,9 +380,9 @@ const ProductDetail = () => {
             <Text className="flex-1 text-lg font-rubik-medium text-gray-800 ml-2">Product Details</Text>
             <TouchableOpacity onPress={handleToggleSave} className="p-2">
               <FontAwesome 
-                name={isProductSaved(displayProduct.id) ? "bookmark" : "bookmark-o"} 
+                name={isProductSaved(product.id) ? "bookmark" : "bookmark-o"} 
                 size={22} 
-                color={isProductSaved(displayProduct.id) ? "#9333EA" : "#374151"} 
+                color={isProductSaved(product.id) ? "#9333EA" : "#374151"} 
               />
             </TouchableOpacity>
           </View>
@@ -389,26 +395,26 @@ const ProductDetail = () => {
         <View className="p-4 bg-white mt-2 shadow-sm">
           <View className="flex-row items-center justify-between mb-2">
             <View className="flex-row items-center">
-              <View className={`px-3 py-1 rounded-full ${displayProduct.status === 'sold' ? 'bg-red-100' : 'bg-green-100'}`}>
-                <Text className={`text-xs font-rubik-medium ${displayProduct.status === 'sold' ? 'text-red-700' : 'text-green-700'}`}>
-                  {displayProduct.status === 'active' ? 'Available' : displayProduct.status === 'sold' ? 'Sold' : 'Archived'}
+              <View className={`px-3 py-1 rounded-full ${product.status === 'sold' ? 'bg-red-100' : 'bg-green-100'}`}>
+                <Text className={`text-xs font-rubik-medium ${product.status === 'sold' ? 'text-red-700' : 'text-green-700'}`}>
+                  {product.status === 'active' ? 'Available' : product.status === 'sold' ? 'Sold' : 'Archived'}
                 </Text>
               </View>
               <Text className="text-xs text-gray-500 ml-2 font-rubik">
-                {formatTimeAgo(displayProduct.createdAt)}
+                {formatTimeAgo(product.createdAt)}
               </Text>
             </View>
             <View className="flex-row items-center">
               <Ionicons name="eye-outline" size={16} color="#6B7280" />
-              <Text className="ml-1 text-gray-500 text-xs font-rubik">{displayProduct.views || 0} views</Text>
+              <Text className="ml-1 text-gray-500 text-xs font-rubik">{product.views || 0} views</Text>
             </View>
           </View>
           
-          <Text className="text-xl font-rubik-semibold text-gray-800 mb-1">{displayProduct.name}</Text>
+          <Text className="text-xl font-rubik-semibold text-gray-800 mb-1">{product.name}</Text>
           
           <View className="mt-2">
             <Text className="text-2xl font-rubik-semibold text-purple-700">
-              {formatCurrency(displayProduct.price)}
+              {formatCurrency(product.price)}
             </Text>
           </View>
         </View>
@@ -420,11 +426,11 @@ const ProductDetail = () => {
             <View className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-purple-400 to-purple-600 rounded-r-full" />
             
             <Image
-              source={{ uri: displayProduct.sellerData?.avatar || `https://robohash.org/${displayProduct.userId}?set=set4` }}
+              source={{ uri: product.sellerData?.avatar || `https://robohash.org/${product.userId}?set=set4` }}
               className="w-12 h-12 rounded-full border-2 border-purple-100"
             />
             <View className="ml-3 flex-1">
-              <Text className="font-rubik-semibold text-gray-800">{displayProduct.sellerData?.username || 'User'}</Text>
+              <Text className="font-rubik-semibold text-gray-800">{product.sellerData?.username || 'User'}</Text>
               <View className="flex-row items-center">
                 <Ionicons name="time-outline" size={12} color="#9CA3AF" />
                 <Text className="text-xs text-gray-500 font-rubik ml-1">Member since {new Date().getFullYear()}</Text>
@@ -451,7 +457,7 @@ const ProductDetail = () => {
             </View>
             <Text className="font-rubik-semibold text-gray-800">Description</Text>
           </View>
-          <Text className="text-gray-700 leading-6 font-rubik mb-4 pl-1">{displayProduct.description}</Text>
+          <Text className="text-gray-700 leading-6 font-rubik mb-4 pl-1">{product.description}</Text>
           
           <View className="border-t border-gray-100 pt-4 mt-2">
             <View className="flex-row items-center mb-3">
@@ -464,26 +470,26 @@ const ProductDetail = () => {
             <ProductInfoItem 
               icon={<MaterialCommunityIcons name="shape-outline" size={20} color="#9333EA" />}
               label="Category"
-              value={displayProduct.category || 'General'}
+              value={product.category || 'General'}
               isCategory={true}
             />
             
             <ProductInfoItem 
               icon={<MaterialCommunityIcons name="tag-outline" size={20} color="#9333EA" />}
               label="Condition"
-              value={displayProduct.condition || 'Not specified'}
+              value={product.condition || 'Not specified'}
             />
             
             <ProductInfoItem 
               icon={<MaterialCommunityIcons name="package-variant" size={20} color="#9333EA" />}
               label="Quantity Available"
-              value={displayProduct.quantity || 1}
+              value={product.quantity || 1}
             />
           </View>
         </View>
         
         {/* Shipping Information */}
-        {displayProduct.shipping && Object.keys(displayProduct.shipping).length > 0 && (
+        {product.shipping && Object.keys(product.shipping).length > 0 && (
           <View className="p-4 bg-white mt-2 mb-24 shadow-sm">
             {/* Decorative elements */}
             <View className="absolute left-0 bottom-0 h-24 w-24 rounded-tr-full bg-purple-50 opacity-30" style={{ left: 0, bottom: 0 }} />
@@ -495,10 +501,10 @@ const ProductDetail = () => {
               <Text className="font-rubik-semibold text-gray-800">Shipping Details</Text>
             </View>
             
-            {displayProduct.shipping.options && Array.isArray(displayProduct.shipping.options) && displayProduct.shipping.options.length > 0 ? (
+            {product.shipping.options && Array.isArray(product.shipping.options) && product.shipping.options.length > 0 ? (
               <View>
                 <View className="flex-row flex-wrap mt-2">
-                  {displayProduct.shipping.options.includes('Pickup') && (
+                  {product.shipping.options.includes('Pickup') && (
                     <View 
                       style={{ backgroundColor: getShippingOptionBgColor('Pickup') }} 
                       className="p-3 px-5 rounded-xl mb-2 flex-row items-center mr-2 shadow-sm"
@@ -516,7 +522,7 @@ const ProductDetail = () => {
                       >Pickup</Text>
                     </View>
                   )}
-                  {displayProduct.shipping.options.includes('Delivery') && (
+                  {product.shipping.options.includes('Delivery') && (
                     <View 
                       style={{ backgroundColor: getShippingOptionBgColor('Delivery') }} 
                       className="p-3 px-5 rounded-xl mb-2 flex-row items-center shadow-sm"
@@ -535,7 +541,7 @@ const ProductDetail = () => {
                     </View>
                   )}
                 </View>
-                {displayProduct.shipping.options.includes('Delivery') && (
+                {product.shipping.options.includes('Delivery') && (
                   <View className="bg-gray-50 p-3 rounded-lg mt-2 border-l-2 border-amber-300">
                     <Text className="text-xs text-gray-600 font-rubik flex-row items-center">
                       <View style={{ width: 16, height: 16, justifyContent: 'center', alignItems: 'center', marginRight: 4 }}>

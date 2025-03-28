@@ -4,6 +4,7 @@ import { fetchUserPosts as fetchPostsFallback } from '../app/(root)/(tabs)/(prof
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../utils/apiClient';
 import { processMediaFiles } from '../utils/mediaUtils';
+import { Image, Text } from 'react-native';
 
 
 // Comment interface
@@ -220,7 +221,8 @@ export type PostsAction =
   | { type: 'ADD_COMMENT'; payload: { postId: string; comment: Comment } }
   | { type: 'DELETE_POST_SUCCESS'; payload: string }
   | { type: 'DELETE_POST_FAILURE'; payload: string }
-  | { type: 'CLEAR_ERRORS' };
+  | { type: 'CLEAR_ERRORS' }
+  | { type: 'UPDATE_POST_IN_ALL_COLLECTIONS'; payload: PostItem };
 
 // Define initial state
 const initialState: PostsState = {
@@ -456,6 +458,20 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
         ...state,
         error: null,
       };
+    case 'UPDATE_POST_IN_ALL_COLLECTIONS':
+      return {
+        ...state,
+        posts: state.posts.map(post =>
+          post.id === action.payload.id ? action.payload : post
+        ),
+        userPosts: state.userPosts.map(post =>
+          post.id === action.payload.id ? action.payload : post
+        ),
+        likedPosts: state.likedPosts.map(post =>
+          post.id === action.payload.id ? action.payload : post
+        ),
+        currentPost: action.payload,
+      };
     default:
       return state;
   }
@@ -525,29 +541,24 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
       
       if (response?.data?.success && response.data.posts) {
         const posts = response.data.posts;
-        console.log(`PostsContext: Received ${posts.length} user posts`);
-  
-        // Fetch missing comments only if needed
-        const processedPosts = await Promise.all(posts.map(async (post: any) => {
-          if (!post.comments || post.comments.length === 0) {
-            try {
-              post.comments = await fetchAndFormatComments(post.id);
-            } catch (err) {
-              console.warn(`Failed to fetch comments for post ${post.id}:`, err);
-              post.comments = [];
-            }
-          }
-          return post;
-        }));
-  
-        const standardizedPosts = processedPosts.map((post: any) => standardizePostFormat(post));
+        console.log(`PostsContext: Received ${posts.length} user posts with complete data`);
+
+        // Standardize the post format and update state
+        const standardizedPosts = posts.map((post: any) => standardizePostFormat(post));
+        
+        // Update posts in state with complete post data
         dispatch({ type: 'FETCH_USER_POSTS_SUCCESS', payload: standardizedPosts });
+        
+        // Update posts in all collections to ensure consistency 
+        standardizedPosts.forEach((post: PostItem) => {
+          updatePostInAllCollections(post);
+        });
       } else {
         // Fallback to general posts and filter by userId
         try {
           const fallbackResponse = await api.get('/pg/posts');
           let userPosts = [];
-  
+
           if (Array.isArray(fallbackResponse.data)) {
             userPosts = fallbackResponse.data.filter((post: any) => post.userId === userId);
           } else if (fallbackResponse.data.posts && Array.isArray(fallbackResponse.data.posts)) {
@@ -555,21 +566,20 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
           }
   
           console.log(`PostsContext: Found ${userPosts.length} posts with fallback`);
-  
-          const processedFallbackPosts = await Promise.all(userPosts.map(async (post: any) => {
-            if (!post.comments || post.comments.length === 0) {
-              try {
-                post.comments = await fetchAndFormatComments(post.id);
-              } catch (err) {
-                console.warn(`Failed to fetch comments for fallback post ${post.id}:`, err);
-                post.comments = [];
-              }
-            }
-            return post;
-          }));
-  
-          const standardizedPosts = processedFallbackPosts.map((post: any) => standardizePostFormat(post));
+
+          // Standardize the posts and update state
+          const standardizedPosts = userPosts.map((post: any) => standardizePostFormat(post));
           dispatch({ type: 'FETCH_USER_POSTS_SUCCESS', payload: standardizedPosts });
+          
+          // We still need to try to get complete data for fallback posts
+          // since they might not have all the data included
+          for (const post of standardizedPosts) {
+            try {
+              await fetchPostById(post.id);
+            } catch (err) { 
+              console.warn(`Failed to fetch complete data for fallback post ${post.id}:`, err);
+            }
+          }
         } catch (fallbackError) {
           throw fallbackError;
         }
@@ -660,7 +670,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   };
 
   // Function to fetch a post by ID
-  const fetchPostById = async (postId: string) => {
+  const fetchPostById = async (postId: string): Promise<void> => {
     try {
       console.log(`Fetching post with ID: ${postId}`);
       
@@ -674,11 +684,8 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
           // Process the post data with our helper function
           const formattedPost = await processPost(response.data.post, postId);
           
-          // Update state with the post data
-          dispatch({ type: 'SET_CURRENT_POST', payload: formattedPost });
-          
-          // Increment view count
-          incrementPostViews(postId);
+          // Update ALL instances of this post in the state
+          updatePostInAllCollections(formattedPost);
           return;
         }
         throw new Error('Post not found or response format incorrect');
@@ -695,11 +702,12 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
           // Process the fallback post data with our helper function
           const formattedPost = await processPost(fallbackPost, postId);
           
-          // Update state with the post data
-          dispatch({ type: 'SET_CURRENT_POST', payload: formattedPost });
+          // Update ALL instances of this post in the state
+          updatePostInAllCollections(formattedPost);
           
           // Increment view count for fallback posts as well
           incrementPostViews(postId);
+          return;
         } else {
           console.error('Post not found in any source');
           throw new Error('Post not found in any source');
@@ -711,11 +719,26 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     }
   };
 
+  // Helper function to update a post in all state collections
+  const updatePostInAllCollections = (post: PostItem) => {
+    // First update the currentPost
+    dispatch({ type: 'SET_CURRENT_POST', payload: post });
+    
+    // Create a helper action to update the post in all state arrays
+    dispatch({
+      type: 'UPDATE_POST_IN_ALL_COLLECTIONS',
+      payload: post
+    });
+  };
+
   // Function to set the current post
   const setCurrentPost = (post: PostItem) => {
-    // Standardize the post format before setting as current post
-    const formattedPost = standardizePostFormat(post);
-    dispatch({ type: 'SET_CURRENT_POST', payload: formattedPost });
+    // Fetch the full post data if possible
+    fetchPostById(post.id).catch(() => {
+      // If we can't fetch, at least standardize and update everywhere
+      const formattedPost = standardizePostFormat(post);
+      updatePostInAllCollections(formattedPost);
+    });
   };
 
   // Function to check if a post is liked

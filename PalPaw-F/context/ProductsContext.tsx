@@ -404,7 +404,7 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
       const products = response.data.products;
       console.log(`ProductsContext: Received ${products.length} user products`);
       
-      // Directly standardize product format without enhancement
+      // Standardize products with the seller data already included from backend
       const standardizedProducts = products.map((product: any) =>
         standardizeProductFormat(product)
       );
@@ -424,7 +424,7 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
 
         console.log(`ProductsContext: Found ${userProducts.length} products with fallback`);
 
-        // Directly standardize fallback products without enhancement
+        // Standardize fallback products
         const standardizedProducts = userProducts.map((product: any) =>
           standardizeProductFormat(product)
         );
@@ -497,26 +497,9 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
     try {
       console.log(`Fetching product with ID: ${productId}`);
       
-      // First, check if the product exists in our current state
-      const existingProduct = state.products.find(product => product.id === productId) || 
-                            state.userProducts.find(product => product.id === productId) ||
-                            state.savedProducts.find(product => product.id === productId);
-      
-      if (existingProduct) {
-        console.log('Product found in existing state');
-        
-        // Standardize the product format before setting as current product
-        const formattedProduct = standardizeProductFormat(existingProduct);
-        dispatch({ type: 'SET_CURRENT_PRODUCT', payload: formattedProduct });
-        
-        // Increment the view count when viewing an existing product
-        incrementProductViews(productId);
-        return;
-      }
-      
       // If not in our state, fetch from API
       try {
-        const response = await api.get(`/pg/products/${productId}`);
+        const response = await api.get(`/upload/products/${productId}`);
         
         if (response.data && response.data.product) {
           console.log('Product fetched from API');
@@ -539,9 +522,20 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
 
   // Function to set the current product
   const setCurrentProduct = (product: ProductItem) => {
-    // Standardize the product format before setting as current product
-    const formattedProduct = standardizeProductFormat(product);
-    dispatch({ type: 'SET_CURRENT_PRODUCT', payload: formattedProduct });
+    try {
+      // Try to fetch the full product details
+      fetchProductById(product.id).catch(error => {
+        console.log('Error fetching product details, using standardized format:', error);
+        // If fetch fails, still standardize the product format and update state
+        const formattedProduct = standardizeProductFormat(product);
+        dispatch({ type: 'SET_CURRENT_PRODUCT', payload: formattedProduct });
+      });
+    } catch (error) {
+      console.error('Error in setCurrentProduct:', error);
+      // Ensure we still set a current product even if there's an error
+      const formattedProduct = standardizeProductFormat(product);
+      dispatch({ type: 'SET_CURRENT_PRODUCT', payload: formattedProduct });
+    }
   };
 
   // Function to check if a product is saved

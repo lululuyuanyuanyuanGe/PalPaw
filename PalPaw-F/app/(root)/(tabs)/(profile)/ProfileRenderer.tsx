@@ -66,8 +66,8 @@ export const RenderItem: React.FC<RenderItemProps> = ({
   const { width } = Dimensions.get('window');
   
   const router = useRouter();
-  const { fetchPostById, isPostLiked } = usePosts();
-  const { isProductSaved } = useProducts();
+  const { setCurrentPost, isPostLiked,  } = usePosts();
+  const { setCurrentProduct, isProductSaved } = useProducts();
   
   // Animation for the like button
   const likeScale = useSharedValue(1);
@@ -78,26 +78,51 @@ export const RenderItem: React.FC<RenderItemProps> = ({
   }
   
   // Function to navigate to post detail
-  const navigateToPostDetail = (post: BaseItem) => {
+  const navigateToPostDetail = async (post: BaseItem) => {
     if (isPostItem(post)) {
-      // Set current post in context first
-      fetchPostById(post.id);
-      
-      // Navigate to posts detail screen with just the post ID
-      // Context will provide all the other data
-      router.push({
-        pathname: "/(root)/(posts)",
-        params: {
-          id: post.id
-        }
-      } as any);
+      try {
+        // Set current post in context first
+        setCurrentPost(post);
+        
+        // Wait to ensure context update completes before navigation
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Navigate to posts detail screen with just the post ID
+        router.push({
+          pathname: "/(root)/(posts)",
+          params: {
+            id: post.id
+          }
+        } as any);
+      } catch (error) {
+        console.error("Error navigating to post:", error);
+        router.push({
+          pathname: "/(root)/(posts)",
+          params: { id: post.id }
+        } as any);
+      }
     } else if (isProductItem(post)) {
-      router.push({
-        pathname: "/(root)/(products)",
-        params: {
-          id: post.id
-        }
-      } as any);
+      try {
+        // Set current product in context first
+        setCurrentProduct(post.id as any);
+        
+        // Wait to ensure context update completes before navigation
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Then navigate
+        router.push({
+          pathname: "/(root)/(products)",
+          params: {
+            id: post.id
+          }
+        } as any);
+      } catch (error) {
+        console.error("Error navigating to product:", error);
+        router.push({
+          pathname: "/(root)/(products)",
+          params: { id: post.id }
+        } as any);
+      }
     }
   };
   
