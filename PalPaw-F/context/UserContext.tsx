@@ -1,6 +1,8 @@
 import React, { createContext, useReducer, useContext, ReactNode, useEffect } from 'react';
 import api from '../utils/apiClient';
 import { useAuth } from './AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../constants/api';
 
 // Define user profile interface based on User model fields
 interface UserProfile {
@@ -19,6 +21,7 @@ interface UserProfile {
   likedPostsCount: number;
   likedPostIds: string[];
   savedProductIds: string[];
+  following?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -46,13 +49,20 @@ type UserAction =
   | { type: 'FETCH_FOLLOWING_REQUEST' }
   | { type: 'FETCH_FOLLOWING_SUCCESS'; payload: UserProfile[] }
   | { type: 'FETCH_FOLLOWING_FAILURE'; payload: string }
-  | { type: 'FOLLOW_USER_SUCCESS'; payload: UserProfile }
+  | { type: 'FOLLOW_USER_REQUEST'; payload: string }
+  | { type: 'FOLLOW_USER_SUCCESS'; payload: string }
+  | { type: 'FOLLOW_USER_FAILURE'; payload: string }
+  | { type: 'UNFOLLOW_USER_REQUEST'; payload: string }
   | { type: 'UNFOLLOW_USER_SUCCESS'; payload: string }
+  | { type: 'UNFOLLOW_USER_FAILURE'; payload: string }
   | { type: 'SAVE_PRODUCT_SUCCESS'; payload: string }
   | { type: 'UNSAVE_PRODUCT_SUCCESS'; payload: string }
   | { type: 'LIKE_POST_SUCCESS'; payload: string }
   | { type: 'UNLIKE_POST_SUCCESS'; payload: string }
-  | { type: 'CLEAR_ERROR' };
+  | { type: 'CLEAR_ERROR' }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_ERROR'; payload: string }
+  | { type: 'SET_USER_PROFILE'; payload: UserProfile };
 
 // Define interface for profile update data
 interface ProfileUpdateData {
@@ -115,13 +125,15 @@ const userReducer = (state: UserState, action: UserAction): UserState => {
         error: null,
       };
     case 'FOLLOW_USER_SUCCESS':
+      if (!state.profile) return state;
       return {
         ...state,
-        followedUsers: [...state.followedUsers, action.payload],
-        profile: state.profile ? {
+        profile: {
           ...state.profile,
-          followingCount: state.profile.followingCount + 1
-        } : null,
+          following: [...(state.profile.following || []), action.payload],
+        },
+        loading: false,
+        error: null,
       };
     case 'UNFOLLOW_USER_SUCCESS':
       return {
@@ -171,13 +183,28 @@ const userReducer = (state: UserState, action: UserAction): UserState => {
         ...state,
         error: null,
       };
+    case 'SET_LOADING':
+      return {
+        ...state,
+        loading: action.payload,
+      };
+    case 'SET_ERROR':
+      return {
+        ...state,
+        error: action.payload,
+      };
+    case 'SET_USER_PROFILE':
+      return {
+        ...state,
+        profile: action.payload,
+      };
     default:
       return state;
   }
 };
 
 // Create the user context
-interface UserContextProps {
+export interface UserContextProps {
   state: UserState;
   dispatch: React.Dispatch<UserAction>;
   fetchUserProfile: (userId?: string) => Promise<void>;
@@ -194,6 +221,8 @@ interface UserContextProps {
   hasSavedProduct: (productId: string) => boolean;
   isFollowing: (userId: string) => boolean;
   clearError: () => void;
+  getUserProfile: () => Promise<void>;
+  updateUserProfile: (formData: FormData) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextProps | undefined>(undefined);
@@ -590,6 +619,42 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     dispatch({ type: 'CLEAR_ERROR' });
   };
 
+  const getUserProfile = async () => {
+    await fetchUserProfile();
+  };
+
+  const updateUserProfile = async (formData: FormData) => {
+    try {
+      dispatch({ type: 'UPDATE_PROFILE_REQUEST' });
+      
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+      
+      const response = await fetch(`${API_URL}/api/users/profile/update`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update profile');
+      }
+      
+      dispatch({ type: 'UPDATE_PROFILE_SUCCESS', payload: data.user });
+      
+    } catch (error: any) {
+      console.error('Error updating user profile:', error);
+      dispatch({ type: 'UPDATE_PROFILE_FAILURE', payload: error.message });
+      throw error;
+    }
+  };
+
   return (
     <UserContext.Provider
       value={{
@@ -609,6 +674,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         hasSavedProduct,
         isFollowing,
         clearError,
+        getUserProfile,
+        updateUserProfile,
       }}
     >
       {children}

@@ -10,7 +10,6 @@ import { syncModels } from './models/index.js'; // Sequelize models
 // Import routes
 import pgAuthRoutes from './routes/pgAuth.js'; // PostgreSQL auth routes
 import uploadRoutes from './routes/upload.js'; // Upload routes
-import userRoutes from './routes/users.js'; // User routes
 import likesRoutes from './routes/likes.js'; // Likes routes
 import postsRoutes from './routes/posts.js'; // Posts routes
 import productsRoutes from './routes/products.js'; // Products
@@ -78,8 +77,6 @@ app.use("/api/pg/auth", pgAuthRoutes); // PostgreSQL auth
 console.log('- /api/pg/auth');
 app.use("/api/upload", uploadRoutes); // Upload routes
 console.log('- /api/upload');
-app.use("/api/pg/users", userRoutes); // User routes
-console.log('- /api/pg/users');
 app.use("/api/likes", likesRoutes); // Likes routes
 console.log('- /api/likes');
 app.use("/api/pg/posts", postsRoutes); // Posts routes

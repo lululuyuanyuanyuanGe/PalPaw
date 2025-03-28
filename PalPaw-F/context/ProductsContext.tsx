@@ -3,24 +3,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../utils/apiClient';
 import {processMediaFiles } from '../utils/mediaUtils';
 
-// Helper function to fetch user data directly
-const fetchUserData = async (userId: string) => {
-  try {
-    const response = await api.get(`/pg/users/${userId}`);
-    if (response.data && response.data.user) {
-      return {
-        id: response.data.user.id,
-        username: response.data.user.username || 'User',
-        avatar: response.data.user.avatar || `https://robohash.org/${userId}?set=set4`
-      };
-    }
-    return null;
-  } catch (error) {
-    console.error(`Error fetching user data for ID ${userId}:`, error);
-    return null;
-  }
-};
-
 // Define the Product Item interface based on the Product model
 export interface ProductItem {
   id: string;
@@ -156,6 +138,8 @@ export type ProductsAction =
   | { type: 'SAVE_PRODUCT_FAILURE'; payload: string }
   | { type: 'UNSAVE_PRODUCT_FAILURE'; payload: string }
   | { type: 'INCREMENT_PRODUCT_VIEWS'; payload: { productId: string } }
+  | { type: 'DELETE_PRODUCT_SUCCESS'; payload: string }
+  | { type: 'DELETE_PRODUCT_FAILURE'; payload: string }
   | { type: 'CLEAR_ERRORS' };
 
 // Define initial state
@@ -332,6 +316,23 @@ const productsReducer = (state: ProductsState, action: ProductsAction): Products
           ? { ...state.currentProduct, views: (state.currentProduct.views || 0) + 1 }
           : state.currentProduct,
       };
+    case 'DELETE_PRODUCT_SUCCESS':
+      return {
+        ...state,
+        products: state.products.filter(product => product.id !== action.payload),
+        userProducts: state.userProducts.filter(product => product.id !== action.payload),
+        savedProducts: state.savedProducts.filter(product => product.id !== action.payload),
+        savedProductIds: state.savedProductIds.filter(id => id !== action.payload),
+        currentProduct: state.currentProduct?.id === action.payload ? null : state.currentProduct,
+        loading: false,
+        error: null,
+      };
+    case 'DELETE_PRODUCT_FAILURE':
+      return {
+        ...state,
+        loading: false,
+        error: action.payload,
+      };
     case 'CLEAR_ERRORS':
       return {
         ...state,
@@ -355,6 +356,7 @@ interface ProductsContextType {
   unsaveProduct: (productId: string) => Promise<boolean>;
   isProductSaved: (productId: string) => boolean;
   incrementProductViews: (productId: string) => Promise<void>;
+  deleteProduct: (productId: string) => Promise<boolean>;
 }
 
 // Create the context with default values
@@ -392,86 +394,54 @@ export const ProductsProvider: React.FC<ProductsProviderProps> = ({ children }) 
     }
   };
 
-  // Function to fetch user products
-  const fetchUserProducts = async (userId: string): Promise<void> => {
-    dispatch({ type: 'FETCH_PRODUCTS_REQUEST' });
-    try {
-      const response = await api.get(`/upload/products/${userId}`);
+// Function to fetch user products
+const fetchUserProducts = async (userId: string): Promise<void> => {
+  dispatch({ type: 'FETCH_PRODUCTS_REQUEST' });
+  try {
+    const response = await api.get(`/upload/products/${userId}`);
+    
+    if (response?.data?.success && response.data.products) {
+      const products = response.data.products;
+      console.log(`ProductsContext: Received ${products.length} user products`);
       
-      if (response?.data?.success && response.data.products) {
-        const products = response.data.products;
-        console.log(`ProductsContext: Received ${products.length} user products`);
-        
-        // Enhance products with seller data if missing
-        const enhancedProducts = await Promise.all(products.map(async (product: any) => {
-          // If product is missing seller data, try to fetch it
-          if (!product.seller && !product.sellerData && (product.userId || product.user_id)) {
-            console.warn(`User product ${product.id} is missing seller data, fetching...`);
-            const productUserId = product.userId || product.user_id;
-            const userData = await fetchUserData(productUserId);
-            
-            if (userData) {
-              product.sellerData = userData;
-              console.log(`Added seller data to product ${product.id}:`, JSON.stringify(userData));
-            } else {
-              console.warn(`Failed to fetch seller data for product ${product.id}`);
-            }
-          }
-          
-          return product;
-        }));
-        
-        // Standardize product format for each product
-        const standardizedProducts = enhancedProducts.map((product: any) => standardizeProductFormat(product));
-        
-        dispatch({ type: 'FETCH_USER_PRODUCTS_SUCCESS', payload: standardizedProducts });
-      } else {
-        // Fallback to general products and filter by userId
-        try {
-          const fallbackResponse = await api.get(`/upload/products/${userId}`);
-          let userProducts = [];
-          
-          if (Array.isArray(fallbackResponse.data)) {
-            userProducts = fallbackResponse.data.filter((product: any) => product.userId === userId);
-          } else if (fallbackResponse.data.products && Array.isArray(fallbackResponse.data.products)) {
-            userProducts = fallbackResponse.data.products.filter((product: any) => product.userId === userId);
-          }
-          
-          console.log(`ProductsContext: Found ${userProducts.length} products with fallback`);
-          
-          // Enhance fallback products with seller data if missing
-          const enhancedFallbackProducts = await Promise.all(userProducts.map(async (product: any) => {
-            // If product is missing seller data, try to fetch it
-            if (!product.seller && !product.sellerData && (product.userId || product.user_id)) {
-              console.warn(`Fallback product ${product.id} is missing seller data, fetching...`);
-              const productUserId = product.userId || product.user_id;
-              const userData = await fetchUserData(productUserId);
-              
-              if (userData) {
-                product.sellerData = userData;
-                console.log(`Added seller data to fallback product ${product.id}:`, JSON.stringify(userData));
-              } else {
-                console.warn(`Failed to fetch seller data for fallback product ${product.id}`);
-              }
-            }
-            
-            return product;
-          }));
-          
-          const standardizedProducts = enhancedFallbackProducts.map((product: any) => standardizeProductFormat(product));
-          dispatch({ type: 'FETCH_USER_PRODUCTS_SUCCESS', payload: standardizedProducts });
-        } catch (fallbackError) {
-          throw fallbackError;
+      // Directly standardize product format without enhancement
+      const standardizedProducts = products.map((product: any) =>
+        standardizeProductFormat(product)
+      );
+      
+      dispatch({ type: 'FETCH_USER_PRODUCTS_SUCCESS', payload: standardizedProducts });
+    } else {
+      // Fallback to general products and filter by userId
+      try {
+        const fallbackResponse = await api.get(`/upload/products/${userId}`);
+        let userProducts = [];
+
+        if (Array.isArray(fallbackResponse.data)) {
+          userProducts = fallbackResponse.data.filter((product: any) => product.userId === userId);
+        } else if (fallbackResponse.data.products && Array.isArray(fallbackResponse.data.products)) {
+          userProducts = fallbackResponse.data.products.filter((product: any) => product.userId === userId);
         }
+
+        console.log(`ProductsContext: Found ${userProducts.length} products with fallback`);
+
+        // Directly standardize fallback products without enhancement
+        const standardizedProducts = userProducts.map((product: any) =>
+          standardizeProductFormat(product)
+        );
+
+        dispatch({ type: 'FETCH_USER_PRODUCTS_SUCCESS', payload: standardizedProducts });
+      } catch (fallbackError) {
+        throw fallbackError;
       }
-    } catch (error) {
-      console.error("Error fetching user products:", error);
-      dispatch({
-        type: 'FETCH_USER_PRODUCTS_FAILURE',
-        payload: 'Failed to fetch user products',
-      });
     }
-  };
+  } catch (error) {
+    console.error("Error fetching user products:", error);
+    dispatch({
+      type: 'FETCH_USER_PRODUCTS_FAILURE',
+      payload: 'Failed to fetch user products',
+    });
+  }
+};
 
   // Function to fetch saved products
   const fetchSavedProducts = async (userId?: string): Promise<void> => {
@@ -674,6 +644,36 @@ export const ProductsProvider: React.FC<ProductsProviderProps> = ({ children }) 
     }
   };
 
+  // Function to delete a product
+  const deleteProduct = async (productId: string): Promise<boolean> => {
+    try {
+      console.log(`Attempting to delete product: ${productId}`);
+      const response = await api.delete(`/pg/products/${productId}`);
+      
+      console.log(`Response from delete product ${productId}:`, response.status, JSON.stringify(response.data));
+      
+      if (response.data?.success) {
+        // Update state by removing the product
+        dispatch({
+          type: 'DELETE_PRODUCT_SUCCESS',
+          payload: productId
+        });
+        
+        return true;
+      }
+      return false;
+    } catch (error: any) {
+      console.error('Error deleting product:', error);
+      
+      dispatch({
+        type: 'DELETE_PRODUCT_FAILURE',
+        payload: 'Failed to delete product'
+      });
+      
+      return false;
+    }
+  };
+
   // Initialize products data from AsyncStorage after functions are defined
   useEffect(() => {
     const initProductsData = async () => {
@@ -748,6 +748,7 @@ export const ProductsProvider: React.FC<ProductsProviderProps> = ({ children }) 
         unsaveProduct,
         isProductSaved,
         incrementProductViews,
+        deleteProduct,
       }}
     >
       {children}

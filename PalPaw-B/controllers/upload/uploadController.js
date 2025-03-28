@@ -6,6 +6,7 @@ import Post from '../../models/Post.js';
 import Product from '../../models/Product.js';
 import User from '../../models/User.js';
 import { generateVideoThumbnail } from '../../utils/videoThumbnail.js';
+import { promisify } from 'util';
 
 // Configure multer storage
 const storage = multer.diskStorage({
@@ -515,5 +516,106 @@ export const createProductWithMedia = async (req, res) => {
       message: 'Server error while creating product',
       error: error.message
     });
+  }
+};
+
+// Delete post
+const unlinkAsync = promisify(fs.unlink);
+
+export const deletePost = async (req, res) => {
+  try {
+    const postId = req.params.postId;
+    const userId = req.user.id;
+
+    // Find the post
+    const post = await Post.findOne({
+      where: { id: postId, userId }
+    });
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    // Delete associated media files
+    if (post.media && Array.isArray(post.media)) {
+      for (const file of post.media) {
+        const mediaPath = path.join(process.cwd(), 'uploads', userId.toString(), 'posts', file.filename);
+        try {
+          await unlinkAsync(mediaPath);
+        } catch (err) {
+          console.warn(`Failed to delete file ${mediaPath}:`, err.message);
+        }
+
+        if (file.thumbnail) {
+          const thumbnailPath = path.join(process.cwd(), file.thumbnail);
+          try {
+            await unlinkAsync(thumbnailPath);
+          } catch (err) {
+            console.warn(`Failed to delete thumbnail ${thumbnailPath}:`, err.message);
+          }
+        }
+      }
+    }
+
+    // Finally delete the post from DB
+    await post.destroy();
+
+    res.json({ success: true, message: 'Post deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting post:', error);
+    res.status(500).json({ success: false, message: 'Server error deleting post' });
+  }
+};
+
+
+/**
+ * Delete a product and its associated media files
+ * @route DELETE /api/products/:productId
+ */
+export const deleteProduct = async (req, res) => {
+  try {
+    const productId = req.params.productId;
+    const userId = req.user.id;
+
+    // Find product belonging to this user
+    const product = await Product.findOne({
+      where: { id: productId, userId }
+    });
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    // Remove associated media files
+    if (product.media && Array.isArray(product.media)) {
+      for (const file of product.media) {
+        const filePath = path.join(process.cwd(), 'uploads', userId.toString(), 'posts', file.filename);
+        try {
+          await unlinkAsync(filePath);
+          console.log(`Deleted media file: ${filePath}`);
+        } catch (err) {
+          console.warn(`Failed to delete media file ${filePath}:`, err.message);
+        }
+
+        // Delete thumbnail if it exists
+        if (file.thumbnail) {
+          const thumbnailPath = path.join(process.cwd(), file.thumbnail);
+          try {
+            await unlinkAsync(thumbnailPath);
+            console.log(`Deleted thumbnail: ${thumbnailPath}`);
+          } catch (err) {
+            console.warn(`Failed to delete thumbnail ${thumbnailPath}:`, err.message);
+          }
+        }
+      }
+    }
+
+    // Delete product from database
+    await product.destroy();
+
+    return res.json({ success: true, message: 'Product deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting product:', error);
+    return res.status(500).json({ success: false, message: 'Server error deleting product' });
   }
 };

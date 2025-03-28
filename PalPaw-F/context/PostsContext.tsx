@@ -5,23 +5,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../utils/apiClient';
 import { processMediaFiles } from '../utils/mediaUtils';
 
-// Helper function to fetch user data directly
-const fetchUserData = async (userId: string) => {
-  try {
-    const response = await api.get(`/pg/users/${userId}`);
-    if (response.data && response.data.user) {
-      return {
-        id: response.data.user.id,
-        username: response.data.user.username || 'User',
-        avatar: response.data.user.avatar || `https://robohash.org/${userId}?set=set4`
-      };
-    }
-    return null;
-  } catch (error) {
-    console.error(`Error fetching user data for ID ${userId}:`, error);
-    return null;
-  }
-};
 
 // Comment interface
 interface Comment {
@@ -235,6 +218,8 @@ export type PostsAction =
   | { type: 'UNLIKE_POST_FAILURE'; payload: string }
   | { type: 'INCREMENT_POST_VIEWS'; payload: { postId: string } }
   | { type: 'ADD_COMMENT'; payload: { postId: string; comment: Comment } }
+  | { type: 'DELETE_POST_SUCCESS'; payload: string }
+  | { type: 'DELETE_POST_FAILURE'; payload: string }
   | { type: 'CLEAR_ERRORS' };
 
 // Define initial state
@@ -449,6 +434,23 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
             }
           : state.currentPost,
       };
+    case 'DELETE_POST_SUCCESS':
+      return {
+        ...state,
+        posts: state.posts.filter(post => post.id !== action.payload),
+        userPosts: state.userPosts.filter(post => post.id !== action.payload),
+        likedPosts: state.likedPosts.filter(post => post.id !== action.payload),
+        likedPostIds: state.likedPostIds.filter(id => id !== action.payload),
+        currentPost: state.currentPost?.id === action.payload ? null : state.currentPost,
+        loading: false,
+        error: null,
+      };
+    case 'DELETE_POST_FAILURE':
+      return {
+        ...state,
+        loading: false,
+        error: action.payload,
+      };
     case 'CLEAR_ERRORS':
       return {
         ...state,
@@ -473,6 +475,7 @@ interface PostsContextType {
   isPostLiked: (postId: string) => boolean;
   incrementPostViews: (postId: string) => Promise<void>;
   addComment: (postId: string, comment: Comment) => Promise<boolean>;
+  deletePost: (postId: string) => Promise<boolean>;
 }
 
 // Create the context with default values
@@ -514,7 +517,6 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     }
   };
 
-  // Function to fetch user posts
   const fetchUserPosts = async (userId: string): Promise<void> => {
     dispatch({ type: 'FETCH_POSTS_REQUEST' });
     try {
@@ -524,109 +526,49 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
       if (response?.data?.success && response.data.posts) {
         const posts = response.data.posts;
         console.log(`PostsContext: Received ${posts.length} user posts`);
-        
-        // Debug: Log the first post's author and tags
-        if (posts.length > 0) {
-          console.log("Sample post author data:", JSON.stringify(posts[0].author || posts[0].authorData));
-          console.log("Sample post tags:", JSON.stringify(posts[0].tags));
-        }
-        
-        // Enhance posts with author data and comments if missing
-        const enhancedPosts = await Promise.all(posts.map(async (post: any) => {
-          // Check for missing fields and add warnings
-          if (!post.media) {
-            console.warn(`User post ${post.id} is missing media field`);
-          }
-          
-          if (!post.tags) {
-            console.warn(`User post ${post.id} is missing tags field`);
-          }
-          
-          // If post is missing author data, try to fetch it
-          if (!post.author && !post.authorData && (post.userId || post.user_id)) {
-            console.warn(`User post ${post.id} is missing author data, fetching...`);
-            const postUserId = post.userId || post.user_id;
-            const userData = await fetchUserData(postUserId);
-            
-            if (userData) {
-              post.authorData = userData;
-              console.log(`Added author data to post ${post.id}:`, JSON.stringify(userData));
-            } else {
-              console.warn(`Failed to fetch author data for post ${post.id}`);
-            }
-          }
-          
-          // Fetch comments if not included or empty
+  
+        // Fetch missing comments only if needed
+        const processedPosts = await Promise.all(posts.map(async (post: any) => {
           if (!post.comments || post.comments.length === 0) {
             try {
-              // Use helper function to fetch and format comments
               post.comments = await fetchAndFormatComments(post.id);
-            } catch (commentsError) {
-              console.warn(`Failed to fetch comments for post ${post.id}:`, commentsError);
-              // Initialize with empty array if fetch fails
+            } catch (err) {
+              console.warn(`Failed to fetch comments for post ${post.id}:`, err);
               post.comments = [];
             }
           }
-          
           return post;
         }));
-        
-        // Standardize post format for each post
-        const standardizedPosts = enhancedPosts.map((post: any) => standardizePostFormat(post));
-        
+  
+        const standardizedPosts = processedPosts.map((post: any) => standardizePostFormat(post));
         dispatch({ type: 'FETCH_USER_POSTS_SUCCESS', payload: standardizedPosts });
       } else {
-        // Try fallback for older API format
+        // Fallback to general posts and filter by userId
         try {
           const fallbackResponse = await api.get('/pg/posts');
           let userPosts = [];
-          
+  
           if (Array.isArray(fallbackResponse.data)) {
             userPosts = fallbackResponse.data.filter((post: any) => post.userId === userId);
           } else if (fallbackResponse.data.posts && Array.isArray(fallbackResponse.data.posts)) {
             userPosts = fallbackResponse.data.posts.filter((post: any) => post.userId === userId);
           }
-          
+  
           console.log(`PostsContext: Found ${userPosts.length} posts with fallback`);
-          
-          // Debug: Log the first fallback post's author and tags
-          if (userPosts.length > 0) {
-            console.log("Sample fallback post author data:", JSON.stringify(userPosts[0].author || userPosts[0].authorData));
-            console.log("Sample fallback post tags:", JSON.stringify(userPosts[0].tags));
-          }
-          
-          // Enhance fallback posts with author data and comments if missing
-          const enhancedFallbackPosts = await Promise.all(userPosts.map(async (post: any) => {
-            // If post is missing author data, try to fetch it
-            if (!post.author && !post.authorData && (post.userId || post.user_id)) {
-              console.warn(`Fallback post ${post.id} is missing author data, fetching...`);
-              const postUserId = post.userId || post.user_id;
-              const userData = await fetchUserData(postUserId);
-              
-              if (userData) {
-                post.authorData = userData;
-                console.log(`Added author data to fallback post ${post.id}:`, JSON.stringify(userData));
-              } else {
-                console.warn(`Failed to fetch author data for fallback post ${post.id}`);
-              }
-            }
-            
-            // Fetch comments if not included or empty
+  
+          const processedFallbackPosts = await Promise.all(userPosts.map(async (post: any) => {
             if (!post.comments || post.comments.length === 0) {
               try {
-                // Use helper function to fetch and format comments
                 post.comments = await fetchAndFormatComments(post.id);
-              } catch (commentsError) {
-                console.warn(`Failed to fetch comments for fallback post ${post.id}:`, commentsError);
-                // Initialize with empty array if fetch fails
+              } catch (err) {
+                console.warn(`Failed to fetch comments for fallback post ${post.id}:`, err);
                 post.comments = [];
               }
             }
-            
             return post;
           }));
-          
-          const standardizedPosts = enhancedFallbackPosts.map((post: any) => standardizePostFormat(post));
+  
+          const standardizedPosts = processedFallbackPosts.map((post: any) => standardizePostFormat(post));
           dispatch({ type: 'FETCH_USER_POSTS_SUCCESS', payload: standardizedPosts });
         } catch (fallbackError) {
           throw fallbackError;
@@ -640,6 +582,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
       });
     }
   };
+  
 
   // Function to fetch liked posts
   const fetchLikedPosts = async (userId?: string): Promise<void> => {
@@ -941,6 +884,36 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     }
   };
 
+  // Function to delete a post
+  const deletePost = async (postId: string): Promise<boolean> => {
+    try {
+      console.log(`Attempting to delete post: ${postId}`);
+      const response = await api.delete(`/pg/posts/${postId}`);
+      
+      console.log(`Response from delete post ${postId}:`, response.status, JSON.stringify(response.data));
+      
+      if (response.data?.success) {
+        // Update state by removing the post from all arrays
+        dispatch({
+          type: 'DELETE_POST_SUCCESS',
+          payload: postId
+        });
+        
+        return true;
+      }
+      return false;
+    } catch (error: any) {
+      console.error('Error deleting post:', error);
+      
+      dispatch({
+        type: 'DELETE_POST_FAILURE',
+        payload: 'Failed to delete post'
+      });
+      
+      return false;
+    }
+  };
+
   // Initialize posts data from AsyncStorage after functions are defined
   useEffect(() => {
     const initPostsData = async () => {
@@ -1016,6 +989,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         isPostLiked,
         incrementPostViews,
         addComment,
+        deletePost,
       }}
     >
       {children}

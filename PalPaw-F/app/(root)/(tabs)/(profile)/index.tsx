@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  ImageBackground,
 } from "react-native";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -31,6 +32,7 @@ import { usePosts, useUser, useAuth, useProducts } from "@/context";
 import AuthPrompt from "@/app/components/AuthPrompt";
 import { formatImageUrl } from "@/utils/mediaUtils";
 import { ProductItem as ContextProductItem } from "@/context/ProductsContext";
+import { FontAwesome5 } from "@expo/vector-icons";
 
 const ProfileScreen = () => {
   const router = useRouter();
@@ -258,47 +260,70 @@ const ProfileScreen = () => {
         ListHeaderComponent={
           user ? (
             <View>
-              {/* Background with Gradient */}
+              {/* Background with Enhanced Decorative Elements */}
               <View className="w-full h-60 relative">
-                <LinearGradient
-                  colors={['#9333EA', '#C084FC']}
-                  className="w-full h-full"
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                />
-                
-                
-                  
-                
-                {/* User Info Section */}
-                <View className="absolute bottom-0 left-0 right-0 p-4">
-                  <View className="flex-row items-end">
-                    <View className="shadow-xl">
-                      <Image
-                        source={{ uri: formatImageUrl(user.avatar) }}
-                        className="w-24 h-24 rounded-full border-4 border-white"
-                        style={{
-                          shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.2,
-                          shadowRadius: 4,
-                        }}
-                      />
-                    </View>
-                    <View className="ml-4 flex-1">
-                      <Text className="text-xl font-bold text-white mb-1">{user.username}</Text>
-                      <Text className="text-white text-opacity-80 text-sm">ID: {user.id}</Text>
-                    </View>
-                    <TouchableOpacity 
-                      className="bg-purple-100 rounded-full p-2 mr-2"
-                      onPress={() => {
-                        Alert.alert("Coming Soon", "Edit profile feature is coming soon!");
-                      }}
+                  <>
+                    <LinearGradient
+                      colors={['#9333EA', '#C084FC']}
+                      className="w-full h-full"
+                      start={{ x: 0.1, y: 0.1 }}
+                      end={{ x: 0.9, y: 0.9 }}
                     >
-                      <Feather name="edit-2" size={20} color="#9333EA" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                      {/* Decorative shapes for gradient background */}
+                      <View className="absolute inset-0 overflow-hidden">
+                        {/* Circle decorations */}
+                        <View className="absolute -right-10 -top-20 w-40 h-40 rounded-full bg-white opacity-10" />
+                        <View className="absolute right-20 top-5 w-20 h-20 rounded-full bg-white opacity-10" />
+                        <View className="absolute left-10 top-10 w-30 h-30 rounded-full bg-white opacity-10" />
+                        
+                        {/* Paw print pattern */}
+                        <View className="absolute top-12 left-5">
+                          <FontAwesome5 name="paw" size={16} color="white" style={{ opacity: 0.6 }} />
+                          <FontAwesome5 name="paw" size={12} color="white" style={{ marginLeft: 25, marginTop: 8, opacity: 0.5 }} />
+                          <FontAwesome5 name="paw" size={14} color="white" style={{ marginLeft: 10, marginTop: 12, opacity: 0.4 }} />
+                        </View>
+                        
+                        <View className="absolute top-16 right-10">
+                          <FontAwesome5 name="paw" size={12} color="white" style={{ opacity: 0.5, transform: [{ rotate: '45deg' }] }} />
+                          <FontAwesome5 name="paw" size={16} color="white" style={{ marginLeft: -5, marginTop: 18, opacity: 0.6, transform: [{ rotate: '-15deg' }] }} />
+                        </View>
+                        
+                        {/* Diagonal line decoration */}
+                        <View className="absolute bottom-20 left-0 right-0 h-0.5 bg-white opacity-10 transform rotate-6" />
+                        <View className="absolute bottom-30 left-0 right-0 h-0.5 bg-white opacity-5 transform -rotate-3" />
+                      </View>
+                      
+                      {/* User Info Section */}
+                      <View className="absolute bottom-0 left-0 right-0 p-4">
+                        <View className="flex-row items-end">
+                          <View className="shadow-xl">
+                            <Image
+                              source={{ uri: formatImageUrl(user.avatar) }}
+                              className="w-24 h-24 rounded-full border-4 border-white"
+                              style={{
+                                shadowColor: '#000',
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.2,
+                                shadowRadius: 4,
+                              }}
+                            />
+                          </View>
+                          <View className="ml-4 flex-1">
+                            <Text className="text-xl font-bold text-white mb-1">{user.username}</Text>
+                            <Text className="text-white text-opacity-80 text-sm">ID: {user.id}</Text>
+                          </View>
+                          <TouchableOpacity 
+                            className="bg-purple-100 rounded-full p-2 mr-2"
+                            onPress={() => {
+                              router.push("/(root)/(Edit)" as any);
+                            }}
+                          >
+                            <Feather name="edit-2" size={20} color="#9333EA" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </LinearGradient>
+                  </>
               </View>
               
               {/* Bio Section */}
