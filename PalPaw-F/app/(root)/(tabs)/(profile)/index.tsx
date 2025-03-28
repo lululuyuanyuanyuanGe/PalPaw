@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -11,11 +11,10 @@ import {
   Alert,
   RefreshControl,
 } from "react-native";
-import { Feather} from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import Constants from "expo-constants";
-import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   BaseItem,
@@ -35,7 +34,22 @@ import { ProductItem as ContextProductItem } from "@/context/ProductsContext";
 
 const ProfileScreen = () => {
   const router = useRouter();
+  const params = useLocalSearchParams<{ activeTab?: ProfileTab }>();
+  
+  // Use a ref to track if we've already applied the URL parameter
+  const initialTabApplied = useRef(false);
+  
+  // Get initial tab from URL or default to 'posts'
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
+  
+  // Effect to set initial tab from URL params only once
+  useEffect(() => {
+    if (!initialTabApplied.current && params.activeTab) {
+      setActiveTab(params.activeTab as ProfileTab);
+      initialTabApplied.current = true;
+    }
+  }, [params.activeTab]);
+  
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [postsLoading, setPostsLoading] = useState<boolean>(false);
   const [productsLoading, setProductsLoading] = useState<boolean>(false);
@@ -253,34 +267,8 @@ const ProfileScreen = () => {
                   end={{ x: 1, y: 1 }}
                 />
                 
-                {/* Menu Button */}
-                <View 
-                  style={{ 
-                    position: 'absolute',
-                    top: statusBarHeight + 10,
-                    left: 15,
-                    backgroundColor: 'rgba(255,255,255,0.2)',
-                    borderRadius: 20,
-                    padding: 4
-                  }}
-                >
-                  <DrawerToggleButton tintColor="#FFFFFF" />
-                </View>
-
-                {/* Logout Button */}
-                <TouchableOpacity 
-                  style={{ 
-                    position: 'absolute',
-                    top: statusBarHeight + 10,
-                    right: 15,
-                    backgroundColor: 'rgba(255,255,255,0.2)',
-                    borderRadius: 20,
-                    padding: 8
-                  }}
-                  onPress={handleLogout}
-                >
-                  <Feather name="log-out" size={20} color="#FFFFFF" />
-                </TouchableOpacity>
+                
+                  
                 
                 {/* User Info Section */}
                 <View className="absolute bottom-0 left-0 right-0 p-4">

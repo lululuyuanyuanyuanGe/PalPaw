@@ -1,27 +1,16 @@
-// app/(tabs)/(homeDrawer)/_layout.tsx
-import { Drawer } from 'expo-router/drawer';
-import { DrawerToggleButton } from '@react-navigation/drawer';
-import ProfileDrawer from '@/app/components/profileDrawer';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+// app/(tabs)/(profile)/_layout.tsx
+import { Stack } from 'expo-router';
 
 export default function ProfileLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <Drawer 
-        drawerContent={() => <ProfileDrawer />}
-        screenOptions={{
-          headerLeft: () => <DrawerToggleButton tintColor="#A45EE5" />,
-        }}
-      >
-        <Drawer.Screen 
-          name="index" 
-          options={{ 
-            drawerLabel: 'Profile', 
-            headerShown: false,
-            title: "Profile"
-          }} 
-        />
-      </Drawer>
-    </GestureHandlerRootView>
+    <Stack>
+      <Stack.Screen 
+        name="index" 
+        options={{ 
+          headerShown: false,
+          title: "Profile"
+        }} 
+      />
+    </Stack>
   );
 }

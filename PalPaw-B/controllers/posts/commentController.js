@@ -1,5 +1,4 @@
 import { Comment, User, Post } from '../../models/index.js';
-import { ApiError } from '../../utils/ApiError.js';
 
 // Create a new comment
 export const createComment = async (req, res, next) => {

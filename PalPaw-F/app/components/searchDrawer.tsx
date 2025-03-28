@@ -1,60 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, AntDesign, Feather, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authService } from '@/utils/apiClient';
+import { useAuth, useUser } from '@/context';
 
 const SearchDrawer = (props: any) => {
   const router = useRouter();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userData, setUserData] = useState<any>(null);
-
-  // Check for auth token on component mount and when the drawer is opened
-  useEffect(() => {
-    checkLoginStatus();
-  }, [props.state.index]); // Re-check when drawer is opened
-
-  // Function to check if user is logged in
-  const checkLoginStatus = async () => {
-    try {
-      const token = await AsyncStorage.getItem('authToken');
-      const userDataStr = await AsyncStorage.getItem('userData');
-      
-      if (token && userDataStr) {
-        setIsLoggedIn(true);
-        setUserData(JSON.parse(userDataStr));
-      } else {
-        setIsLoggedIn(false);
-        setUserData(null);
-      }
-    } catch (error) {
-      console.error('Error checking login status:', error);
-      setIsLoggedIn(false);
-    }
-  };
+  const { state: authState, logout } = useAuth();
+  const { state: userState } = useUser();
 
   // Handle login navigation
   const handleLogin = () => {
-    // Use proper route format for Expo Router
     router.push('/(root)/(auth)/login');
   };
 
   // Handle logout
   const handleLogout = async () => {
     try {
-      await authService.logout();
-      setIsLoggedIn(false);
-      setUserData(null);
-      
-      // Navigate back to home screen
+      await logout();
       router.push('/');
     } catch (error) {
       console.error('Error during logout:', error);
     }
   };
+
+  // Get user information from context
+  const isLoggedIn = authState.isAuthenticated && !!authState.user;
+  const userData = authState.user;
 
   return (
     <DrawerContentScrollView 
@@ -80,22 +54,22 @@ const SearchDrawer = (props: any) => {
             marginTop: 6
           }}
         >
-          {/* Decorative elements */}
+          {/* Decorative elements - reduced number of paws */}
           <View style={{ 
             position: 'absolute', 
             right: 15, 
             top: 20, 
-            opacity: 0.2 
+            opacity: 0.35 
           }}>
-            <MaterialCommunityIcons name="paw" size={60} color="#ffffff" />
+            <FontAwesome5 name="paw" size={50} color="#ffffff" />
           </View>
           <View style={{ 
             position: 'absolute', 
             left: 20, 
             bottom: 40, 
-            opacity: 0.15 
+            opacity: 0.3 
           }}>
-            <MaterialCommunityIcons name="paw" size={40} color="#ffffff" />
+            <FontAwesome5 name="paw" size={35} color="#ffffff" />
           </View>
           
           {/* Profile Avatar with Glow Effect */}
@@ -109,15 +83,23 @@ const SearchDrawer = (props: any) => {
                 elevation: 5,
               }}
             >
-              <View className="w-16 h-16 bg-purple-100 rounded-full items-center justify-center">
-                {isLoggedIn && userData ? (
-                  <Text className="text-purple-700 font-bold text-lg">
-                    {userData.username && userData.username.substring(0, 1).toUpperCase()}
-                  </Text>
-                ) : (
-                  <Ionicons name="paw" size={34} color="#9333EA" />
-                )}
-              </View>
+              {isLoggedIn && userData && userData.avatar ? (
+                <Image 
+                  source={{ uri: userData.avatar }} 
+                  className="w-16 h-16 rounded-full"
+                  resizeMode="cover"
+                />
+              ) : (
+                <View className="w-16 h-16 bg-purple-100 rounded-full items-center justify-center">
+                  {isLoggedIn && userData ? (
+                    <Text className="text-purple-700 font-bold text-lg">
+                      {userData.username && userData.username.substring(0, 1).toUpperCase()}
+                    </Text>
+                  ) : (
+                    <FontAwesome5 name="paw" size={30} color="#9333EA" />
+                  )}
+                </View>
+              )}
             </View>
             
             {/* Display username if logged in */}
@@ -165,106 +147,133 @@ const SearchDrawer = (props: any) => {
         </LinearGradient>
       </View>
 
-      {/* Menu items with custom colors */}
-      <View className="mt-3 px-2">
-        <DrawerItem
-          label="My Pets"
-          labelStyle={{ fontWeight: '500', color: '#474747' }}
-          icon={({ size }) => (
-            <MaterialCommunityIcons name="paw" size={size} color="#9333EA" />
-          )}
-          onPress={() => {
-            props.navigation.closeDrawer();
-            // Use a proper route format or a relative path
-            router.push('/');
-          }}
-          style={{ paddingVertical: 4 }}
-        />
-        
-        <DrawerItem
-          label="Scan QR Code"
-          labelStyle={{ fontWeight: '500', color: '#474747' }}
-          icon={({ size }) => (
-            <Ionicons name="qr-code-outline" size={size} color="#9333EA" />
-          )}
-          onPress={() => {
-            props.navigation.closeDrawer();
-          }}
-          style={{ paddingVertical: 4 }}
-        />
-        
-        <DrawerItem
-          label="Notifications"
-          labelStyle={{ fontWeight: '500', color: '#474747' }}
-          icon={({ size }) => (
-            <Ionicons name="notifications-outline" size={size} color="#9333EA" />
-          )}
-          onPress={() => {
-            props.navigation.closeDrawer();
-            // Use a proper route format or a relative path
-            router.push('/');
-          }}
-          style={{ paddingVertical: 4 }}
-        />
-        
-        <View className="border-t border-gray-200 my-2 mx-5" />
-        
-        <DrawerItem
-          label="Settings"
-          labelStyle={{ fontWeight: '500', color: '#474747' }}
-          icon={({ size }) => (
-            <Ionicons name="settings-outline" size={size} color="#9333EA" />
-          )}
-          onPress={() => {
-            props.navigation.closeDrawer();
-            // Use a proper route format or a relative path
-            router.push('/');
-          }}
-          style={{ paddingVertical: 4 }}
-        />
-        
-        <DrawerItem
-          label="Help Center"
-          labelStyle={{ fontWeight: '500', color: '#474747' }}
-          icon={({ size }) => (
-            <Ionicons name="help-circle-outline" size={size} color="#9333EA" />
-          )}
-          onPress={() => {
-            props.navigation.closeDrawer();
-          }}
-          style={{ paddingVertical: 4 }}
-        />
-        
-        <DrawerItem
-          label="User Agreement"
-          labelStyle={{ fontWeight: '500', color: '#474747' }}
-          icon={({ size }) => (
-            <Ionicons name="document-text-outline" size={size} color="#9333EA" />
-          )}
-          onPress={() => {
-            props.navigation.closeDrawer();
-          }}
-          style={{ paddingVertical: 4 }}
-        />
-        
-        <DrawerItem
-          label="Privacy Policy"
-          labelStyle={{ fontWeight: '500', color: '#474747' }}
-          icon={({ size }) => (
-            <Ionicons name="shield-outline" size={size} color="#9333EA" />
-          )}
-          onPress={() => {
-            props.navigation.closeDrawer();
-          }}
-          style={{ paddingVertical: 4 }}
-        />
+      {/* Reduced number of background paws */}
+      <View style={{ position: 'absolute', right: 25, top: 235, opacity: 0.15 }}>
+        <FontAwesome5 name="paw" size={35} color="#6B21A8" />
+      </View>
+      <View style={{ position: 'absolute', left: 40, top: 550, opacity: 0.17, transform: [{ rotate: '20deg' }] }}>
+        <FontAwesome5 name="paw" size={30} color="#7E22CE" />
       </View>
       
-      {/* App version at bottom */}
+      {/* Just a few paws in the bottom white space */}
+      <View style={{ position: 'absolute', right: 50, bottom: 180, opacity: 0.18, transform: [{ rotate: '10deg' }] }}>
+        <FontAwesome5 name="paw" size={55} color="#6B21A8" />
+      </View>
+      <View style={{ position: 'absolute', left: 60, bottom: 130, opacity: 0.25, transform: [{ rotate: '-15deg' }] }}>
+        <FontAwesome5 name="paw" size={35} color="#7E22CE" />
+      </View>
+
+      {/* Menu items with custom colors - made larger */}
+      <View className="mt-3 px-2">
+        {/* Menu Item: Messages - increased size */}
+        <View className="bg-white rounded-xl mx-3 my-2 shadow-sm" style={{
+          shadowColor: '#9333EA20',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 3,
+          elevation: 1,
+        }}>
+          <DrawerItem
+            label="Messages"
+            labelStyle={{ fontWeight: '600', color: '#474747', fontSize: 16 }}
+            icon={({ size }) => (
+              <View className="bg-purple-100 p-2.5 rounded-full">
+                <Feather name="message-circle" size={size-6} color="#9333EA" />
+              </View>
+            )}
+            onPress={() => {
+              props.navigation.closeDrawer();
+              router.push('/(root)/(chats)');
+            }}
+            style={{ paddingVertical: 10 }}
+          />
+        </View>
+        
+        {/* Menu Item: Liked Posts - increased size */}
+        <View className="bg-white rounded-xl mx-3 my-2 shadow-sm" style={{
+          shadowColor: '#9333EA20',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 3,
+          elevation: 1,
+        }}>
+          <DrawerItem
+            label="Liked Posts"
+            labelStyle={{ fontWeight: '600', color: '#474747', fontSize: 16 }}
+            icon={({ size }) => (
+              <View className="bg-purple-100 p-2.5 rounded-full">
+                <AntDesign name="heart" size={size-6} color="#9333EA" />
+              </View>
+            )}
+            onPress={() => {
+              props.navigation.closeDrawer();
+              router.push({
+                pathname: '/(root)/(tabs)/(profile)',
+                params: { activeTab: 'liked' }
+              });
+            }}
+            style={{ paddingVertical: 10 }}
+          />
+        </View>
+        
+        {/* Menu Item: Saved Products - increased size */}
+        <View className="bg-white rounded-xl mx-3 my-2 shadow-sm" style={{
+          shadowColor: '#9333EA20',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 3,
+          elevation: 1,
+        }}>
+          <DrawerItem
+            label="Saved Products"
+            labelStyle={{ fontWeight: '600', color: '#474747', fontSize: 16 }}
+            icon={({ size }) => (
+              <View className="bg-purple-100 p-2.5 rounded-full">
+                <Feather name="shopping-bag" size={size-6} color="#9333EA" />
+              </View>
+            )}
+            onPress={() => {
+              props.navigation.closeDrawer();
+              router.push('/(root)/(savedProducts)');
+            }}
+            style={{ paddingVertical: 10 }}
+          />
+        </View>
+        
+        {/* Menu Item: Settings - increased size */}
+        <View className="bg-white rounded-xl mx-3 my-2 shadow-sm" style={{
+          shadowColor: '#9333EA20',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 3,
+          elevation: 1,
+        }}>
+          <DrawerItem
+            label="Settings"
+            labelStyle={{ fontWeight: '600', color: '#474747', fontSize: 16 }}
+            icon={({ size }) => (
+              <View className="bg-purple-100 p-2.5 rounded-full">
+                <Ionicons name="settings-outline" size={size-6} color="#9333EA" />
+              </View>
+            )}
+            onPress={() => {
+              props.navigation.closeDrawer();
+              router.push('/');
+            }}
+            style={{ paddingVertical: 10 }}
+          />
+        </View>
+      </View>
+      
+      {/* App version at bottom with reduced paw prints */}
       <View className="mt-auto border-t border-gray-200 pt-3 pb-5">
         <Text className="text-center text-gray-400 text-xs">
           PalPaw v1.0.0
         </Text>
+        {/* Single bottom decorative paw */}
+        <View style={{ position: 'absolute', right: 20, bottom: 20, opacity: 0.4 }}>
+          <FontAwesome5 name="paw" size={18} color="#7E22CE" />
+        </View>
       </View>
     </DrawerContentScrollView>
   );
