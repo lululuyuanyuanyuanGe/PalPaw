@@ -12,7 +12,8 @@ import {
   Dimensions,
   Alert,
   Animated,
-  ViewStyle
+  ViewStyle,
+  Modal
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather, MaterialCommunityIcons, MaterialIcons, FontAwesome5, Ionicons, AntDesign } from '@expo/vector-icons';
@@ -49,6 +50,83 @@ const DecorativePaw = ({ style, size = 24, color = '#9333EA', opacity = 0.2, rot
   );
 };
 
+// Remove Product Confirmation Modal Component
+interface RemoveProductModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  isRemoving: boolean;
+}
+
+const RemoveProductModal: React.FC<RemoveProductModalProps> = ({ 
+  visible, 
+  onClose, 
+  onConfirm,
+  isRemoving
+}) => {
+  return (
+    <Modal
+      transparent={true}
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View className="flex-1 justify-center items-center bg-black/50">
+        <View className="bg-white w-10/12 rounded-2xl shadow-lg overflow-hidden">
+          {/* Header with decoration */}
+          <LinearGradient
+            colors={['#A855F7', '#9333EA']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            className="py-3 px-4"
+          >
+            <View className="flex-row items-center">
+              <MaterialCommunityIcons name="bookmark-remove" size={22} color="white" />
+              <Text className="text-white font-medium text-lg ml-2">
+                Remove Product
+              </Text>
+            </View>
+          </LinearGradient>
+          
+          {/* Modal Content */}
+          <View className="px-5 py-6">
+            <Text className="text-gray-700 text-base mb-6">
+              Are you sure you want to remove this product from your saved items?
+            </Text>
+            
+            {/* Action Buttons with improved styling */}
+            <View className="flex-row justify-end">
+              <TouchableOpacity
+                className="py-2 px-4 rounded-lg mr-3"
+                onPress={onClose}
+                disabled={isRemoving}
+              >
+                <Text className="text-gray-600 font-medium">Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                className="bg-red-500 py-2 px-4 rounded-lg"
+                onPress={onConfirm}
+                disabled={isRemoving}
+              >
+                {isRemoving ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Text className="text-white font-medium">Remove</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+          
+          {/* Decorative elements */}
+          <View className="absolute -bottom-4 -right-4 w-20 h-20 rounded-full bg-purple-100 opacity-30" />
+          <View className="absolute top-12 -left-4 w-12 h-12 rounded-full bg-purple-50 opacity-50" />
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 interface SavedProductsProps {
   statusBarHeight?: number;
   onClose?: () => void;
@@ -64,6 +142,9 @@ const SavedProducts: React.FC<SavedProductsProps> = ({
   
   const [refreshing, setRefreshing] = useState(false);
   const [lastFetchTime, setLastFetchTime] = useState(0);
+  const [removeModalVisible, setRemoveModalVisible] = useState(false);
+  const [productToRemove, setProductToRemove] = useState<string | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   // Animation values for subtle paw rotations
   const [animation] = useState(new Animated.Value(0));
@@ -156,30 +237,28 @@ const SavedProducts: React.FC<SavedProductsProps> = ({
 
   // Handle unsave product
   const handleUnsaveProduct = async (productId: string) => {
-    Alert.alert(
-      "Remove Product",
-      "Are you sure you want to remove this product from your saved items?",
-      [
-        { 
-          text: "Cancel", 
-          style: "cancel" 
-        },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              if (authState.isAuthenticated) {
-                await unsaveProduct(productId);
-              }
-            } catch (error) {
-              console.error('Error removing product:', error);
-              Alert.alert("Error", "Failed to remove product. Please try again.");
-            }
-          }
-        }
-      ]
-    );
+    setProductToRemove(productId);
+    setRemoveModalVisible(true);
+  };
+
+  // Add a new function to confirm removal
+  const confirmRemoveProduct = async () => {
+    if (!productToRemove) return;
+    
+    setIsRemoving(true);
+    try {
+      if (authState.isAuthenticated) {
+        await unsaveProduct(productToRemove);
+        console.log(`Successfully removed product: ${productToRemove}`);
+      }
+    } catch (error) {
+      console.error('Error removing product:', error);
+      Alert.alert("Error", "Failed to remove product. Please try again.");
+    } finally {
+      setIsRemoving(false);
+      setRemoveModalVisible(false);
+      setProductToRemove(null);
+    }
   };
 
   // Render each product item
@@ -414,6 +493,14 @@ const SavedProducts: React.FC<SavedProductsProps> = ({
             )}
           </View>
         }
+      />
+      
+      {/* Remove Product Confirmation Modal */}
+      <RemoveProductModal
+        visible={removeModalVisible}
+        onClose={() => setRemoveModalVisible(false)}
+        onConfirm={confirmRemoveProduct}
+        isRemoving={isRemoving}
       />
     </SafeAreaView>
   );
