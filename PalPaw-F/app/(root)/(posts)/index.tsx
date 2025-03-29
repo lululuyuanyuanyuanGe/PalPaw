@@ -20,10 +20,11 @@ import Animated, {
   interpolate,
   Extrapolate
 } from 'react-native-reanimated';
-import { usePosts } from '@/context';
+import { usePosts, useUser } from '@/context';
 import MediaCarousel from '@/app/components/MediaCarousel';
 import { useAuth } from '@/context';
 import { FontAwesome5 } from '@expo/vector-icons';
+import { formatImageUrl } from '@/utils/mediaUtils';
 
 // Utility function to format the date/time
 const formatTimeAgo = (date: string | Date) => {
@@ -78,7 +79,7 @@ const Comment: React.FC<CommentProps> = ({ author, content, timestamp, avatarUri
     <View className="bg-white p-4 rounded-xl mb-3 shadow-sm border border-gray-50">
       <View className="flex-row items-center mb-3">
         <Image
-          source={{ uri: displayAvatarUri }}
+          source={{ uri: formatImageUrl(displayAvatarUri) }}
           className="w-9 h-9 rounded-full border-2 border-purple-100"
         />
         <View className="ml-3 flex-1">
@@ -101,6 +102,15 @@ const PostDetail = () => {
   const { state: postsState, likePost, unlikePost, addComment, fetchPostById, isPostLiked } = usePosts();
   const { currentPost, userPosts, posts, likedPosts } = postsState;
   
+  // Get user context for profile data
+  const { state: userState } = useUser();
+  
+  // Get auth context for authentication status
+  const { state: authState } = useAuth();
+  
+  // Combine user data from both contexts
+  const userData = userState.profile || authState.user;
+  
   // Find post in all collections in priority order
   const postId = params.id as string;
   const post = currentPost?.id === postId 
@@ -116,9 +126,6 @@ const PostDetail = () => {
       transform: [{ scale: likeScale.value }]
     };
   });
-  
-  // Get auth context
-  const { state: authState } = useAuth();
   
   // Use useFocusEffect to ensure the post is fetched every time the screen comes into focus
   useFocusEffect(
@@ -268,7 +275,7 @@ const PostDetail = () => {
           <View className="flex-row items-center">
             <View className="w-12 h-12 rounded-full border-2 border-purple-100 overflow-hidden">
               <Image
-                source={{ uri: post.authorData?.avatar || 'https://robohash.org/user123?set=set4' }}
+                source={{ uri: formatImageUrl(post.authorData?.avatar) || 'https://robohash.org/user123?set=set4' }}
                 className="w-full h-full"
                 resizeMode="cover"
               />
@@ -389,22 +396,25 @@ const PostDetail = () => {
       </ScrollView>
 
       {/* Comment Input with Enhanced UI */}
-      <View className="bg-white border-t border-gray-100 px-4 py-3 absolute bottom-0 left-0 right-0 shadow-up">
+      <View className="bg-white border-t border-gray-100 px-4 py-3 absolute bottom-0 left-0 right-0">
         <View className="flex-row items-center">
-          {authState.isAuthenticated && authState.user && authState.user.avatar ? (
-            <Image
-              source={{ uri: authState.user.avatar }}
-              className="w-8 h-8 rounded-full mr-3"
-            />
+          {authState.isAuthenticated && userData ? (
+            userData.avatar ? (
+              <Image
+                source={{ uri: formatImageUrl(userData.avatar) }}
+                className="w-8 h-8 rounded-full mr-3"
+                defaultSource={require('../../../assets/images/cat1.jpg')}
+              />
+            ) : (
+              <View className="w-8 h-8 bg-purple-100 rounded-full mr-3 items-center justify-center">
+                <Text className="text-purple-700 font-bold text-xs">
+                  {userData.username?.substring(0, 1).toUpperCase() || "?"}
+                </Text>
+              </View>
+            )
           ) : (
             <View className="w-8 h-8 bg-purple-100 rounded-full mr-3 items-center justify-center">
-              {authState.isAuthenticated && authState.user ? (
-                <Text className="text-purple-700 font-bold text-xs">
-                  {authState.user.username.substring(0, 1).toUpperCase()}
-                </Text>
-              ) : (
-                <FontAwesome5 name="paw" size={12} color="#9333EA" />
-              )}
+              <FontAwesome5 name="paw" size={12} color="#9333EA" />
             </View>
           )}
           <View className="flex-1 flex-row items-center bg-gray-100 rounded-full px-4 py-2">

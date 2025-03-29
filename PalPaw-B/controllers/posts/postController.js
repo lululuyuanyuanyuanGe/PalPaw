@@ -152,7 +152,10 @@ export const getPostById = async (req, res) => {
     const formattedPost = {
       ...postJson,
       views: 0, // Add default views value
-      authorData: postJson.author,
+      authorData: {
+        ...postJson.author,
+        avatar: postJson.author?.avatar || null // Ensure avatar is explicitly included even if null
+      },
       author: undefined, // Remove the nested author object
       isLiked
     };
@@ -161,10 +164,14 @@ export const getPostById = async (req, res) => {
     if (formattedPost.comments) {
       formattedPost.comments = formattedPost.comments.map(comment => ({
         id: comment.id,
-        author: comment.author.username,
+        author: {
+          id: comment.author.id,
+          username: comment.author.username,
+          avatar: comment.author.avatar || null // Ensure avatar is explicitly included even if null
+        },
         content: comment.content,
         timestamp: comment.createdAt,
-        avatarUri: comment.author.avatar,
+        avatarUri: comment.author.avatar || null, // Ensure avatarUri is explicitly included even if null
         likes: comment.likes || 0
       }));
     }
