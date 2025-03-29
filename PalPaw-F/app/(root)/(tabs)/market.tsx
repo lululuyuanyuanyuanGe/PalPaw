@@ -1,4 +1,4 @@
-// app/market.tsx - Market Screen with Pet Supplies and Pets tabs
+// app/market.tsx - Redesigned Market Screen with unified vertical product listings
 import React, { useState } from 'react';
 import { 
   View, 
@@ -9,144 +9,122 @@ import {
   Image, 
   FlatList,
   StatusBar,
-  SafeAreaView,
-  Platform
+  SafeAreaView
 } from 'react-native';
 import { 
   Feather, 
   MaterialCommunityIcons,
-  FontAwesome,
-  Ionicons 
+  FontAwesome
 } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
 
 // Define types
-type SupplyItem = {
+type ProductItem = {
   id: number;
   name: string;
+  description: string;
   price: number;
   rating: number;
   image: string;
+  category: string;
   discount?: number;
+  isNew?: boolean;
 };
 
-type PetItem = {
-  id: number;
-  name: string;
-  breed: string;
-  age: string;
-  price: number;
-  image: string;
-  distance: string;
-};
+type CategoryIconName = 'paw' | 'food-variant' | 'toy-brick' | 'bed' | 'tshirt-crew' | 
+                       'medical-bag' | 'content-cut' | 'whistle' | 'bag-suitcase' | 'dog-side';
 
 type Category = {
   id: number;
   name: string;
-  icon: string;
+  icon: CategoryIconName;
+  color: string;
 };
 
 // Define market screen component
 export default function MarketScreen() {
-  const [activeTab, setActiveTab] = useState<'supplies' | 'pets'>('supplies');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   
-  // Mock data for pet supplies
-  const petSupplies: SupplyItem[] = [
+  // Mock data for pet products - combined list
+  const products: ProductItem[] = [
     {
       id: 1,
       name: 'Premium Dog Food',
+      description: 'High-quality nutrition for your furry friend',
       price: 29.99,
       rating: 4.8,
       image: 'https://picsum.photos/200',
+      category: 'Pet Food',
       discount: 15
     },
     {
       id: 2,
       name: 'Cat Tree Tower',
+      description: 'Multi-level cat condo with scratching posts',
       price: 49.99,
       rating: 4.6,
-      image: 'https://picsum.photos/201'
+      image: 'https://picsum.photos/201',
+      category: 'Pet Beds',
+      isNew: true
     },
     {
       id: 3,
       name: 'Bird Cage Deluxe',
+      description: 'Spacious and stylish home for your feathered companion',
       price: 75.99,
       rating: 4.7,
-      image: 'https://picsum.photos/202'
+      image: 'https://picsum.photos/202',
+      category: 'Accessories'
     },
     {
       id: 4,
       name: 'Hamster Exercise Wheel',
+      description: 'Silent spinner for happy rodents',
       price: 12.99,
       rating: 4.5,
       image: 'https://picsum.photos/203',
+      category: 'Pet Toys',
       discount: 10
     },
     {
       id: 5,
       name: 'Fish Tank Filter',
+      description: 'Advanced filtration for crystal clear water',
       price: 24.99,
       rating: 4.3,
-      image: 'https://picsum.photos/204'
+      image: 'https://picsum.photos/204',
+      category: 'Health & Wellness'
     },
     {
       id: 6,
       name: 'Cozy Pet Bed',
+      description: 'Ultra-soft sleeping space for dogs and cats',
       price: 34.99,
       rating: 4.9,
       image: 'https://picsum.photos/205',
+      category: 'Pet Beds',
       discount: 20
-    }
-  ];
-  
-  // Mock data for pets
-  const pets: PetItem[] = [
+    },
     {
-      id: 1,
-      name: 'Max',
-      breed: 'Golden Retriever',
-      age: '2 years',
-      price: 800,
+      id: 7,
+      name: 'Interactive Dog Toy',
+      description: 'Mental stimulation for intelligent pups',
+      price: 18.99,
+      rating: 4.7,
       image: 'https://picsum.photos/206',
-      distance: '1.2 mi'
+      category: 'Pet Toys',
+      isNew: true
     },
     {
-      id: 2,
-      name: 'Luna',
-      breed: 'Siamese Cat',
-      age: '1 year',
-      price: 500,
+      id: 8,
+      name: 'Cat Scratching Post',
+      description: 'Save your furniture with this sisal-wrapped post',
+      price: 22.50,
+      rating: 4.6,
       image: 'https://picsum.photos/207',
-      distance: '0.5 mi'
-    },
-    {
-      id: 3,
-      name: 'Charlie',
-      breed: 'Cockatiel',
-      age: '8 months',
-      price: 150,
-      image: 'https://picsum.photos/208',
-      distance: '3.7 mi'
-    },
-    {
-      id: 4,
-      name: 'Bella',
-      breed: 'Holland Lop Rabbit',
-      age: '4 months',
-      price: 120,
-      image: 'https://picsum.photos/209',
-      distance: '2.1 mi'
-    },
-    {
-      id: 5,
-      name: 'Rocky',
-      breed: 'French Bulldog',
-      age: '1.5 years',
-      price: 1200,
-      image: 'https://picsum.photos/210',
-      distance: '4.3 mi'
+      category: 'Pet Beds'
     }
   ];
   
@@ -154,89 +132,95 @@ export default function MarketScreen() {
     setSearchQuery('');
   };
 
-  // Categories for pet supplies
-  const supplyCategories: Category[] = [
-    { id: 1, name: 'Food', icon: '🍖' },
-    { id: 2, name: 'Toys', icon: '🧸' },
-    { id: 3, name: 'Beds', icon: '🛏️' },
-    { id: 4, name: 'Grooming', icon: '✂️' },
-    { id: 5, name: 'Clothing', icon: '👕' },
-    { id: 6, name: 'Health', icon: '💊' }
+  // Get color based on category
+  const getCategoryColor = (categoryName: string): string => {
+    const colorMap: {[key: string]: string} = {
+      'Pet Food': '#8B5CF6',     // Violet-500
+      'Pet Toys': '#A855F7',     // Purple-500
+      'Pet Beds': '#D946EF',     // Fuchsia-500
+      'Pet Clothing': '#EC4899', // Pink-500
+      'Health & Wellness': '#06B6D4', // Cyan-500
+      'Grooming': '#14B8A6',     // Teal-500
+      'Training': '#F59E0B',     // Amber-500
+      'Carriers & Travel': '#10B981', // Emerald-500
+      'Accessories': '#6366F1'   // Indigo-500
+    };
+    
+    return colorMap[categoryName] || '#9333EA';
+  };
+
+  // Categories for products
+  const categories: Category[] = [
+    { id: 0, name: 'All', icon: 'paw', color: '#9333EA' },
+    { id: 1, name: 'Pet Food', icon: 'food-variant', color: getCategoryColor('Pet Food') },
+    { id: 2, name: 'Pet Toys', icon: 'toy-brick', color: getCategoryColor('Pet Toys') },
+    { id: 3, name: 'Pet Beds', icon: 'bed', color: getCategoryColor('Pet Beds') },
+    { id: 4, name: 'Pet Clothing', icon: 'tshirt-crew', color: getCategoryColor('Pet Clothing') },
+    { id: 5, name: 'Health & Wellness', icon: 'medical-bag', color: getCategoryColor('Health & Wellness') },
+    { id: 6, name: 'Grooming', icon: 'content-cut', color: getCategoryColor('Grooming') },
+    { id: 7, name: 'Training', icon: 'whistle', color: getCategoryColor('Training') },
+    { id: 8, name: 'Carriers & Travel', icon: 'bag-suitcase', color: getCategoryColor('Carriers & Travel') },
+    { id: 9, name: 'Accessories', icon: 'dog-side', color: getCategoryColor('Accessories') }
   ];
   
-  // Categories for pets
-  const petCategories: Category[] = [
-    { id: 1, name: 'Dogs', icon: '🐕' },
-    { id: 2, name: 'Cats', icon: '🐈' },
-    { id: 3, name: 'Birds', icon: '🦜' },
-    { id: 4, name: 'Fish', icon: '🐠' },
-    { id: 5, name: 'Small Pets', icon: '🐹' },
-    { id: 6, name: 'Reptiles', icon: '🦎' }
-  ];
-  
-  // Display categories based on active tab
-  const displayCategories = activeTab === 'supplies' ? supplyCategories : petCategories;
+  // Filter products based on search query and selected category
+  const filteredProducts = products.filter(product => {
+    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          product.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
+    
+    return matchesSearch && matchesCategory;
+  });
 
-  // Render supply item - now with width set for 2 items per row
-  const renderSupplyItem = ({ item }: { item: SupplyItem }) => (
-    <View className="bg-white rounded-xl shadow-sm overflow-hidden border border-pink-50 w-[48%] mb-4">
-      <View className="relative">
-        <Image 
-          source={{ uri: item.image }} 
-          className="w-full h-32"
-          style={{ resizeMode: 'cover' }}
-        />
-        {item.discount && (
-          <View className="absolute top-2 left-2 bg-pink-500 rounded-full px-2 py-0.5">
-            <Text className="text-white text-xs font-bold">{item.discount}% OFF</Text>
+  // Render product item
+  const renderProductItem = ({ item }: { item: ProductItem }) => (
+    <TouchableOpacity 
+      className="bg-white rounded-xl shadow-sm overflow-hidden border border-pink-50 mb-4"
+      activeOpacity={0.9}
+    >
+      <View className="flex-row">
+        <View className="relative">
+          <Image 
+            source={{ uri: item.image }} 
+            className="w-28 h-28"
+            style={{ resizeMode: 'cover' }}
+          />
+          {item.discount && (
+            <View className="absolute top-2 left-2 bg-pink-500 rounded-full px-2 py-0.5">
+              <Text className="text-white text-xs font-bold">{item.discount}% OFF</Text>
+            </View>
+          )}
+          {item.isNew && (
+            <View className="absolute top-2 left-2 bg-teal-500 rounded-full px-2 py-0.5">
+              <Text className="text-white text-xs font-bold">NEW</Text>
+            </View>
+          )}
+        </View>
+        
+        <View className="flex-1 p-3 justify-between">
+          <View>
+            <Text className="font-medium text-gray-800 text-base">{item.name}</Text>
+            <Text className="text-xs text-gray-500 mt-1" numberOfLines={2}>{item.description}</Text>
+            
+            <View className="flex-row items-center mt-1 gap-1">
+              <FontAwesome name="star" size={12} color="#FBBF24" />
+              <Text className="text-xs text-gray-600">{item.rating}</Text>
+              
+              <View className="ml-2 px-2 py-0.5 bg-purple-100 rounded-full">
+                <Text className="text-xs text-purple-700">{item.category}</Text>
+              </View>
+            </View>
           </View>
-        )}
-      </View>
-      <View className="p-3">
-        <Text className="font-medium text-gray-800 text-sm">{item.name}</Text>
-        <View className="flex-row items-center mt-1">
-          <FontAwesome name="star" size={12} color="#FBBF24" />
-          <Text className="text-xs text-gray-600 ml-1">{item.rating}</Text>
-        </View>
-        <View className="mt-2 flex-row justify-between items-center">
-          <Text className="font-bold text-purple-600">${item.price.toFixed(2)}</Text>
-          <TouchableOpacity className="bg-purple-100 p-1.5 rounded-full">
-            <Feather name="shopping-bag" size={16} color="#9333EA" />
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
-
-  // Render pet item
-  const renderPetItem = ({ item }: { item: PetItem }) => (
-    <View className="bg-white rounded-xl shadow-sm overflow-hidden border border-pink-50 w-full mb-3">
-      <View className="relative">
-        <Image 
-          source={{ uri: item.image }} 
-          className="w-full h-32"
-          style={{ resizeMode: 'cover' }}
-        />
-        <View className="absolute bottom-2 right-2 bg-white bg-opacity-80 rounded-full px-2 py-0.5">
-          <Text className="text-xs font-medium">{item.distance}</Text>
-        </View>
-      </View>
-      <View className="p-3">
-        <View className="flex-row justify-between">
-          <Text className="font-medium text-gray-800">{item.name}</Text>
-          <View className="bg-purple-100 px-2 py-0.5 rounded-full">
-            <Text className="text-xs text-purple-600">{item.age}</Text>
+          
+          <View className="flex-row justify-between items-center mt-2">
+            <Text className="font-bold text-purple-600">${item.price.toFixed(2)}</Text>
+            <TouchableOpacity className="bg-purple-600 px-3 py-1.5 rounded-full">
+              <Text className="text-white text-xs font-medium">View Details</Text>
+            </TouchableOpacity>
           </View>
         </View>
-        <Text className="text-xs text-gray-500 mt-1">{item.breed}</Text>
-        <View className="mt-2 flex-row justify-between items-center">
-          <Text className="font-bold text-purple-600">${item.price}</Text>
-          <TouchableOpacity className="bg-purple-100 px-2 py-1 rounded-full">
-            <Text className="text-purple-600 text-xs font-medium">View</Text>
-          </TouchableOpacity>
-        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
   
   return (
@@ -261,17 +245,9 @@ export default function MarketScreen() {
         <View className="flex-1">
           {/* Fixed Header - Always stays at the top */}
           <View className="bg-purple-500 px-4 shadow-md z-10">
-            {/* Title and Cart Icon */}
+            {/* Title */}
             <View className="flex-row justify-between items-center mb-4">
               <Text className="text-white text-xl font-bold">PalPaw Market</Text>
-              <View className="relative">
-                <View className="h-10 w-10 bg-white rounded-full items-center justify-center flex-row">
-                  <Feather name="shopping-bag" size={20} color="#A855F7" />
-                </View>
-                <View className="absolute -top-1 -right-1 h-5 w-5 bg-pink-500 rounded-full items-center justify-center">
-                  <Text className="text-white text-xs">3</Text>
-                </View>
-              </View>
             </View>
             
             {/* Search Bar */}
@@ -283,98 +259,70 @@ export default function MarketScreen() {
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 className="bg-white py-3 pl-10 pr-10 rounded-full w-full"
-                placeholder={activeTab === 'supplies' ? "Search for pet supplies..." : "Search for pets..."}
+                placeholder="Search for pet products..."
               />
               {searchQuery ? (
                 <TouchableOpacity
                   onPress={clearSearchQuery}
-                  className="absolute right-12 top-0 bottom-0 justify-center z-10"
+                  className="absolute right-3 top-0 bottom-0 justify-center z-10"
                 >
                   <Feather name="x" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
               ) : null}
-              <TouchableOpacity className="absolute right-3 top-0 bottom-0 justify-center z-10">
-                <Feather name="filter" size={18} color="#A855F7" />
-              </TouchableOpacity>
-            </View>
-            
-            {/* Sub Tabs */}
-            <View className="flex-row bg-purple-400 rounded-full p-1 mb-4">
-              <TouchableOpacity 
-                onPress={() => setActiveTab('supplies')}
-                className={`flex-1 py-2 rounded-full flex-row items-center justify-center ${
-                  activeTab === 'supplies' 
-                    ? 'bg-white' 
-                    : ''
-                }`}
-              >
-                <Feather 
-                  name="shopping-bag" 
-                  size={16} 
-                  color={activeTab === 'supplies' ? '#9333EA' : '#fff'} 
-                />
-                <Text 
-                  className={`ml-1 ${
-                    activeTab === 'supplies' 
-                      ? 'text-purple-600 font-medium' 
-                      : 'text-white'
-                  }`}
-                >
-                  Supplies
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                onPress={() => setActiveTab('pets')}
-                className={`flex-1 py-2 rounded-full flex-row items-center justify-center ${
-                  activeTab === 'pets' 
-                    ? 'bg-white' 
-                    : ''
-                }`}
-              >
-                <MaterialCommunityIcons 
-                  name="paw" 
-                  size={16} 
-                  color={activeTab === 'pets' ? '#9333EA' : '#fff'} 
-                />
-                <Text 
-                  className={`ml-1 ${
-                    activeTab === 'pets' 
-                      ? 'text-purple-600 font-medium' 
-                      : 'text-white'
-                  }`}
-                >
-                  Pets
-                </Text>
-              </TouchableOpacity>
             </View>
           </View>
           
-          {/* Scrollable Content Area - Categories and products */}
+          {/* Pink Border Line */}
+          <View className="h-1 bg-pink-500 w-full" />
+          
+          {/* Scrollable Content Area */}
           <ScrollView 
             className="flex-1 bg-blue-50"
             showsVerticalScrollIndicator={false}
-            nestedScrollEnabled={true}
           >
-            {/* Pink Border Line - Part of scrollable content */}
-            <View className="h-1 bg-pink-500 w-full" />
-            
             {/* Categories */}
             <View className="px-4 pt-4">
               <ScrollView 
                 horizontal 
                 showsHorizontalScrollIndicator={false} 
                 className="pb-2"
-                nestedScrollEnabled={true}
               >
-                {displayCategories.map(category => (
+                {categories.map(category => (
                   <TouchableOpacity 
                     key={category.id} 
                     className="flex-none mr-3 items-center"
+                    onPress={() => setSelectedCategory(category.name)}
                   >
-                    <View className="w-16 h-16 bg-white rounded-full items-center justify-center shadow-sm border border-pink-100">
-                      <Text className="text-2xl">{category.icon}</Text>
+                    <View className="w-16 h-16 rounded-full items-center justify-center shadow-sm"
+                      style={{
+                        backgroundColor: selectedCategory === category.name 
+                          ? `${category.color}15` // 15 is hex for 8% opacity
+                          : '#F9F5FF', // Light purple background for all icons
+                        borderWidth: 1,
+                        borderColor: selectedCategory === category.name 
+                          ? category.color 
+                          : '#F3E8FF' // Light border
+                      }}
+                    >
+                      <MaterialCommunityIcons 
+                        name={category.icon} 
+                        size={28}
+                        color={category.color}
+                      />
                     </View>
-                    <Text className="text-xs font-medium mt-1 text-gray-700">{category.name}</Text>
+                    <Text className={`text-xs mt-1 ${
+                      selectedCategory === category.name 
+                        ? 'font-bold' 
+                        : 'font-medium'
+                    }`}
+                    style={{ 
+                      color: selectedCategory === category.name 
+                        ? category.color
+                        : '#4B5563'
+                    }}
+                    >
+                      {category.name}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -382,39 +330,19 @@ export default function MarketScreen() {
             
             {/* Product Listings */}
             <View className="px-4 pt-4 pb-20">
-              <Text className="text-lg font-bold text-gray-800 mb-3">
-                {activeTab === 'supplies' ? 'Popular Supplies' : 'Pets Near You'}
-              </Text>
-              
-              {/* Supply items or Pets list - Using original FlatList components */}
-              {activeTab === 'supplies' ? (
-                <FlatList
-                  key="supplies-grid"
-                  data={petSupplies}
-                  renderItem={renderSupplyItem}
-                  keyExtractor={(item) => item.id.toString()}
-                  numColumns={2}
-                  columnWrapperStyle={{ 
-                    justifyContent: 'space-between',
-                    marginHorizontal: 2,
-                  }}
-                  contentContainerStyle={{
-                    paddingBottom: 20,
-                  }}
-                  showsVerticalScrollIndicator={false}
-                  scrollEnabled={false} // Prevent scrolling within FlatList since parent ScrollView handles it
-                  nestedScrollEnabled={true}
-                />
+              {filteredProducts.length === 0 ? (
+                <View className="items-center justify-center py-20">
+                  <MaterialCommunityIcons name="paw" size={60} color="#D1D5DB" />
+                  <Text className="text-gray-500 mt-4 text-center">
+                    No products found matching your search.
+                  </Text>
+                </View>
               ) : (
                 <FlatList
-                  key="pets-list"
-                  data={pets}
-                  renderItem={renderPetItem}
+                  data={filteredProducts}
+                  renderItem={renderProductItem}
                   keyExtractor={(item) => item.id.toString()}
-                  numColumns={1}
-                  showsVerticalScrollIndicator={false}
                   scrollEnabled={false} // Prevent scrolling within FlatList since parent ScrollView handles it
-                  nestedScrollEnabled={true}
                 />
               )}
             </View>
