@@ -9,7 +9,9 @@ import {
   getProductById,
   createProductWithMedia,
   deletePost,
-  deleteProduct
+  deleteProduct,
+  updateUserProfile,
+  avatarUpload
 } from '../controllers/upload/uploadController.js';
 import { authenticate } from '../middlewares/authMiddleware.js';
 import { createProduct } from '../controllers/products/productController.js';
@@ -92,5 +94,12 @@ router.get('/product/:productId', getProductById);
  * @access Private (only product owner)
  */
 router.delete('/product/:productId', authenticate, deleteProduct);
+
+/**
+ * @route PUT /api/upload/profile
+ * @desc Update user profile including avatar
+ * @access Private
+ */
+router.put('/profile', authenticate, avatarUpload.single('avatar'), updateUserProfile);
 
 export default router;

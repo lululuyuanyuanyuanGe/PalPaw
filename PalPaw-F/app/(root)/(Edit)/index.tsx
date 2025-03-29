@@ -161,8 +161,8 @@ const EditProfileScreen = () => {
   // Create getDisplayItems function
   const getDisplayItems = (): BaseItem[] => {
     return activeTab === 'posts'
-      ? postsState.userPosts.filter(post => post.id !== "new-post-button" && post.id !== itemToDelete)
-      : productsState.userProducts.filter(product => product.id !== "new-product-button" && product.id !== itemToDelete);
+      ? postsState.userPosts.filter(post => post.id !== "new-post-button")
+      : productsState.userProducts.filter(product => product.id !== "new-product-button");
   };
 
   // Render grid items - using the ProfileRenderer with improved layout
@@ -290,7 +290,7 @@ const EditProfileScreen = () => {
           <View className="absolute left-0 right-0 -bottom-10 items-center justify-center z-10">
             <View className="w-[100px] h-[100px] rounded-full bg-white p-[3px] shadow-lg">
               <Image
-                source={avatarImage ? { uri: formatImageUrl(avatarImage) } : require('../../../assets/images/cat1.jpg')}
+                source={{ uri: formatImageUrl("https://placekitten.com/200/200") }}
                 className="w-full h-full rounded-full"
               />
               <TouchableOpacity

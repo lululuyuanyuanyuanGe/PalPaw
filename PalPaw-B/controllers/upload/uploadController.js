@@ -774,3 +774,123 @@ export const deleteProduct = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Server error deleting product' });
   }
 };
+
+/**
+ * Update user profile including avatar, bio and username
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const updateUserProfile = async (req, res) => {
+  try {
+    console.log('updateUserProfile called');
+    console.log('Request body:', req.body);
+    console.log('Request file:', req.file);
+
+    const userId = req.user.id;
+    const { username, bio } = req.body;
+    
+    // Find the user
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update username and bio if provided
+    if (username) user.username = username;
+    if (bio !== undefined) user.bio = bio;
+
+    // Handle avatar upload if provided
+    if (req.file) {
+      // Create avatar directory if it doesn't exist
+      const avatarDir = path.join(process.cwd(), 'uploads', userId.toString(), 'avatar');
+      if (!fs.existsSync(avatarDir)) {
+        fs.mkdirSync(avatarDir, { recursive: true });
+      }
+
+      // Delete old avatar if it exists
+      if (user.avatar && !user.avatar.includes('robohash')) {
+        try {
+          const oldAvatarPath = path.join(process.cwd(), user.avatar);
+          if (fs.existsSync(oldAvatarPath)) {
+            await promisify(fs.unlink)(oldAvatarPath);
+            console.log(`Deleted old avatar: ${oldAvatarPath}`);
+          }
+        } catch (error) {
+          console.warn('Failed to delete old avatar:', error.message);
+        }
+      }
+
+      // Set the new avatar path
+      const avatarUrl = `/uploads/${userId}/avatar/${req.file.filename}`;
+      user.avatar = avatarUrl;
+    }
+
+    // Save the updated user
+    await user.save();
+
+    // Return the updated user without sensitive information
+    const userResponse = {
+      id: user.id,
+      username: user.username,
+      bio: user.bio,
+      avatar: user.avatar,
+      email: user.email,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: userResponse
+    });
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while updating profile',
+      error: error.message
+    });
+  }
+};
+
+// Configure avatar-specific storage
+const avatarStorage = multer.diskStorage({
+  destination: function(req, file, cb) {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return cb(new Error('User ID not available for avatar upload'), null);
+    }
+    
+    // Create avatar directory
+    const avatarDir = path.join(process.cwd(), 'uploads', userId.toString(), 'avatar');
+    if (!fs.existsSync(avatarDir)) {
+      fs.mkdirSync(avatarDir, { recursive: true });
+    }
+    
+    cb(null, avatarDir);
+  },
+  filename: function(req, file, cb) {
+    const uniqueName = `avatar_${uuidv4()}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  }
+});
+
+// Configure avatar upload with limits
+export const avatarUpload = multer({ 
+  storage: avatarStorage,
+  limits: { 
+    fileSize: 5 * 1024 * 1024 // 5MB limit for avatars
+  },
+  fileFilter: function(req, file, cb) {
+    // Only accept images
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files are allowed for avatars'));
+    }
+    cb(null, true);
+  }
+});
