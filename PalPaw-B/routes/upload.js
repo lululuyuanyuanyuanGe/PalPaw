@@ -59,7 +59,7 @@ router.delete('/post/:postId', authenticate, deletePost);
 // router.post('/product', authenticate, productUpload.array('media'), handlePostMulterError, createProductWithFormData);
 
 /**
- * @route POST /api/products/upload
+ * @route POST /api/upload/products/upload
  * @desc Upload media files and create a product - endpoint that frontend expects
  * @access Private
  */

@@ -3,7 +3,7 @@ import { View, Text, Image, TouchableOpacity, ActivityIndicator, StyleSheet, Dim
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BaseItem, PostItem, ProductItem, isButtonItem, isPostItem, isProductItem, ProfileTab } from './types';
+import { BaseItem, PostItem, ProductItem, isButtonItem, isPostItem, isProductItem, ProfileTab, newPostButton } from './types';
 import { usePosts, useProducts } from '../../../../context';
 import Animated, { useSharedValue, withSpring } from 'react-native-reanimated';
 import { formatImageUrl, isVideoUrl, processMediaFiles } from '../../../../utils/mediaUtils';
@@ -79,25 +79,23 @@ export const RenderItem: React.FC<RenderItemProps> = ({
   
   // Function to navigate to post detail
   const navigateToPostDetail = async (post: BaseItem) => {
-    if (isPostItem(post)) {
-      try {
-        // Set current post in context first
-        setCurrentPost(post);
-        
-        // Navigate to posts detail screen with just the post ID as string
-        router.push({
-          pathname: "/(root)/(posts)",
-          params: {
-            id: String(post.id)
-          }
-        } as any);
-      } catch (error) {
-        console.error("Error navigating to post:", error);
-        router.push({
-          pathname: "/(root)/(posts)",
-          params: { id: String(post.id) }
-        } as any);
-      }
+    if (post.id === 'newPost' || post === newPostButton) {
+      // Navigate to post creation
+      router.push("/(root)/(createPosts)/createPosts" as any);
+    } else if (post.id === 'newProduct' || post.isButton) {
+      // Navigate to product creation
+      router.push("/(root)/(createProducts)/createProducts" as any);
+    } else if (isPostItem(post)) {
+      // Set the current post in context before navigation
+      setCurrentPost(post as PostItem);
+      
+      // Navigate to posts detail screen with just the post ID as string
+      router.push({
+        pathname: "/(root)/(posts)",
+        params: {
+          id: String(post.id)
+        }
+      } as any);
     } else if (isProductItem(post)) {
       try {
         // Set current product in context with the full product object
@@ -219,13 +217,8 @@ export const RenderItem: React.FC<RenderItemProps> = ({
           maxWidth: width / 2 - 8, // Account for margins
         }}
         onPress={() => {
-          handleItemPress(item);
-          // Navigate to new post creation
-          if (activeTab === 'posts') {
-            router.push("/(root)/(createPosts)/createPosts");
-          } else {
-            router.push("/(root)/(createProducts)/createProducts");
-          }
+          // Use the function that already has the correct logic
+          navigateToPostDetail(item);
         }}
       >
         <LinearGradient

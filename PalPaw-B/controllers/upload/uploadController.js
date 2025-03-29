@@ -21,8 +21,11 @@ const storage = multer.diskStorage({
     }
     
     // Determine the appropriate directory based on the route
-    const isProduct = req.originalUrl.includes('/products/');
+    // Check if the request URL contains 'product' or 'products' anywhere in the path
+    const isProduct = req.originalUrl.includes('/product') || req.originalUrl.includes('/products');
     const dirType = isProduct ? 'products' : 'posts';
+    
+    console.log(`File upload request: URL=${req.originalUrl}, Destination=${dirType}`);
     
     // Create path structure: uploads/{userId}/posts or uploads/{userId}/products
     const userUploadDir = path.join(process.cwd(), 'uploads', userId.toString(), dirType);
@@ -517,57 +520,32 @@ export const createProductWithMedia = async (req, res) => {
     const mediaObjects = [];
     
     if (req.files && req.files.length > 0) {
-      // Create products directory if it doesn't exist
-      const productsDir = path.join(process.cwd(), 'uploads', userId.toString(), 'products');
-      if (!fs.existsSync(productsDir)) {
-        fs.mkdirSync(productsDir, { recursive: true });
-      }
-      
       // Create thumbnails directory if it doesn't exist
       const thumbnailDir = path.join(process.cwd(), 'uploads', userId.toString(), 'thumbnails');
       if (!fs.existsSync(thumbnailDir)) {
         fs.mkdirSync(thumbnailDir, { recursive: true });
       }
       
-      // Process each file (includes thumbnail generation for videos)
+      // Process each file
       for (const file of req.files) {
         // Log each file for debugging
         console.log('Processing file:', {
           originalname: file.originalname,
           mimetype: file.mimetype,
           size: file.size,
-          filename: file.filename
+          filename: file.filename,
+          destination: file.destination
         });
         
-        // Move file from 'posts' to 'products' directory
-        const sourceFilePath = path.join(process.cwd(), 'uploads', userId.toString(), 'posts', file.filename);
-        const destFilePath = path.join(productsDir, file.filename);
+        // Check if the file was saved to the correct directory
+        const fileDir = path.dirname(file.path);
+        const isInProductsDir = fileDir.includes(path.join('uploads', userId.toString(), 'products'));
         
-        try {
-          // Create a read stream from the source file
-          const readStream = fs.createReadStream(sourceFilePath);
-          // Create a write stream to the destination file
-          const writeStream = fs.createWriteStream(destFilePath);
-          
-          // Pipe the read stream to the write stream
-          readStream.pipe(writeStream);
-          
-          // Wait for the write to finish
-          await new Promise((resolve, reject) => {
-            writeStream.on('finish', resolve);
-            writeStream.on('error', reject);
-          });
-          
-          // Delete the original file after successful copy
-          await unlinkAsync(sourceFilePath);
-          
-          console.log(`Moved file from ${sourceFilePath} to ${destFilePath}`);
-        } catch (moveError) {
-          console.error('Error moving file to products directory:', moveError);
-          // Continue with original path if move fails
+        if (!isInProductsDir) {
+          console.warn(`File ${file.filename} was not saved to the products directory. It was saved to ${fileDir}`);
         }
         
-        // Get the file path relative to the server - now includes user ID in path and uses products folder
+        // Get the file path relative to the server
         const fileUrl = `/uploads/${userId}/products/${file.filename}`;
         
         // Determine media type based on mimetype
@@ -585,7 +563,7 @@ export const createProductWithMedia = async (req, res) => {
         // Generate thumbnail for video files
         if (mediaType === 'video') {
           try {
-            // Full path to the uploaded video (now in products folder)
+            // Full path to the uploaded video
             const videoPath = path.join(process.cwd(), 'uploads', userId.toString(), 'products', file.filename);
             
             // Generate unique thumbnail filename

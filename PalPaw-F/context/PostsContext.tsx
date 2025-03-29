@@ -570,16 +570,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
           // Standardize the posts and update state
           const standardizedPosts = userPosts.map((post: any) => standardizePostFormat(post));
           dispatch({ type: 'FETCH_USER_POSTS_SUCCESS', payload: standardizedPosts });
-          
-          // We still need to try to get complete data for fallback posts
-          // since they might not have all the data included
-          for (const post of standardizedPosts) {
-            try {
-              await fetchPostById(post.id);
-            } catch (err) { 
-              console.warn(`Failed to fetch complete data for fallback post ${post.id}:`, err);
-            }
-          }
+
         } catch (fallbackError) {
           throw fallbackError;
         }
