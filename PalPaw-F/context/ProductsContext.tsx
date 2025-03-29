@@ -43,13 +43,16 @@ const standardizeProductFormat = (product: any): ProductItem => {
   // Process seller data
   let sellerData = null;
   if (product.sellerData) {
-    sellerData = product.sellerData;
+    sellerData = {
+      ...product.sellerData,
+      avatar: product.sellerData.avatar || null  // Ensure avatar is explicitly included
+    };
     console.log(`Using existing sellerData for product ${product.id}:`, JSON.stringify(sellerData));
   } else if (product.seller) {
     sellerData = {
       id: product.seller.id,
       username: product.seller.username || 'User',
-      avatar: product.seller.avatar || `https://robohash.org/${product.seller.id}?set=set4`
+      avatar: product.seller.avatar || null
     };
     console.log(`Created sellerData from seller for product ${product.id}:`, JSON.stringify(sellerData));
   } else if (product.userId || product.user_id) {
@@ -57,7 +60,7 @@ const standardizeProductFormat = (product: any): ProductItem => {
     sellerData = {
       id: userId,
       username: 'User',
-      avatar: `https://robohash.org/${userId}?set=set4`
+      avatar: null
     };
     console.log(`Created placeholder sellerData for product ${product.id} using userId:`, JSON.stringify(sellerData));
   }
@@ -528,7 +531,7 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
         
         // Try fallback endpoint as a last resort
         try {
-          const fallbackResponse = await api.get(`/api/upload/product/${id}`);
+          const fallbackResponse = await api.get(`/upload/product/${id}`);
           
           if (fallbackResponse.data && fallbackResponse.data.product) {
             console.log('Product fetched from fallback API endpoint');
@@ -583,9 +586,9 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
       }
 
       console.log(`Sending save request for product: ${productId}`);
-      const response = await api.post(`/products/${productId}/save`);
+      const response = await api.post(`/pg/products/${productId}/save`);
       
-      console.log(`Response from /products/${productId}/save:`, response.status, JSON.stringify(response.data));
+      console.log(`Response from /pg/products/${productId}/save:`, response.status, JSON.stringify(response.data));
       
       if (response.data?.success) {
         // Update state with the saved product ID
@@ -593,7 +596,7 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
           type: 'SAVE_PRODUCT_SUCCESS',
           payload: { 
             productId, 
-            savedProductIds: [...state.savedProductIds, productId] 
+            savedProductIds: response.data.savedProductIds || [...state.savedProductIds, productId] 
           }
         });
         
@@ -622,7 +625,7 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
       }
 
       console.log(`Sending unsave request for product: ${productId}`);
-      const response = await api.post(`/products/${productId}/unsave`);
+      const response = await api.delete(`/pg/products/${productId}/save`);
       
       console.log(`Response from unsave product ${productId}:`, response.status, JSON.stringify(response.data));
       
@@ -632,7 +635,7 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
           type: 'UNSAVE_PRODUCT_SUCCESS',
           payload: { 
             productId, 
-            savedProductIds: state.savedProductIds.filter(id => id !== productId) 
+            savedProductIds: response.data.savedProductIds || state.savedProductIds.filter(id => id !== productId) 
           }
         });
         
@@ -698,60 +701,55 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
     }
   };
 
-  // Initialize products data from AsyncStorage after functions are defined
+  // Initialize products data from AsyncStorage and API
   useEffect(() => {
     const initProductsData = async () => {
       try {
-        console.log('Initializing products data from storage');
+        console.log('Initializing products data from storage and API');
         
-        // Initialize saved products IDs from AsyncStorage
+        // First attempt to load from storage
         const storedSavedProductIds = await AsyncStorage.getItem('savedProductIds');
         if (storedSavedProductIds) {
-          // We only initialize the IDs from storage, the actual products will be fetched when needed
           const savedProductIds = JSON.parse(storedSavedProductIds);
           console.log(`Found ${savedProductIds.length} saved product IDs in storage`);
           dispatch({ 
             type: 'FETCH_SAVED_PRODUCTS_SUCCESS', 
             payload: { products: [], productIds: savedProductIds } 
           });
-        } else {
-          console.log('No saved products found in storage');
         }
         
-        // Initialize user data to fetch user products
+        // Initialize user data for fetching user-specific products
         const userData = await AsyncStorage.getItem('userData');
-        if (userData) {
-          const user = JSON.parse(userData);
-          if (user && user.id) {
-            console.log('Found user data in storage, user ID:', user.id);
-            
-            // Initialize both user products and saved products in parallel
-            Promise.all([
-              // Fetch user products
-              fetchUserProducts(user.id).catch(error => {
-                console.error('Error initializing user products:', error);
-                return null;
-              }),
-              
-              // Fetch saved products
-              fetchSavedProducts(user.id).catch(error => {
-                console.error('Error initializing saved products:', error);
-                return null;
-              })
-            ]).then(([userProductsResult, savedProductsResult]) => {
-              console.log('Initial data fetch complete:', {
-                userProductsFetched: userProductsResult !== null,
-                savedProductsFetched: savedProductsResult !== null
-              });
+        const user = userData ? JSON.parse(userData) : null;
+        
+        // Fetch general products always
+        fetchProducts().catch(error => {
+          console.error('Error initializing general products:', error);
+        });
+        
+        // If user is logged in, fetch user-specific data
+        if (user && user.id) {
+          console.log('Found user data in storage, user ID:', user.id);
+          
+          // Fetch user products and saved products in parallel
+          Promise.all([
+            fetchUserProducts(user.id).catch(error => {
+              console.error('Error initializing user products:', error);
+              return null;
+            }),
+            fetchSavedProducts(user.id).catch(error => {
+              console.error('Error initializing saved products:', error);
+              return null;
+            })
+          ]).then(([userProductsResult, savedProductsResult]) => {
+            console.log('Initial user data fetch complete:', {
+              userProductsFetched: userProductsResult !== null,
+              savedProductsFetched: savedProductsResult !== null
             });
-          } else {
-            console.log('User data found but missing ID');
-          }
-        } else {
-          console.log('No user data found in storage');
+          });
         }
       } catch (error) {
-        console.error('Error initializing products data:', error);
+        console.error('Error in products initialization:', error);
       }
     };
 

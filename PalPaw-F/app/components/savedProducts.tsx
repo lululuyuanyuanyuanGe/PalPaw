@@ -9,7 +9,6 @@ import {
   RefreshControl,
   StatusBar,
   SafeAreaView,
-  Dimensions,
   Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -20,8 +19,6 @@ import { ProductItem } from '@/context/ProductsContext';
 import { formatImageUrl } from '@/utils/mediaUtils';
 import AuthPrompt from './AuthPrompt';
 import Constants from 'expo-constants';
-
-const { width } = Dimensions.get('window');
 
 interface SavedProductsProps {
   statusBarHeight?: number;
@@ -35,7 +32,6 @@ const SavedProducts: React.FC<SavedProductsProps> = ({
   const router = useRouter();
   const { state: productsState, fetchSavedProducts, unsaveProduct, setCurrentProduct } = useProducts();
   const { state: authState } = useAuth();
-  const { state: userState } = useUser();
   
   const [refreshing, setRefreshing] = useState(false);
   const [lastFetchTime, setLastFetchTime] = useState(0);

@@ -63,8 +63,11 @@ export const getAllProducts = async (req, res) => {
       const productJson = product.toJSON();
       return {
         ...productJson,
-        views: 0, // Add default views value since it's missing in the database
-        sellerData: productJson.seller,
+        views: productJson.views || 0, // Ensure views has a value
+        sellerData: {
+          ...productJson.seller,
+          avatar: productJson.seller?.avatar || null // Ensure avatar is explicitly included even if null
+        },
         seller: undefined // Remove the nested seller object
       };
     });
@@ -333,7 +336,10 @@ export const getSavedProducts = async (req, res) => {
       const productJson = product.toJSON();
       return {
         ...productJson,
-        sellerData: productJson.seller,
+        sellerData: {
+          ...productJson.seller,
+          avatar: productJson.seller?.avatar || null // Ensure avatar is explicitly included even if null
+        },
         seller: undefined, // Remove the nested seller object
         isSaved: true
       };
