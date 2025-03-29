@@ -38,6 +38,7 @@ const EditProfileScreen = () => {
   const [bio, setBio] = useState("");
   const [avatarImage, setAvatarImage] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<any>(null);
+  const [isLocalAvatar, setIsLocalAvatar] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>("posts");
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   
@@ -63,6 +64,7 @@ const EditProfileScreen = () => {
         setBio(user.bio);
       }
       setAvatarImage(user.avatar || null);
+      setIsLocalAvatar(false); // Reset local avatar flag when loading from server
     }
   }, [userState.profile, authState.user]);
 
@@ -78,6 +80,7 @@ const EditProfileScreen = () => {
       if (!result.canceled) {
         setAvatarImage(result.assets[0].uri);
         setAvatarFile(result.assets[0]);
+        setIsLocalAvatar(true);
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -309,7 +312,11 @@ const EditProfileScreen = () => {
             <View className="absolute left-0 right-0 -bottom-10 items-center justify-center z-10">
               <View className="w-[100px] h-[100px] rounded-full bg-white p-[3px] shadow-lg">
                 <Image
-                  source={avatarImage ? { uri: formatImageUrl(avatarImage) } : require('../../../assets/images/cat1.jpg')}
+                  source={avatarImage 
+                    ? isLocalAvatar 
+                      ? { uri: avatarImage }
+                      : { uri: formatImageUrl(avatarImage) }
+                    : require('../../../assets/images/cat1.jpg')}
                   className="w-full h-full rounded-full"
                 />
                 <TouchableOpacity
