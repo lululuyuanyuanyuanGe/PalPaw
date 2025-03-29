@@ -973,7 +973,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const incrementPostViews = async (postId: string) => {
     try {
       // Call the API to increment post views
-      await api.get(`/pg/posts/${postId}`);
+      await api.get(`/pg/posts/${postId}/views`);
       
       // Update state locally
       dispatch({ 

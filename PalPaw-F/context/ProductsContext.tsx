@@ -581,7 +581,22 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
           
           // Standardize the product format
           const formattedProduct = standardizeProductFormat(response.data.product);
+          
+          // Backend already incremented the view count in the database.
+          // Decrement it locally before setting the state so we can increment it
+          // back using the INCREMENT_PRODUCT_VIEWS action for consistency
+          if (formattedProduct.views > 0) {
+            formattedProduct.views -= 1;
+          }
+          
+          // Set the current product with the decremented view count
           dispatch({ type: 'SET_CURRENT_PRODUCT', payload: formattedProduct });
+          
+          // Now increment the view count locally to match the backend count
+          dispatch({ 
+            type: 'INCREMENT_PRODUCT_VIEWS', 
+            payload: { productId: id }
+          });
         } else {
           throw new Error('Product not found');
         }
@@ -597,7 +612,20 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
             
             // Standardize the product format
             const formattedProduct = standardizeProductFormat(fallbackResponse.data.product);
+            
+            // Same approach for fallback: decrement before setting, then increment
+            if (formattedProduct.views > 0) {
+              formattedProduct.views -= 1;
+            }
+            
+            // Set the current product with the decremented view count
             dispatch({ type: 'SET_CURRENT_PRODUCT', payload: formattedProduct });
+            
+            // Increment view count locally to match backend
+            dispatch({ 
+              type: 'INCREMENT_PRODUCT_VIEWS', 
+              payload: { productId: id }
+            });
             return;
           }
         } catch (fallbackError) {
@@ -713,20 +741,17 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
     }
   };
 
-  // Function to increment product views with API call
+  // Function to increment product views in local state only
   const incrementProductViews = async (productId: string): Promise<void> => {
     try {
-      // Call the API to increment product views
-      await api.get(`/pg/products/${productId}`);
-      
-      // Update state locally
+      // Just update the local state without API call
+      // The backend already increments the count in the database when fetching the product
       dispatch({ 
         type: 'INCREMENT_PRODUCT_VIEWS', 
         payload: { productId }
       });
     } catch (error) {
-      console.error('Error incrementing product views:', error);
-      // We don't dispatch an error here to keep the UX smooth
+      console.error('Error incrementing product views in local state:', error);
     }
   };
 
