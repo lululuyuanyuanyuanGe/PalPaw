@@ -5,7 +5,8 @@ import {
   getPostById, 
   createPost, 
   updatePost, 
-  deletePost 
+  deletePost,
+  incrementPostViews
 } from '../controllers/posts/index.js';
 import { getRandomPosts, getFriendsPosts } from '../controllers/upload/uploadController.js';
 
@@ -38,6 +39,15 @@ router.get('/friends', authenticate, getFriendsPosts);
  * @access Public (with visibility checks)
  */
 router.get('/:id', optionalAuthenticate, getPostById);
+
+/**
+ * @route GET /api/pg/posts/:id/views
+ * @desc Increment view count for a post
+ * @access Public
+ */
+// Commented out to prevent double counting of views
+// View count is already incremented in the getPostById method
+// router.get('/:id/views', incrementPostViews);
 
 /**
  * @route POST /api/pg/posts

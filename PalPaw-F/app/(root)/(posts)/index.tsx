@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
   Image, 
   TouchableOpacity, 
   ScrollView, 
-  Dimensions, 
   TextInput,
   ActivityIndicator 
 } from 'react-native';
@@ -99,8 +98,16 @@ const PostDetail = () => {
   const scrollY = useSharedValue(0);
   
   // Get posts context with all post arrays
-  const { state: postsState, likePost, unlikePost, addComment, fetchPostById, isPostLiked } = usePosts();
-  const { currentPost, userPosts, feedPosts, likedPosts } = postsState;
+  const { 
+    state: { currentPost },
+    likePost, 
+    unlikePost,
+    fetchPostById,
+    isPostLiked,
+    addComment,
+    fetchUserPosts
+  } = usePosts();
+  const { userPosts, feedPosts, likedPosts } = usePosts().state;
   
   // Get user context for profile data and follow functionality
   const { state: userState, followUser, unfollowUser } = useUser();
@@ -116,7 +123,7 @@ const PostDetail = () => {
   const post = currentPost?.id === postId 
     ? currentPost 
     : userPosts?.find(p => p.id === postId) 
-      || (Array.isArray(postsState.feedPosts) ? postsState.feedPosts.find(p => p.id === postId) : undefined)
+      || (Array.isArray(feedPosts) ? feedPosts.find(p => p.id === postId) : undefined)
       || (Array.isArray(likedPosts) ? likedPosts.find(p => p.id === postId) : undefined);
   
   // Animation for the like button
@@ -310,6 +317,21 @@ const PostDetail = () => {
       }
     }
   };
+
+  // Add this inside the component after the useEffect hooks
+  // This will increment the view count when the post detail page loads
+  const viewIncremented = useRef(false);
+  useEffect(() => {
+    // Post views are already incremented by the backend when post is fetched
+    // So we don't need to explicitly call incrementPostViews
+    if (post && post.id && !viewIncremented.current) {
+      console.log('Post loaded with ID:', post.id);
+      viewIncremented.current = true;
+      
+      // No need to call incrementPostViews as the view is counted
+      // when the post is fetched via getPostById in the backend
+    }
+  }, [post]);
 
   return (
     <>

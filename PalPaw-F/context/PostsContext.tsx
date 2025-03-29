@@ -417,6 +417,11 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
             ? { ...post, views: (post.views || 0) + 1 }
             : post
         ),
+        friendsPosts: state.friendsPosts.map(post =>
+          post.id === action.payload.postId
+            ? { ...post, views: (post.views || 0) + 1 }
+            : post
+        ),
         currentPost: state.currentPost?.id === action.payload.postId
           ? { ...state.currentPost, views: (state.currentPost.views || 0) + 1 }
           : state.currentPost,
@@ -486,6 +491,9 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
           post.id === action.payload.id ? action.payload : post
         ),
         likedPosts: state.likedPosts.map(post =>
+          post.id === action.payload.id ? action.payload : post
+        ),
+        friendsPosts: state.friendsPosts.map(post =>
           post.id === action.payload.id ? action.payload : post
         ),
         currentPost: action.payload,
@@ -763,8 +771,22 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
           // Process the post data with our helper function
           const formattedPost = await processPost(response.data.post, postId);
           
-          // Update ALL instances of this post in the state
+          // Backend already incremented the view count in the database.
+          // Decrement it locally before setting the state so we can increment it
+          // back using the INCREMENT_POST_VIEWS action for consistency
+          if (formattedPost.views !== undefined && formattedPost.views > 0) {
+            formattedPost.views -= 1;
+          }
+          
+          // Update ALL instances of this post in the state with decremented view count
           updatePostInAllCollections(formattedPost);
+          
+          // Now increment the view count locally to match the backend count
+          dispatch({ 
+            type: 'INCREMENT_POST_VIEWS', 
+            payload: { postId }
+          });
+          
           return;
         }
         throw new Error('Post not found or response format incorrect');
@@ -972,17 +994,41 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   // Function to increment post views with API call
   const incrementPostViews = async (postId: string) => {
     try {
-      // Call the API to increment post views
-      await api.get(`/pg/posts/${postId}/views`);
+      // Fetch the post by ID, which will automatically increment the view count in the backend
+      const response = await api.get(`/pg/posts/${postId}`);
       
-      // Update state locally
+      if (response.data && response.data.success) {
+        console.log('Post fetched and view count incremented in backend');
+        
+        // Get the post with updated view count from the response
+        const updatedPost = response.data.post;
+        
+        // Create a standardized post object
+        const formattedPost = standardizePostFormat(updatedPost);
+        
+        // Set the current post with updated view count
+        dispatch({ type: 'SET_CURRENT_POST', payload: formattedPost });
+        
+        // Update the post in all collections
+        dispatch({
+          type: 'UPDATE_POST_IN_ALL_COLLECTIONS',
+          payload: formattedPost
+        });
+      } else {
+        // Fallback to just incrementing views in the local state
+        dispatch({ 
+          type: 'INCREMENT_POST_VIEWS', 
+          payload: { postId }
+        });
+      }
+    } catch (error) {
+      console.error('Error incrementing post views:', error);
+      
+      // Fallback to just incrementing views in the local state if the API fails
       dispatch({ 
         type: 'INCREMENT_POST_VIEWS', 
         payload: { postId }
       });
-    } catch (error) {
-      console.error('Error incrementing post views:', error);
-      // We don't dispatch an error here to keep the UX smooth
     }
   };
 

@@ -102,7 +102,7 @@ export const getPostById = async (req, res) => {
     
     const post = await Post.findByPk(id, {
       attributes: [
-        'id', 'userId', 'title', 'content', 'media', 'likes', 
+        'id', 'userId', 'title', 'content', 'media', 'likes', 'views',
         'location', 'tags', 'visibility', 'isDeleted', 'createdAt', 'updatedAt'
       ],
       include: [
@@ -141,6 +141,24 @@ export const getPostById = async (req, res) => {
       });
     }
     
+    // Increment view count asynchronously (don't wait for completion)
+    // This allows the response to be sent quickly while still counting the view
+    if (post.views !== undefined) {
+      Post.increment('views', { 
+        by: 1, 
+        where: { id: post.id } 
+      })
+      .catch(err => {
+        console.error('Error incrementing post views:', err);
+      });
+    } else {
+      // If views field doesn't exist yet, add it with value 1
+      post.views = 1;
+      post.save().catch(err => {
+        console.error('Error saving view count:', err);
+      });
+    }
+    
     // Check if the current user has liked this post
     let isLiked = false;
     if (req.user) {
@@ -151,7 +169,7 @@ export const getPostById = async (req, res) => {
     const postJson = post.toJSON();
     const formattedPost = {
       ...postJson,
-      views: 0, // Add default views value
+      views: postJson.views || 1, // Use actual views or default to 1 (we just viewed it)
       authorData: {
         ...postJson.author,
         avatar: postJson.author?.avatar || null // Ensure avatar is explicitly included even if null
@@ -162,18 +180,27 @@ export const getPostById = async (req, res) => {
     
     // Format comments to match frontend expectations
     if (formattedPost.comments) {
-      formattedPost.comments = formattedPost.comments.map(comment => ({
-        id: comment.id,
-        author: {
+      formattedPost.comments = formattedPost.comments.map(comment => {
+        // Ensure we have proper author information for the comment
+        const authorInfo = comment.author ? {
           id: comment.author.id,
-          username: comment.author.username,
-          avatar: comment.author.avatar || null // Ensure avatar is explicitly included even if null
-        },
-        content: comment.content,
-        timestamp: comment.createdAt,
-        avatarUri: comment.author.avatar || null, // Ensure avatarUri is explicitly included even if null
-        likes: comment.likes || 0
-      }));
+          username: comment.author.username || 'Unknown',
+          avatar: comment.author.avatar || null
+        } : {
+          id: 'unknown',
+          username: 'Unknown User',
+          avatar: null
+        };
+        
+        return {
+          id: comment.id,
+          author: authorInfo,
+          content: comment.content,
+          timestamp: comment.createdAt,
+          avatarUri: authorInfo.avatar,
+          likes: comment.likes || 0
+        };
+      });
     }
     
     res.json({
@@ -317,6 +344,50 @@ export const deletePost = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Failed to delete post',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Increment post views
+ * @route GET /api/pg/posts/:id/views
+ */
+export const incrementPostViews = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const post = await Post.findByPk(id);
+    
+    if (!post) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Post not found' 
+      });
+    }
+    
+    // Increment view count
+    if (post.views !== undefined) {
+      await post.increment('views', { by: 1 });
+    } else {
+      post.views = 1;
+      await post.save();
+    }
+    
+    // Get the updated post
+    await post.reload();
+    
+    // Send back success response with updated view count
+    res.json({
+      success: true,
+      message: 'Post view count incremented',
+      viewCount: post.views
+    });
+  } catch (error) {
+    console.error('Error incrementing post views:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to increment post views',
       error: error.message
     });
   }
