@@ -27,6 +27,7 @@ import { usePosts, useAuth, useProducts } from "@/context";
 import MediaCarousel from '../../components/MediaCarousel';
 import { formatImageUrl } from '@/utils/mediaUtils';
 import { getCategoryIcon, getCategoryColor, getCategoryBgColor } from './decorations';
+import api from '../../../utils/apiClient';
 
 // Utility function to format the date/time
 const formatTimeAgo = (date: string | Date) => {
@@ -146,11 +147,15 @@ const getShippingOptionBgColor = (option: string) => {
 
 const ProductDetail = () => {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const productId = params.id as string;
+  const { id } = useLocalSearchParams();
+  const productId = id as string;
+  
+  console.log(`ProductDetail: Rendering with productId:`, productId);
+  console.log(`ProductDetail: Type of productId:`, typeof productId);
+  console.log(`ProductDetail: String representation:`, String(productId));
+  
   const scrollY = useSharedValue(0);
   const footerOpacity = useSharedValue(0);
-  const { width } = Dimensions.get('window');
   const [loading, setLoading] = useState(true);
   const [isAtBottom, setIsAtBottom] = useState(false);
   
@@ -193,13 +198,36 @@ const ProductDetail = () => {
   useEffect(() => {
     const loadProduct = async () => {
       if (productId && !product) {
+        setLoading(true);
         try {
-          await fetchProductById(productId);
+          console.log(`ProductDetail: Loading product with ID ${productId}`);
+          
+          // First try to get product from context/state
+          await fetchProductById(productId).catch(async (error) => {
+            console.error(`ProductDetail: Primary fetch failed: ${error.message}`);
+            
+            // If context fetch fails, try direct API request as a last resort
+            try {
+              console.log(`ProductDetail: Trying direct API request as fallback...`);
+              const response = await api.get(`/pg/products/${productId}`);
+              
+              if (response.data && response.data.product) {
+                console.log('ProductDetail: Directly fetched product from API');
+                
+                // Try to update the context with the fetched product
+                await fetchProductById(productId);
+                setLoading(false);
+              } else {
+                throw new Error('Product not found in API response');
+              }
+            } catch (directApiError: any) {
+              console.error(`ProductDetail: API fallback fetch failed: ${directApiError.message}`);
+              Alert.alert('Error', 'Failed to load product details. Please try again later.');
+            }
+          });
         } catch (error) {
-          console.error('Error fetching product:', error);
+          console.error('ProductDetail: Error in product loading process:', error);
           Alert.alert('Error', 'Failed to load product details');
-        } finally {
-          setLoading(false);
         }
       } else {
         setLoading(false);

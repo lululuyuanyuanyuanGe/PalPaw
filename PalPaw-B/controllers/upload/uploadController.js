@@ -354,7 +354,7 @@ export const getUserProducts = async (req, res) => {
       include: [
         {
           model: User,
-          as: 'author',
+          as: 'seller',
           attributes: ['id', 'username', 'avatar']
         }
       ]
@@ -365,11 +365,11 @@ export const getUserProducts = async (req, res) => {
       const productJson = product.toJSON();
       
       // Add sellerData object for consistent format with posts
-      if (productJson.author) {
+      if (productJson.seller) {
         productJson.sellerData = {
-          id: productJson.author.id,
-          username: productJson.author.username,
-          avatar: productJson.author.avatar
+          id: productJson.seller.id,
+          username: productJson.seller.username,
+          avatar: productJson.seller.avatar
         };
       }
       
@@ -403,6 +403,7 @@ export const getProductById = async (req, res) => {
       include: [
         {
           model: User,
+          as: 'seller',
           attributes: ['id', 'username', 'avatar']
         }
       ]
@@ -415,9 +416,32 @@ export const getProductById = async (req, res) => {
       });
     }
     
+    // Increment view count
+    product.views = (product.views || 0) + 1;
+    await product.save();
+    
+    // Transform product to ensure consistent format with seller data
+    const transformedProduct = product.toJSON();
+    
+    // Add sellerData object for consistent format
+    if (transformedProduct.seller) {
+      transformedProduct.sellerData = {
+        id: transformedProduct.seller.id,
+        username: transformedProduct.seller.username,
+        avatar: transformedProduct.seller.avatar
+      };
+    }
+    
+    // Check if current user has saved this product
+    let isSaved = false;
+    if (req.user) {
+      isSaved = req.user.hasSavedProduct(productId);
+      transformedProduct.isSaved = isSaved;
+    }
+    
     return res.status(200).json({
       success: true,
-      product
+      product: transformedProduct
     });
   } catch (error) {
     console.error('Error fetching product:', error);

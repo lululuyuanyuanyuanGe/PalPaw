@@ -350,7 +350,7 @@ interface ProductsContextType {
   fetchProducts: () => Promise<void>;
   fetchUserProducts: (userId: string) => Promise<void>;
   fetchSavedProducts: (userId?: string) => Promise<void>;
-  fetchProductById: (productId: string) => Promise<void>;
+  fetchProductById: (productId: string | any) => Promise<void>;
   setCurrentProduct: (product: ProductItem) => void;
   saveProduct: (productId: string) => Promise<boolean>;
   unsaveProduct: (productId: string) => Promise<boolean>;
@@ -411,9 +411,12 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
       
       dispatch({ type: 'FETCH_USER_PRODUCTS_SUCCESS', payload: standardizedProducts });
     } else {
-      // Fallback to general products and filter by userId
+      // If the response is valid but doesn't contain the expected data format
+      console.warn('Response did not contain expected data format:', response.data);
+      
+      // Try to fall back to the main products endpoint as a last resort
       try {
-        const fallbackResponse = await api.get(`/upload/products/${userId}`);
+        const fallbackResponse = await api.get('/pg/products');
         let userProducts = [];
 
         if (Array.isArray(fallbackResponse.data)) {
@@ -422,7 +425,7 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
           userProducts = fallbackResponse.data.products.filter((product: any) => product.userId === userId);
         }
 
-        console.log(`ProductsContext: Found ${userProducts.length} products with fallback`);
+        console.log(`ProductsContext: Found ${userProducts.length} products with fallback to general products endpoint`);
 
         // Standardize fallback products
         const standardizedProducts = userProducts.map((product: any) =>
@@ -431,7 +434,8 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
 
         dispatch({ type: 'FETCH_USER_PRODUCTS_SUCCESS', payload: standardizedProducts });
       } catch (fallbackError) {
-        throw fallbackError;
+        console.error('Error in fallback products fetch:', fallbackError);
+        throw new Error('Failed to fetch user products with both primary and fallback methods');
       }
     }
   } catch (error) {
@@ -493,13 +497,22 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
   };
 
   // Function to fetch a product by ID
-  const fetchProductById = async (productId: string) => {
+  const fetchProductById = async (productId: string | any) => {
     try {
-      console.log(`Fetching product with ID: ${productId}`);
+      // Ensure we have a string ID, not an object
+      const id = typeof productId === 'string' ? productId : 
+                 (productId && typeof productId === 'object' && productId.id) ? productId.id : productId;
+      
+      console.log(`Fetching product with ID: ${id}`);
+      
+      if (!id) {
+        console.error('Invalid product ID:', productId);
+        throw new Error('Invalid product ID');
+      }
       
       // If not in our state, fetch from API
       try {
-        const response = await api.get(`/upload/products/${productId}`);
+        const response = await api.get(`/pg/products/${id}`);
         
         if (response.data && response.data.product) {
           console.log('Product fetched from API');
@@ -512,6 +525,23 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
         }
       } catch (apiError) {
         console.error('Error fetching product from API:', apiError);
+        
+        // Try fallback endpoint as a last resort
+        try {
+          const fallbackResponse = await api.get(`/upload/product/${id}`);
+          
+          if (fallbackResponse.data && fallbackResponse.data.product) {
+            console.log('Product fetched from fallback API endpoint');
+            
+            // Standardize the product format
+            const formattedProduct = standardizeProductFormat(fallbackResponse.data.product);
+            dispatch({ type: 'SET_CURRENT_PRODUCT', payload: formattedProduct });
+            return;
+          }
+        } catch (fallbackError) {
+          console.error('Error fetching product from fallback API:', fallbackError);
+        }
+        
         console.error('Product not found in any source');
         throw new Error('Product not found in any source');
       }

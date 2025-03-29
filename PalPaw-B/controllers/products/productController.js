@@ -100,8 +100,8 @@ export const getProductById = async (req, res) => {
     const product = await Product.findByPk(id, {
       attributes: [
         'id', 'userId', 'name', 'description', 'price', 'media', 
-        'category', 'condition', 'status', 'tags', 'savedCount', 
-        'isDeleted', 'createdAt', 'updatedAt', 'shipping'
+        'category', 'condition', 'status', 'tags', 'views',
+        'isDeleted', 'createdAt', 'updatedAt', 'shipping', 'quantity'
       ],
       include: [
         {
@@ -119,8 +119,16 @@ export const getProductById = async (req, res) => {
       });
     }
     
-    // We can't increment view count since the column doesn't exist yet
-    // Instead of: product.views += 1; await product.save();
+    // Increment view count if the column exists
+    try {
+      if (product.views !== undefined) {
+        product.views = (product.views || 0) + 1;
+        await product.save();
+      }
+    } catch (viewError) {
+      console.log('Could not update view count:', viewError.message);
+      // Continue even if updating views fails
+    }
     
     // Check if the current user has saved this product
     let isSaved = false;
@@ -132,7 +140,6 @@ export const getProductById = async (req, res) => {
     const productJson = product.toJSON();
     const formattedProduct = {
       ...productJson,
-      views: 0, // Add default views value
       sellerData: productJson.seller,
       seller: undefined, // Remove the nested seller object
       isSaved // Add flag indicating if product is saved by current user
@@ -212,10 +219,15 @@ export const saveProduct = async (req, res) => {
     // Save product to user's collection
     const saved = await req.user.saveProduct(id);
     
-    if (saved) {
-      // Increment saved count on product
-      product.savedCount = (product.savedCount || 0) + 1;
-      await product.save();
+    // Try to update savedCount if it exists in the Product model
+    try {
+      if (saved && product.get('savedCount') !== undefined) {
+        product.savedCount = (product.savedCount || 0) + 1;
+        await product.save();
+      }
+    } catch (error) {
+      console.log('Could not update savedCount:', error.message);
+      // Continue even if updating savedCount fails
     }
     
     res.json({
@@ -253,10 +265,15 @@ export const unsaveProduct = async (req, res) => {
     // Remove product from user's collection
     const removed = await req.user.unsaveProduct(id);
     
-    if (removed && product.savedCount > 0) {
-      // Decrement saved count on product
-      product.savedCount -= 1;
-      await product.save();
+    // Try to update savedCount if it exists in the Product model
+    try {
+      if (removed && product.get('savedCount') !== undefined && product.savedCount > 0) {
+        product.savedCount -= 1;
+        await product.save();
+      }
+    } catch (error) {
+      console.log('Could not update savedCount:', error.message);
+      // Continue even if updating savedCount fails
     }
     
     res.json({

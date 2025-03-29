@@ -84,43 +84,37 @@ export const RenderItem: React.FC<RenderItemProps> = ({
         // Set current post in context first
         setCurrentPost(post);
         
-        // Wait to ensure context update completes before navigation
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Navigate to posts detail screen with just the post ID
+        // Navigate to posts detail screen with just the post ID as string
         router.push({
           pathname: "/(root)/(posts)",
           params: {
-            id: post.id
+            id: String(post.id)
           }
         } as any);
       } catch (error) {
         console.error("Error navigating to post:", error);
         router.push({
           pathname: "/(root)/(posts)",
-          params: { id: post.id }
+          params: { id: String(post.id) }
         } as any);
       }
     } else if (isProductItem(post)) {
       try {
-        // Set current product in context first
-        setCurrentProduct(post.id as any);
+        // Set current product in context with the full product object
+        setCurrentProduct(post as any);
         
-        // Wait to ensure context update completes before navigation
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Then navigate
+        // Navigate with ID as string to ensure it's properly passed
         router.push({
           pathname: "/(root)/(products)",
           params: {
-            id: post.id
+            id: String(post.id)
           }
         } as any);
       } catch (error) {
         console.error("Error navigating to product:", error);
         router.push({
           pathname: "/(root)/(products)",
-          params: { id: post.id }
+          params: { id: String(post.id) }
         } as any);
       }
     }

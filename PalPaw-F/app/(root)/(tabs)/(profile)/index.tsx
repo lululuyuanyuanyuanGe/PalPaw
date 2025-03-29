@@ -135,16 +135,6 @@ const ProfileScreen = () => {
     setActiveTab(tab);
   };
   
-  // Handle logout
-  const handleLogout = async () => {
-    try {
-      await authLogout();
-    } catch (error) {
-      console.error("Error logging out:", error);
-      Alert.alert("Error", "Failed to log out. Please try again.");
-    }
-  };
-  
   // Get dimensions for grid layout
   const numColumns = 2;
   
