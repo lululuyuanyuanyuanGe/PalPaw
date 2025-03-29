@@ -355,6 +355,29 @@ export const getRandomPosts = async (req, res) => {
     
     console.log(`Found ${allPosts.length} total posts to choose from`);
     
+    // Filter out test posts or placeholder data
+    const validPosts = allPosts.filter(post => {
+      // Skip posts with common test content
+      const title = post.title?.toLowerCase() || '';
+      const content = post.content?.toLowerCase() || '';
+      const isTestPost = 
+        title.includes('test') || 
+        title.includes('asdasd') || 
+        content.includes('test content') ||
+        title.length < 3 ||
+        (title === 'asdasd') ||
+        (content === 'asdasd');
+      
+      // Skip posts without proper media content
+      const hasMissingMedia = post.media && 
+        post.media.length > 0 && 
+        post.media.some(item => !item.url || item.url.includes('undefined'));
+      
+      return !isTestPost && !hasMissingMedia;
+    });
+    
+    console.log(`After filtering test content: ${validPosts.length} valid posts`);
+    
     // Fisher-Yates shuffle algorithm
     const shuffleArray = (array) => {
       for (let i = array.length - 1; i > 0; i--) {
@@ -364,27 +387,83 @@ export const getRandomPosts = async (req, res) => {
       return array;
     };
     
+    // If we don't have enough valid posts, include some filtered posts as fallback
+    let postsToUse = validPosts;
+    if (validPosts.length < count && allPosts.length >= count) {
+      console.log(`Not enough valid posts (${validPosts.length}), including some filtered posts to reach ${count}`);
+      
+      // Filter less strictly - just ensure they have some valid media
+      const fallbackPosts = allPosts.filter(post => {
+        // Check if post has at least one valid media item
+        return post.media && 
+               post.media.length > 0 && 
+               post.media.some(item => item.url && !item.url.includes('undefined'));
+      });
+      
+      // Sort out the ones we've already included
+      const additionalPosts = fallbackPosts.filter(
+        post => !validPosts.some(vp => vp.id === post.id)
+      );
+      
+      // Combine valid posts with some additional posts to reach count
+      postsToUse = [...validPosts, ...shuffleArray(additionalPosts).slice(0, count - validPosts.length)];
+      console.log(`Added ${postsToUse.length - validPosts.length} additional posts to reach desired count`);
+    }
+    
+    // If still not enough posts, generate placeholder posts
+    if (postsToUse.length < count) {
+      console.log(`Still only have ${postsToUse.length} posts, generating placeholders to reach ${count}`);
+      
+      // Create some placeholder posts
+      for (let i = postsToUse.length; i < count; i++) {
+        const placeholderId = `placeholder-${i}-${Date.now()}`;
+        postsToUse.push({
+          id: placeholderId,
+          title: "Explore PalPaw",
+          content: "Create your own posts to see them here!",
+          media: [{ 
+            url: `https://source.unsplash.com/random/800x600?pet,animal&sig=${placeholderId}`,
+            type: 'image'
+          }],
+          createdAt: new Date(),
+          likes: Math.floor(Math.random() * 20),
+          authorData: {
+            id: "system",
+            username: "PalPaw",
+            avatar: "https://robohash.org/system?set=set4"
+          },
+          comments: []
+        });
+      }
+    }
+    
     // Shuffle and select 'count' posts
-    const shuffledPosts = shuffleArray([...allPosts]);
+    const shuffledPosts = shuffleArray([...postsToUse]);
     const randomPosts = shuffledPosts.slice(0, count);
     
     // Transform posts to ensure proper data structure
     const formattedPosts = randomPosts.map(post => {
-      const postJSON = post.toJSON();
-      
-      // Ensure author data is in the expected format
-      if (postJSON.author) {
-        postJSON.authorData = {
-          id: postJSON.author.id,
-          username: postJSON.author.username || 'User',
-          avatar: postJSON.author.avatar || `https://robohash.org/${postJSON.author.id}?set=set4`
-        };
+      // Check if it's a regular post or a placeholder post
+      if (post.toJSON) {
+        const postJSON = post.toJSON();
+        
+        // Ensure author data is in the expected format
+        if (postJSON.author) {
+          postJSON.authorData = {
+            id: postJSON.author.id,
+            username: postJSON.author.username || 'User',
+            avatar: postJSON.author.avatar || `https://robohash.org/${postJSON.author.id}?set=set4`
+          };
+        }
+        
+        return postJSON;
+      } else {
+        // It's already a placeholder post
+        return post;
       }
-      
-      return postJSON;
     });
     
-    console.log(`Returning ${formattedPosts.length} random posts`);
+    console.log(`Returning exactly ${formattedPosts.length} posts`);
     
     return res.status(200).json({
       success: true,

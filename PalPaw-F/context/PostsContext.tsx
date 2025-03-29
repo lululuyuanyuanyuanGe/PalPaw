@@ -540,49 +540,61 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
       
       // Make API call to fetch feed posts (random posts for discovery)
       const response = await api.get('/pg/posts/feed');
+      console.log("Feed API response:", response.status, response.statusText);
+      
       let posts = [];
       
       if (Array.isArray(response.data)) {
         posts = response.data;
+        console.log("Response data is an array");
       } else if (response.data.posts && Array.isArray(response.data.posts)) {
         posts = response.data.posts;
+        console.log("Response data has posts array");
+      } else if (response.data.success) {
+        // Handle the case where success is true but posts might be in a different format
+        console.log("Response indicates success, data format:", typeof response.data);
+        if (response.data.posts) {
+          posts = response.data.posts;
+        }
       }
       
-      console.log(`Received ${posts.length} feed posts`);
+      console.log(`Received ${posts.length} feed posts with IDs:`, posts.map((p: any) => p.id).join(', '));
       
       // Standardize the posts format
       const standardizedPosts = posts.map((post: any) => standardizePostFormat(post));
+      
+      console.log(`After standardization: ${standardizedPosts.length} posts`);
       
       // Update state with feed posts
       dispatch({ type: 'FETCH_POSTS_SUCCESS', payload: standardizedPosts });
     } catch (error) {
       console.error('Error fetching feed posts:', error);
       
-      // Fallback to regular posts if feed endpoint fails
+      // Fallback to using getRandomPosts function
       try {
-        console.log("Falling back to regular posts endpoint");
+        console.log("Falling back to manual random post selection");
         const fallbackResponse = await api.get('/pg/posts');
-        let posts = [];
+        let allPosts = [];
         
         if (Array.isArray(fallbackResponse.data)) {
-          posts = fallbackResponse.data;
+          allPosts = fallbackResponse.data;
         } else if (fallbackResponse.data.posts && Array.isArray(fallbackResponse.data.posts)) {
-          posts = fallbackResponse.data.posts;
+          allPosts = fallbackResponse.data.posts;
         }
         
-        // Get a random sample of up to 6 posts for the feed
-        const shuffled = [...posts].sort(() => 0.5 - Math.random());
-        const feedPosts = shuffled.slice(0, 6);
+        // Shuffle the array and take 6 posts
+        const shuffled = [...allPosts].sort(() => 0.5 - Math.random());
+        const randomPosts = shuffled.slice(0, 6);
         
-        console.log(`Using ${feedPosts.length} random posts as fallback for feed`);
+        console.log(`Retrieved ${randomPosts.length} random posts for feed`);
         
-        // Standardize the posts format
-        const standardizedPosts = feedPosts.map((post: any) => standardizePostFormat(post));
+        // Standardize before updating state
+        const standardizedPosts = randomPosts.map((post: any) => standardizePostFormat(post));
         
-        // Update state with feed posts
+        // Update state with random posts
         dispatch({ type: 'FETCH_POSTS_SUCCESS', payload: standardizedPosts });
       } catch (fallbackError) {
-        console.error('Error with fallback posts fetch:', fallbackError);
+        console.error('Error with fallback random posts fetch:', fallbackError);
         dispatch({
           type: 'FETCH_POSTS_FAILURE',
           payload: 'Failed to fetch feed posts',
@@ -1025,8 +1037,12 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
               fetchLikedPosts(user.id).catch(error => {
                 console.error('Error initializing liked posts:', error);
                 return null;
+              }),
+              fetchFeedPosts().catch(error => {
+                console.error('Error initializing feed posts:', error);
+                return null;
               })
-            ]).then(([userPostsResult, likedPostsResult]) => {
+            ]).then(([userPostsResult, likedPostsResult, feedPostsResult]) => {
               console.log('Initial data fetch complete:', {
                 userPostsFetched: userPostsResult !== null,
                 likedPostsFetched: likedPostsResult !== null

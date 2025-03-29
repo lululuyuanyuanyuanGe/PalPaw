@@ -116,7 +116,6 @@ const HomeScreen = () => {
     state: postsState, 
     fetchPosts,
     fetchFeedPosts,
-    fetchUserPosts,
     setCurrentPost
   } = usePosts();
   
@@ -178,9 +177,13 @@ const HomeScreen = () => {
     ? postsState.feedPosts
     : postsState.feedPosts; // TODO: Replace with followingPosts when available
   
+  console.log(`Home: Found ${postsToDisplay.length} posts to display in ${activeTab} tab`);
+  
   // Split posts into left and right columns for waterfall layout
-  const leftColumnPosts = postsToDisplay.filter((_, index: number) => index % 2 === 0);
-  const rightColumnPosts = postsToDisplay.filter((_, index: number) => index % 2 === 1);
+  const leftColumnPosts = postsToDisplay.filter((_, index) => index % 2 === 0);
+  const rightColumnPosts = postsToDisplay.filter((_, index) => index % 2 === 1);
+  
+  console.log(`Home: Split into ${leftColumnPosts.length} left and ${rightColumnPosts.length} right posts`);
   
   // Check if loading
   const isLoading = postsState.loading;

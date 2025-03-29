@@ -100,7 +100,7 @@ const PostDetail = () => {
   
   // Get posts context with all post arrays
   const { state: postsState, likePost, unlikePost, addComment, fetchPostById, isPostLiked } = usePosts();
-  const { currentPost, userPosts, posts, likedPosts } = postsState;
+  const { currentPost, userPosts, feedPosts, likedPosts } = postsState;
   
   // Get user context for profile data
   const { state: userState } = useUser();
@@ -115,9 +115,9 @@ const PostDetail = () => {
   const postId = params.id as string;
   const post = currentPost?.id === postId 
     ? currentPost 
-    : userPosts.find(p => p.id === postId) 
-      || posts.find(p => p.id === postId)
-      || likedPosts.find(p => p.id === postId);
+    : userPosts?.find(p => p.id === postId) 
+      || (Array.isArray(postsState.feedPosts) ? postsState.feedPosts.find(p => p.id === postId) : undefined)
+      || (Array.isArray(likedPosts) ? likedPosts.find(p => p.id === postId) : undefined);
   
   // Animation for the like button
   const likeScale = useSharedValue(1);
