@@ -87,12 +87,20 @@ const EditProfileScreen = () => {
 
   const saveProfile = async () => {
     try {
+      // Validate form data before submitting
+      if (!username || username.trim() === '') {
+        Alert.alert("Error", "Username cannot be empty");
+        return;
+      }
+
       setIsSaving(true);
       
-      // Create form data for api upload
+      // Create form data for API upload
       const formData = new FormData();
-      formData.append("username", username);
-      formData.append("bio", bio);
+      formData.append("username", username.trim());
+      
+      // Append bio if available (even empty string is valid)
+      formData.append("bio", bio !== null ? bio.trim() : '');
       
       // Add avatar if changed
       if (avatarFile) {
@@ -102,11 +110,22 @@ const EditProfileScreen = () => {
         formData.append("avatar", {
           uri: avatarFile.uri,
           name: `avatar.${fileType}`,
-          type: `image/${fileType}`,
+          type: fileType.toLowerCase() === 'jpg' ? 'image/jpeg' : `image/${fileType.toLowerCase()}`,
         } as any);
+        
+        console.log('Uploading avatar:', avatarFile.uri);
       }
 
+      console.log('Updating profile with:', {
+        username: username,
+        bio: bio,
+        hasAvatar: !!avatarFile
+      });
+
+      // Call the updateUserProfile function with formData
       await updateUserProfile(formData);
+      
+      // Refresh user data after update
       await fetchUserProfile();
       
       // Show success modal instead of alert
@@ -286,22 +305,22 @@ const EditProfileScreen = () => {
             </View>
           </LinearGradient>
             
-          {/* Centered Avatar */}
-          <View className="absolute left-0 right-0 -bottom-10 items-center justify-center z-10">
-            <View className="w-[100px] h-[100px] rounded-full bg-white p-[3px] shadow-lg">
-              <Image
-                source={{ uri: formatImageUrl("https://placekitten.com/200/200") }}
-                className="w-full h-full rounded-full"
-              />
-              <TouchableOpacity
-                className="absolute bottom-0 right-0 bg-purple-600 rounded-full w-9 h-9 items-center justify-center border-[3px] border-white"
-                onPress={pickAvatar}
-              >
-                <Feather name="camera" size={18} color="white" />
-              </TouchableOpacity>
+            {/* Centered Avatar */}
+            <View className="absolute left-0 right-0 -bottom-10 items-center justify-center z-10">
+              <View className="w-[100px] h-[100px] rounded-full bg-white p-[3px] shadow-lg">
+                <Image
+                  source={avatarImage ? { uri: formatImageUrl(avatarImage) } : require('../../../assets/images/cat1.jpg')}
+                  className="w-full h-full rounded-full"
+                />
+                <TouchableOpacity
+                  className="absolute bottom-0 right-0 bg-purple-600 rounded-full w-9 h-9 items-center justify-center border-[3px] border-white"
+                  onPress={pickAvatar}
+                >
+                  <Feather name="camera" size={18} color="white" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
         
         {/* Main Content */}
         <View className="bg-white rounded-t-3xl mx-4 shadow-sm p-5 mt-16">

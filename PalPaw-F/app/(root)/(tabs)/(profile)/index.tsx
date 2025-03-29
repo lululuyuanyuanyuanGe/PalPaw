@@ -67,7 +67,6 @@ const ProfileScreen = () => {
   const { 
     state: userState, 
     fetchUserProfile, 
-    hasLikedPost 
   } = useUser();
   
   // Use PostsContext for post data

@@ -3,29 +3,23 @@ import api from '../utils/apiClient';
 import { useAuth } from './AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Define user profile interface based on User model fields
+// Simplified user profile interface with only essential fields
 interface UserProfile {
   id: string;
   username: string;
-  email: string;
+  email?: string;
   firstName?: string;
   lastName?: string;
   avatar?: string;
   bio?: string;
-  isActive: boolean;
-  role: 'user' | 'admin';
-  lastLogin?: string;
   followerCount: number;
   followingCount: number;
-  likedPostsCount: number;
-  likedPostIds: string[];
-  savedProductIds: string[];
   following?: string[];
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-// Define the user state interface
+// Simplified user state interface
 interface UserState {
   profile: UserProfile | null;
   followedUsers: UserProfile[];
@@ -34,7 +28,7 @@ interface UserState {
   error: string | null;
 }
 
-// Define actions for user state
+// Simplified actions for user state
 type UserAction =
   | { type: 'FETCH_PROFILE_REQUEST' }
   | { type: 'FETCH_PROFILE_SUCCESS'; payload: UserProfile }
@@ -54,10 +48,6 @@ type UserAction =
   | { type: 'UNFOLLOW_USER_REQUEST'; payload: string }
   | { type: 'UNFOLLOW_USER_SUCCESS'; payload: string }
   | { type: 'UNFOLLOW_USER_FAILURE'; payload: string }
-  | { type: 'SAVE_PRODUCT_SUCCESS'; payload: string }
-  | { type: 'UNSAVE_PRODUCT_SUCCESS'; payload: string }
-  | { type: 'LIKE_POST_SUCCESS'; payload: string }
-  | { type: 'UNLIKE_POST_SUCCESS'; payload: string }
   | { type: 'CLEAR_ERROR' }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string }
@@ -80,7 +70,7 @@ const initialState: UserState = {
   error: null,
 };
 
-// User reducer
+// Simplified user reducer
 const userReducer = (state: UserState, action: UserAction): UserState => {
   switch (action.type) {
     case 'FETCH_PROFILE_REQUEST':
@@ -130,52 +120,21 @@ const userReducer = (state: UserState, action: UserAction): UserState => {
         profile: {
           ...state.profile,
           following: [...(state.profile.following || []), action.payload],
+          followingCount: state.profile.followingCount + 1
         },
         loading: false,
         error: null,
       };
     case 'UNFOLLOW_USER_SUCCESS':
+      if (!state.profile) return state;
       return {
         ...state,
-        followedUsers: state.followedUsers.filter(user => user.id !== action.payload),
-        profile: state.profile ? {
+        profile: {
           ...state.profile,
+          following: state.profile.following?.filter(id => id !== action.payload),
           followingCount: state.profile.followingCount - 1
-        } : null,
-      };
-    case 'SAVE_PRODUCT_SUCCESS':
-      return {
-        ...state,
-        profile: state.profile ? {
-          ...state.profile,
-          savedProductIds: [...state.profile.savedProductIds, action.payload]
-        } : null,
-      };
-    case 'UNSAVE_PRODUCT_SUCCESS':
-      return {
-        ...state,
-        profile: state.profile ? {
-          ...state.profile,
-          savedProductIds: state.profile.savedProductIds.filter(id => id !== action.payload)
-        } : null,
-      };
-    case 'LIKE_POST_SUCCESS':
-      return {
-        ...state,
-        profile: state.profile ? {
-          ...state.profile,
-          likedPostIds: [...state.profile.likedPostIds, action.payload],
-          likedPostsCount: state.profile.likedPostsCount + 1
-        } : null,
-      };
-    case 'UNLIKE_POST_SUCCESS':
-      return {
-        ...state,
-        profile: state.profile ? {
-          ...state.profile,
-          likedPostIds: state.profile.likedPostIds.filter(id => id !== action.payload),
-          likedPostsCount: state.profile.likedPostsCount - 1
-        } : null,
+        },
+        followedUsers: state.followedUsers.filter(user => user.id !== action.payload),
       };
     case 'CLEAR_ERROR':
       return {
@@ -202,25 +161,18 @@ const userReducer = (state: UserState, action: UserAction): UserState => {
   }
 };
 
-// Create the user context
+// Create the user context with simplified interface
 export interface UserContextProps {
   state: UserState;
   dispatch: React.Dispatch<UserAction>;
-  fetchUserProfile: (userId?: string) => Promise<void>;
+  fetchUserProfile: (userId?: string) => Promise<UserProfile | null>;
   updateProfile: (data: ProfileUpdateData) => Promise<void>;
   fetchFollowers: (userId?: string) => Promise<void>;
   fetchFollowing: (userId?: string) => Promise<void>;
   followUser: (userId: string) => Promise<void>;
   unfollowUser: (userId: string) => Promise<void>;
-  saveProduct: (productId: string) => Promise<void>;
-  unsaveProduct: (productId: string) => Promise<void>;
-  likePost: (postId: string) => Promise<void>;
-  unlikePost: (postId: string) => Promise<void>;
-  hasLikedPost: (postId: string) => boolean;
-  hasSavedProduct: (productId: string) => boolean;
-  isFollowing: (userId: string) => boolean;
   clearError: () => void;
-  getUserProfile: () => Promise<void>;
+  getUserProfile: () => Promise<UserProfile | null>;
   updateUserProfile: (formData: FormData) => Promise<void>;
 }
 
@@ -248,19 +200,46 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     dispatch({ type: 'FETCH_PROFILE_REQUEST' });
 
     try {
+      // Verify we have a token
+      const token = await AsyncStorage.getItem('token');
+      if (!token && !userId) {
+        throw new Error('Authentication required to access your profile');
+      }
+      
       // Use 'me' as the ID when fetching the current user's profile
       const endpoint = `/users/${userId || 'me'}`;
       
       console.log(`Fetching user profile from endpoint: ${endpoint}`);
-      const response = await api.get(endpoint);
+      const response = await api.get(endpoint, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+      });
       
       if (response.data && response.data.success) {
         console.log('Profile fetch successful:', response.data.user);
+        
+        // Extract only the fields we need to store in context
+        const profileData: UserProfile = {
+          id: response.data.user.id,
+          username: response.data.user.username,
+          email: response.data.user.email,
+          firstName: response.data.user.firstName,
+          lastName: response.data.user.lastName,
+          avatar: response.data.user.avatar,
+          bio: response.data.user.bio,
+          followerCount: response.data.user.followerCount || 0,
+          followingCount: response.data.user.followingCount || 0,
+          following: response.data.user.following || [],
+          createdAt: response.data.user.createdAt,
+          updatedAt: response.data.user.updatedAt
+        };
+        
         dispatch({
           type: 'FETCH_PROFILE_SUCCESS',
-          payload: response.data.user,
+          payload: profileData,
         });
-        return response.data.user;
+        return profileData;
       } else {
         throw new Error('Failed to fetch user profile');
       }
@@ -415,7 +394,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       if (response.data && response.data.success) {
         dispatch({
           type: 'FOLLOW_USER_SUCCESS',
-          payload: response.data.user,
+          payload: userId,
         });
       } else {
         throw new Error('Failed to follow user');
@@ -469,161 +448,6 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     }
   };
 
-  // Save product
-  const saveProduct = async (productId: string) => {
-    if (!authState.isAuthenticated) {
-      dispatch({
-        type: 'UPDATE_PROFILE_FAILURE',
-        payload: 'You must be logged in to save products',
-      });
-      return;
-    }
-
-    try {
-      const response = await api.post(`/products/${productId}/save`);
-      
-      if (response.data && response.data.success) {
-        dispatch({
-          type: 'SAVE_PRODUCT_SUCCESS',
-          payload: productId,
-        });
-      } else {
-        throw new Error('Failed to save product');
-      }
-    } catch (error) {
-      let errorMessage = 'Failed to save product';
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      
-      dispatch({
-        type: 'UPDATE_PROFILE_FAILURE',
-        payload: errorMessage,
-      });
-    }
-  };
-
-  // Unsave product
-  const unsaveProduct = async (productId: string) => {
-    if (!authState.isAuthenticated) {
-      dispatch({
-        type: 'UPDATE_PROFILE_FAILURE',
-        payload: 'You must be logged in to unsave products',
-      });
-      return;
-    }
-
-    try {
-      const response = await api.post(`/products/${productId}/unsave`);
-      
-      if (response.data && response.data.success) {
-        dispatch({
-          type: 'UNSAVE_PRODUCT_SUCCESS',
-          payload: productId,
-        });
-      } else {
-        throw new Error('Failed to unsave product');
-      }
-    } catch (error) {
-      let errorMessage = 'Failed to unsave product';
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      
-      dispatch({
-        type: 'UPDATE_PROFILE_FAILURE',
-        payload: errorMessage,
-      });
-    }
-  };
-
-  // Like post
-  const likePost = async (postId: string) => {
-    if (!authState.isAuthenticated) {
-      dispatch({
-        type: 'UPDATE_PROFILE_FAILURE',
-        payload: 'You must be logged in to like posts',
-      });
-      return;
-    }
-
-    try {
-      const response = await api.post(`/posts/${postId}/like`);
-      
-      if (response.data && response.data.success) {
-        dispatch({
-          type: 'LIKE_POST_SUCCESS',
-          payload: postId,
-        });
-      } else {
-        throw new Error('Failed to like post');
-      }
-    } catch (error) {
-      let errorMessage = 'Failed to like post';
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      
-      dispatch({
-        type: 'UPDATE_PROFILE_FAILURE',
-        payload: errorMessage,
-      });
-    }
-  };
-
-  // Unlike post
-  const unlikePost = async (postId: string) => {
-    if (!authState.isAuthenticated) {
-      dispatch({
-        type: 'UPDATE_PROFILE_FAILURE',
-        payload: 'You must be logged in to unlike posts',
-      });
-      return;
-    }
-
-    try {
-      const response = await api.post(`/posts/${postId}/unlike`);
-      
-      if (response.data && response.data.success) {
-        dispatch({
-          type: 'UNLIKE_POST_SUCCESS',
-          payload: postId,
-        });
-      } else {
-        throw new Error('Failed to unlike post');
-      }
-    } catch (error) {
-      let errorMessage = 'Failed to unlike post';
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      
-      dispatch({
-        type: 'UPDATE_PROFILE_FAILURE',
-        payload: errorMessage,
-      });
-    }
-  };
-
-  // Check if user has liked a post
-  const hasLikedPost = (postId: string): boolean => {
-    return state.profile?.likedPostIds.includes(postId) || false;
-  };
-
-  // Check if user has saved a product
-  const hasSavedProduct = (productId: string): boolean => {
-    return state.profile?.savedProductIds.includes(productId) || false;
-  };
-
-  // Check if user is following another user
-  const isFollowing = (userId: string): boolean => {
-    return state.followedUsers.some(user => user.id === userId) || false;
-  };
-
   // Clear error
   const clearError = () => {
     dispatch({ type: 'CLEAR_ERROR' });
@@ -651,8 +475,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       
       console.log('Updating user profile with form data:', Object.fromEntries(formData.entries()));
       
-      // Use the API client instead of fetch for consistency
-      const response = await api.put('/users/profile/update', formData, {
+      // Use new endpoint for profile updates
+      const response = await api.put('/upload/profile', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -662,6 +486,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       
       if (response.data?.success) {
         dispatch({ type: 'UPDATE_PROFILE_SUCCESS', payload: response.data.user });
+        
         // Refresh the profile after update
         await fetchUserProfile(authState.user?.id);
         return response.data.user;
@@ -686,13 +511,6 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         fetchFollowing,
         followUser,
         unfollowUser,
-        saveProduct,
-        unsaveProduct,
-        likePost,
-        unlikePost,
-        hasLikedPost,
-        hasSavedProduct,
-        isFollowing,
         clearError,
         getUserProfile,
         updateUserProfile,

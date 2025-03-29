@@ -1,14 +1,10 @@
 import express from 'express';
-import { 
-  updateUserProfile,
-  getUserById
-} from '../controllers/user/userController.js';
-import { authenticate } from '../middlewares/authMiddleware.js';
-
+import { getUserById } from '../controllers/user/userController.js';
+import { optionalAuthenticate } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// Get user by ID (auth required for current user, public for other users)
-router.get('/:id', getUserById);
+// Get user by ID - use optionalAuthenticate to handle both authenticated and unauthenticated access
+router.get('/:id', optionalAuthenticate, getUserById);
 
 export default router;

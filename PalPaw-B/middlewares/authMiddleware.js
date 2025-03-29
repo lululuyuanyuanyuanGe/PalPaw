@@ -40,42 +40,34 @@ export const authenticate = async (req, res, next) => {
 };
 
 /**
- * Optional authentication middleware
- * Verifies JWT token and attaches user to request object if present and valid
- * Continues to next middleware regardless of authentication status
+ * Optional authentication middleware that sets req.user if authentication is provided
+ * but continues regardless of authentication status
  */
 export const optionalAuthenticate = async (req, res, next) => {
   try {
-    // Get token from header
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    // Get the token from the Authorization header
+    const authHeader = req.headers.authorization;
     
-    // If no token, skip authentication but continue
-    if (!token) {
-      return next();
-    }
-    
-    // Try to verify token
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
       
-      // Find user
-      const user = await User.findByPk(decoded.id, {
-        attributes: { exclude: ['password'] }
-      });
+      // Verify the token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Find the user in the database
+      const user = await User.findByPk(decoded.id);
       
       if (user) {
-        // Attach user to request
+        // Set user in request object
         req.user = user;
       }
-    } catch (tokenError) {
-      // Token is invalid, but we'll continue anyway
-      console.info('Invalid token in optional auth, continuing...');
     }
     
+    // Continue to next middleware regardless of authentication
     next();
   } catch (error) {
-    // Even on error, proceed to the next middleware
-    console.error('Optional auth middleware error:', error);
+    console.log('Optional authentication failed:', error.message);
+    // Continue without setting req.user
     next();
   }
 }; 
