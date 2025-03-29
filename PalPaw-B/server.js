@@ -73,18 +73,26 @@ app.use('/uploads', express.static(uploadsPath));
 
 // Routes
 console.log('Registered routes:');
+
+
 app.use("/api/pg/auth", pgAuthRoutes); // PostgreSQL auth
 console.log('- /api/pg/auth');
+
 app.use("/api/upload", uploadRoutes); // Upload routes
 console.log('- /api/upload');
+
 app.use("/api/likes", likesRoutes); // Likes routes
 console.log('- /api/likes');
+
 app.use("/api/pg/posts", postsRoutes); // Posts routes
 console.log('- /api/pg/posts');
+
 app.use("/api/pg/products", productsRoutes); // Products routes
 console.log('- /api/pg/products');
+
 app.use("/api/comments", commentRoutes); // Comments routes
 console.log('- /api/comments');
+
 app.use("/api/users", userRoutes); // User routes
 console.log('- /api/users');
 
