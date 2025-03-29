@@ -193,6 +193,7 @@ const processPost = async (post: any, postId: string): Promise<PostItem> => {
 // Define the context state interface
 interface PostsState {
   Posts: PostItem[];
+  friendsPosts: PostItem[];
   feedPosts: PostItem[];
   userPosts: PostItem[];
   likedPosts: PostItem[];
@@ -211,6 +212,8 @@ export type PostsAction =
   | { type: 'FETCH_USER_POSTS_FAILURE'; payload: string }
   | { type: 'FETCH_LIKED_POSTS_SUCCESS'; payload: { posts: PostItem[], postIds: string[] } }
   | { type: 'FETCH_LIKED_POSTS_FAILURE'; payload: string }
+  | { type: 'FETCH_FRIENDS_POSTS_SUCCESS'; payload: PostItem[] }
+  | { type: 'FETCH_FRIENDS_POSTS_FAILURE'; payload: string }
   | { type: 'SET_CURRENT_POST'; payload: PostItem }
   | { type: 'CLEAR_CURRENT_POST' }
   | { type: 'LIKE_POST_SUCCESS'; payload: { postId: string, likedPostIds: string[] } }
@@ -227,6 +230,7 @@ export type PostsAction =
 // Define initial state
 const initialState: PostsState = {
   Posts: [],
+  friendsPosts: [],
   feedPosts: [],
   userPosts: [],
   likedPosts: [],
@@ -280,6 +284,19 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
         error: null,
       };
     case 'FETCH_LIKED_POSTS_FAILURE':
+      return {
+        ...state,
+        loading: false,
+        error: action.payload,
+      };
+    case 'FETCH_FRIENDS_POSTS_SUCCESS':
+      return {
+        ...state,
+        friendsPosts: action.payload,
+        loading: false,
+        error: null,
+      };
+    case 'FETCH_FRIENDS_POSTS_FAILURE':
       return {
         ...state,
         loading: false,
@@ -486,6 +503,7 @@ interface PostsContextType {
   fetchFeedPosts: () => Promise<void>;
   fetchUserPosts: (userId: string) => Promise<void>;
   fetchLikedPosts: (userId?: string) => Promise<void>;
+  fetchFriendsPosts: () => Promise<void>;
   fetchPostById: (postId: string) => Promise<void>;
   setCurrentPost: (post: PostItem) => void;
   likePost: (postId: string) => Promise<boolean>;
@@ -998,6 +1016,90 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     }
   };
 
+  // Function to fetch posts from friends (followers and following)
+  const fetchFriendsPosts = async (): Promise<void> => {
+    dispatch({ type: 'FETCH_POSTS_REQUEST' });
+    try {
+      console.log("Fetching posts from friends (followers and following)...");
+      
+      // Get auth token
+      const token = await AsyncStorage.getItem('token');
+      
+      if (!token) {
+        throw new Error('No auth token found');
+      }
+      
+      // Make API call to fetch friends' posts (max 6 posts from backend)
+      const response = await api.get('/pg/posts/friends', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      console.log("Friends posts API response:", response.status, response.statusText);
+      
+      let posts = [];
+      
+      if (Array.isArray(response.data)) {
+        posts = response.data;
+        console.log("Response data is an array");
+      } else if (response.data.posts && Array.isArray(response.data.posts)) {
+        posts = response.data.posts;
+        console.log("Response data has posts array");
+      } else if (response.data.success) {
+        // Handle the case where success is true but posts might be in a different format
+        console.log("Response indicates success, data format:", typeof response.data);
+        if (response.data.posts) {
+          posts = response.data.posts;
+        }
+      }
+      
+      console.log(`Received ${posts.length} friends' posts`);
+      
+      // Process posts and fetch comments if needed
+      const enhancedPosts = await Promise.all(posts.map(async (post: any) => {
+        // Fetch comments if not included or empty
+        if (!post.comments || post.comments.length === 0) {
+          try {
+            post.comments = await fetchAndFormatComments(post.id);
+          } catch (commentsError) {
+            console.warn(`Failed to fetch comments for post ${post.id}:`, commentsError);
+            post.comments = [];
+          }
+        }
+        return post;
+      }));
+      
+      // Standardize the posts format
+      const standardizedPosts = enhancedPosts.map((post: any) => standardizePostFormat(post));
+      
+      console.log(`After standardization: ${standardizedPosts.length} friends' posts`);
+      
+      // Update state with friends' posts
+      dispatch({ type: 'FETCH_FRIENDS_POSTS_SUCCESS', payload: standardizedPosts });
+    } catch (error) {
+      console.error('Error fetching friends posts:', error);
+      
+      // Fallback to feed posts if friends posts fetch fails
+      try {
+        console.log("Falling back to feed posts as friends posts");
+        
+        // Use feed posts as fallback
+        await fetchFeedPosts();
+        
+        // Treat feed posts as friends posts
+        dispatch({ 
+          type: 'FETCH_FRIENDS_POSTS_SUCCESS', 
+          payload: state.feedPosts 
+        });
+      } catch (fallbackError) {
+        console.error('Error with fallback for friends posts:', fallbackError);
+        dispatch({
+          type: 'FETCH_FRIENDS_POSTS_FAILURE',
+          payload: 'Failed to fetch friends posts'
+        });
+      }
+    }
+  };
+
   // Initialize posts data from AsyncStorage after functions are defined
   useEffect(() => {
     const initPostsData = async () => {
@@ -1025,7 +1127,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
           if (user && user.id) {
             console.log('Found user data in storage, user ID:', user.id);
             
-            // Initialize both user posts and liked posts in parallel
+            // Initialize user posts, liked posts, and feed posts in parallel
             Promise.all([
               // Fetch user posts
               fetchUserPosts(user.id).catch(error => {
@@ -1038,14 +1140,24 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
                 console.error('Error initializing liked posts:', error);
                 return null;
               }),
+              
+              // Fetch feed posts
               fetchFeedPosts().catch(error => {
                 console.error('Error initializing feed posts:', error);
                 return null;
+              }),
+              
+              // Fetch friends posts
+              fetchFriendsPosts().catch(error => {
+                console.error('Error initializing friends posts:', error);
+                return null;
               })
-            ]).then(([userPostsResult, likedPostsResult, feedPostsResult]) => {
+            ]).then(([userPostsResult, likedPostsResult, feedPostsResult, friendsPostsResult]) => {
               console.log('Initial data fetch complete:', {
                 userPostsFetched: userPostsResult !== null,
-                likedPostsFetched: likedPostsResult !== null
+                likedPostsFetched: likedPostsResult !== null,
+                feedPostsFetched: feedPostsResult !== null,
+                friendsPostsFetched: friendsPostsResult !== null
               });
             });
           } else {
@@ -1071,6 +1183,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         fetchFeedPosts,
         fetchUserPosts,
         fetchLikedPosts,
+        fetchFriendsPosts,
         fetchPostById,
         setCurrentPost,
         likePost,

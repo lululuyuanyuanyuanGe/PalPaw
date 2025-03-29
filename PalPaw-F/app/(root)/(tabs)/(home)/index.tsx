@@ -11,7 +11,8 @@ import {
   PixelRatio,
   SafeAreaView,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  StyleSheet
 } from 'react-native';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { DrawerToggleButton } from '@react-navigation/drawer';
@@ -105,17 +106,20 @@ const Card = ({ post, onPress, index }: { post: PostItem, onPress: (post: PostIt
 };
 
 const HomeScreen = () => {
-  const [activeTab, setActiveTab] = useState('explore');
+  const [activeTab, setActiveTab] = useState<'explore' | 'follow'>('explore');
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
   const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   
   // Get posts context
   const { 
     state: postsState, 
     fetchPosts,
     fetchFeedPosts,
+    fetchFriendsPosts,
     setCurrentPost
   } = usePosts();
   
@@ -137,16 +141,27 @@ const HomeScreen = () => {
   
   // Function to load posts based on active tab
   const loadPosts = async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    
     try {
       if (activeTab === 'explore') {
         await fetchFeedPosts();
       } else {
-        // Fetch following posts - for now, just fetch regular posts
-        // In a real app, you'd have a fetchFollowingPosts method
-        await fetchPosts();
+        try {
+          await fetchFriendsPosts();
+        } catch (friendsError) {
+          console.error('Error fetching friends posts:', friendsError);
+          setLoadError('Could not load friends posts. Showing recommended posts instead.');
+          // Fall back to feed posts if friends posts fails
+          await fetchFeedPosts();
+        }
       }
     } catch (error) {
       console.error('Error loading posts:', error);
+      setLoadError('Could not load posts. Please try again later.');
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -172,21 +187,17 @@ const HomeScreen = () => {
   };
   
   // Get the appropriate posts based on active tab
-  // For now, both tabs use the same post data
   const postsToDisplay = activeTab === 'explore' 
-    ? postsState.feedPosts
-    : postsState.feedPosts; // TODO: Replace with followingPosts when available
+    ? (postsState.feedPosts || [])
+    : (postsState.friendsPosts || []);
   
-  console.log(`Home: Found ${postsToDisplay.length} posts to display in ${activeTab} tab`);
+  console.log(`Home: Found ${postsToDisplay?.length || 0} posts to display in ${activeTab} tab`);
   
   // Split posts into left and right columns for waterfall layout
-  const leftColumnPosts = postsToDisplay.filter((_, index) => index % 2 === 0);
-  const rightColumnPosts = postsToDisplay.filter((_, index) => index % 2 === 1);
+  const leftColumnPosts = postsToDisplay ? postsToDisplay.filter((_, index) => index % 2 === 0) : [];
+  const rightColumnPosts = postsToDisplay ? postsToDisplay.filter((_, index) => index % 2 === 1) : [];
   
   console.log(`Home: Split into ${leftColumnPosts.length} left and ${rightColumnPosts.length} right posts`);
-  
-  // Check if loading
-  const isLoading = postsState.loading;
   
   return (
     <>
@@ -301,21 +312,28 @@ const HomeScreen = () => {
                   </Text>
                 </View>
               ) : (
-                <View className="flex-row justify-between">
-                  {/* Left column */}
-                  <View className="w-[48%]">
-                    {leftColumnPosts.map((post, index) => (
-                      <Card key={post.id} post={post} onPress={handlePostPress} index={index * 2} />
-                    ))}
+                <>
+                  {loadError && (
+                    <View className="mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
+                      <Text className="text-red-600">{loadError}</Text>
+                    </View>
+                  )}
+                  <View className="flex-row justify-between">
+                    {/* Left column */}
+                    <View className="w-[48%]">
+                      {leftColumnPosts.map((post, index) => (
+                        <Card key={post.id} post={post} onPress={handlePostPress} index={index * 2} />
+                      ))}
+                    </View>
+                    
+                    {/* Right column */}
+                    <View className="w-[48%]">
+                      {rightColumnPosts.map((post, index) => (
+                        <Card key={post.id} post={post} onPress={handlePostPress} index={index * 2 + 1} />
+                      ))}
+                    </View>
                   </View>
-                  
-                  {/* Right column */}
-                  <View className="w-[48%]">
-                    {rightColumnPosts.map((post, index) => (
-                      <Card key={post.id} post={post} onPress={handlePostPress} index={index * 2 + 1} />
-                    ))}
-                  </View>
-                </View>
+                </>
               )}
             </View>
           </ScrollView>
@@ -324,5 +342,31 @@ const HomeScreen = () => {
     </>
   );
 };
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    padding: 15,
+    backgroundColor: '#FFF6F5',
+    borderRadius: 8,
+    marginBottom: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B6B',
+  },
+  errorText: {
+    color: '#FF6B6B',
+    fontSize: 14,
+  },
+});
 
 export default HomeScreen;

@@ -7,7 +7,7 @@ import {
   updatePost, 
   deletePost 
 } from '../controllers/posts/index.js';
-import { getRandomPosts } from '../controllers/upload/uploadController.js';
+import { getRandomPosts, getFriendsPosts } from '../controllers/upload/uploadController.js';
 
 const router = express.Router();
 
@@ -24,6 +24,13 @@ router.get('/', optionalAuthenticate, getAllPosts);
  * @access Public
  */
 router.get('/feed', optionalAuthenticate, getRandomPosts);
+
+/**
+ * @route GET /api/pg/posts/friends
+ * @desc Get posts from user's followers and following (max 6 posts)
+ * @access Private
+ */
+router.get('/friends', authenticate, getFriendsPosts);
 
 /**
  * @route GET /api/pg/posts/:id

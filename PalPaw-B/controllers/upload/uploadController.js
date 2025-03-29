@@ -1067,3 +1067,289 @@ export const avatarUpload = multer({
     cb(null, true);
   }
 });
+
+/**
+ * Get posts from a user's followers and users the current user is following
+ * Returns a maximum of 6 posts total (3 from followers and 3 from following, if available)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const getFriendsPosts = async (req, res) => {
+  try {
+    console.log('Getting posts from friends (followers and following)');
+    
+    // Get limit parameter with default of 6
+    const limit = parseInt(req.query.limit) || 6;
+    
+    // Validate limit to prevent excessive queries
+    if (limit > 20) {
+      return res.status(400).json({
+        success: false,
+        message: 'Maximum limit allowed is 20'
+      });
+    }
+    
+    // Get current authenticated user ID
+    const currentUserId = req.user.id;
+    
+    // Step 1: Get current user to check model structure
+    const currentUser = await User.findByPk(currentUserId);
+    
+    if (!currentUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if our database model has relationship fields
+    // We need to check what fields actually exist in our User model
+    const userModelHasFollowing = Object.prototype.hasOwnProperty.call(currentUser, 'followingIds');
+    console.log(`User model has followingIds field: ${userModelHasFollowing}`);
+    
+    let followerIds = [];
+    let followingIds = [];
+    
+    // If we have social relationship fields, we'll use them
+    if (userModelHasFollowing) {
+      try {
+        // Get followers (users who follow the current user)
+        const followers = await User.findAll({
+          where: {
+            followingIds: {
+              [Op.contains]: [currentUserId]
+            }
+          },
+          attributes: ['id']
+        });
+        
+        // Get follower IDs as an array
+        followerIds = followers.map(follower => follower.id);
+        
+        // Get users that the current user follows
+        followingIds = currentUser.followingIds || [];
+      } catch (relationshipError) {
+        console.error('Error fetching relationship data, schema might be missing fields:', relationshipError);
+        // Continue with empty arrays for fallback
+      }
+    } else {
+      console.log('User model does not have social relationship fields, using fallback strategy');
+    }
+    
+    console.log(`Found ${followerIds.length} followers and ${followingIds.length} following users`);
+    
+    // If we have no data from relationships, let's just show recent popular posts
+    if (followerIds.length === 0 && followingIds.length === 0) {
+      console.log('No friend data available, using popular posts instead');
+      
+      // Get popular posts excluding the current user's
+      const popularPosts = await Post.findAll({
+        where: {
+          userId: {
+            [Op.ne]: currentUserId
+          },
+          visibility: 'public',
+          isDeleted: false
+        },
+        limit: limit,
+        order: [['likes', 'DESC'], ['createdAt', 'DESC']], // Most likes, then most recent
+        include: [
+          {
+            model: User,
+            as: 'author',
+            attributes: ['id', 'username', 'avatar']
+          },
+          {
+            model: Comment,
+            as: 'comments',
+            include: [
+              {
+                model: User,
+                as: 'author',
+                attributes: ['id', 'username', 'avatar']
+              }
+            ]
+          }
+        ]
+      });
+      
+      // Format and return these posts
+      const formattedPosts = popularPosts.map(post => {
+        const postJSON = post.toJSON();
+        
+        // Ensure author data is in the expected format
+        if (postJSON.author) {
+          postJSON.authorData = {
+            id: postJSON.author.id,
+            username: postJSON.author.username || 'User',
+            avatar: postJSON.author.avatar || `https://robohash.org/${postJSON.author.id}?set=set4`
+          };
+        }
+        
+        return postJSON;
+      });
+      
+      return res.status(200).json({
+        success: true,
+        posts: formattedPosts
+      });
+    }
+    
+    // Continue with the regular logic if we have relationship data...
+    let allPosts = [];
+    
+    // Step 2: Get posts from followers (up to half the limit)
+    if (followerIds.length > 0) {
+      const followerPostsLimit = Math.ceil(limit / 2);
+      const followerPosts = await Post.findAll({
+        where: {
+          userId: {
+            [Op.in]: followerIds
+          },
+          visibility: 'public',
+          isDeleted: false
+        },
+        limit: followerPostsLimit,
+        order: [['createdAt', 'DESC']],
+        include: [
+          {
+            model: User,
+            as: 'author',
+            attributes: ['id', 'username', 'avatar']
+          },
+          {
+            model: Comment,
+            as: 'comments',
+            include: [
+              {
+                model: User,
+                as: 'author',
+                attributes: ['id', 'username', 'avatar']
+              }
+            ]
+          }
+        ]
+      });
+      
+      allPosts = [...allPosts, ...followerPosts];
+      console.log(`Found ${followerPosts.length} posts from followers`);
+    }
+    
+    // Step 3: Get posts from users the current user follows (up to remaining limit)
+    if (followingIds.length > 0) {
+      const followingPostsLimit = limit - allPosts.length;
+      if (followingPostsLimit > 0) {
+        const followingPosts = await Post.findAll({
+          where: {
+            userId: {
+              [Op.in]: followingIds
+            },
+            visibility: 'public',
+            isDeleted: false
+          },
+          limit: followingPostsLimit,
+          order: [['createdAt', 'DESC']],
+          include: [
+            {
+              model: User,
+              as: 'author',
+              attributes: ['id', 'username', 'avatar']
+            },
+            {
+              model: Comment,
+              as: 'comments',
+              include: [
+                {
+                  model: User,
+                  as: 'author',
+                  attributes: ['id', 'username', 'avatar']
+                }
+              ]
+            }
+          ]
+        });
+        
+        allPosts = [...allPosts, ...followingPosts];
+        console.log(`Found ${followingPosts.length} posts from users the current user follows`);
+      }
+    }
+    
+    // Step 4: If we don't have enough posts, add popular posts to fill up to the limit
+    if (allPosts.length < limit) {
+      const remainingLimit = limit - allPosts.length;
+      console.log(`Adding ${remainingLimit} additional popular posts to reach the limit`);
+      
+      // Get post IDs we already have to exclude them from additional query
+      const existingPostIds = allPosts.map(post => post.id);
+      
+      // Get recent popular posts (with most likes) excluding the ones we already have
+      const additionalPosts = await Post.findAll({
+        where: {
+          id: {
+            [Op.notIn]: existingPostIds.length > 0 ? existingPostIds : [0] // Use [0] as a placeholder if empty
+          },
+          userId: {
+            [Op.ne]: currentUserId // Exclude current user's posts
+          },
+          visibility: 'public',
+          isDeleted: false
+        },
+        limit: remainingLimit,
+        order: [['likes', 'DESC'], ['createdAt', 'DESC']], // Most likes, then most recent
+        include: [
+          {
+            model: User,
+            as: 'author',
+            attributes: ['id', 'username', 'avatar']
+          },
+          {
+            model: Comment,
+            as: 'comments',
+            include: [
+              {
+                model: User,
+                as: 'author',
+                attributes: ['id', 'username', 'avatar']
+              }
+            ]
+          }
+        ]
+      });
+      
+      console.log(`Found ${additionalPosts.length} additional popular posts`);
+      
+      // Add to our collection
+      allPosts = [...allPosts, ...additionalPosts];
+    }
+    
+    // Transform posts to ensure proper data structure
+    const formattedPosts = allPosts.map(post => {
+      const postJSON = post.toJSON();
+      
+      // Ensure author data is in the expected format
+      if (postJSON.author) {
+        postJSON.authorData = {
+          id: postJSON.author.id,
+          username: postJSON.author.username || 'User',
+          avatar: postJSON.author.avatar || `https://robohash.org/${postJSON.author.id}?set=set4`
+        };
+      }
+      
+      return postJSON;
+    });
+    
+    console.log(`Returning ${formattedPosts.length} friend posts`);
+    
+    return res.status(200).json({
+      success: true,
+      posts: formattedPosts
+    });
+  } catch (error) {
+    console.error('Error fetching friends posts:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while fetching friends posts',
+      error: error.message
+    });
+  }
+};
