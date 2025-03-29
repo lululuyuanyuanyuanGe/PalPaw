@@ -32,10 +32,12 @@ User.hasMany(Product, { foreignKey: 'userId', as: 'products' });
 Product.belongsTo(User, { foreignKey: 'userId', as: 'seller' });
 
 // User - Follow relationships (followers)
-User.hasMany(Follow, { foreignKey: 'followedId', as: 'followers' });
-Follow.belongsTo(User, { foreignKey: 'followedId', as: 'followed' });
+// Users who are being followed (Fixed to use followingId to match controller)
+User.hasMany(Follow, { foreignKey: 'followingId', as: 'followers' });
+Follow.belongsTo(User, { foreignKey: 'followingId', as: 'following' });
 
 // User - Follow relationships (following)
+// Users who follow others
 User.hasMany(Follow, { foreignKey: 'followerId', as: 'following' });
 Follow.belongsTo(User, { foreignKey: 'followerId', as: 'follower' });
 

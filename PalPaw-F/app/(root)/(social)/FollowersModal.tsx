@@ -14,57 +14,29 @@ import {
 import { Ionicons, Feather, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context';
+import { useUser } from '@/context';
 import { formatImageUrl } from '@/utils/mediaUtils';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
+import api from '@/utils/apiClient';
 
-// User type interface
+// User type interface - Adjusted to match UserProfile from context
 interface User {
   id: string;
   username: string;
-  avatar: string;
+  avatar?: string; // Make avatar optional to match UserProfile
   bio?: string;
   isFollowing?: boolean;
+  // Add other fields that might be in UserProfile but not required in our UI
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  followerCount?: number;
+  followingCount?: number;
+  following?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
-
-// Mock followers data
-const MOCK_FOLLOWERS: User[] = [
-  {
-    id: '1',
-    username: 'FurryFriend',
-    avatar: 'https://robohash.org/user1?set=set4',
-    bio: 'Dog lover and pet enthusiast',
-    isFollowing: true
-  },
-  {
-    id: '2',
-    username: 'PawsomeKitty',
-    avatar: 'https://robohash.org/user2?set=set4',
-    bio: 'Just a cat living my best life',
-    isFollowing: false
-  },
-  {
-    id: '3',
-    username: 'PetAdventurer',
-    avatar: 'https://robohash.org/user3?set=set4',
-    bio: 'Exploring the world with my dog',
-    isFollowing: true
-  },
-  {
-    id: '4',
-    username: 'FluffyTales',
-    avatar: 'https://robohash.org/user4?set=set4',
-    bio: 'Stories about my fluffy companions',
-    isFollowing: false
-  },
-  {
-    id: '5',
-    username: 'PawPatrol',
-    avatar: 'https://robohash.org/user5?set=set4',
-    bio: 'Rescue pets advocate',
-    isFollowing: true
-  }
-];
 
 interface FollowersModalProps {
   userId: string;
@@ -77,6 +49,7 @@ const { height, width } = Dimensions.get('window');
 const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
   const router = useRouter();
   const { state: authState } = useAuth();
+  const { state: userState, fetchFollowers, followUser, unfollowUser } = useUser();
   
   const [followers, setFollowers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -90,11 +63,13 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
   // Animate in/out when visibility changes
   useEffect(() => {
     if (visible) {
-      // Reset animations for list items
-      itemAnimations.current = MOCK_FOLLOWERS.map(() => new Animated.Value(0));
+      // Reset animations for list items when data is available
+      if (userState.followers?.length) {
+        itemAnimations.current = userState.followers.map(() => new Animated.Value(0));
+      }
       
-      // Fetch mock data when becoming visible
-      fetchFollowers();
+      // Fetch followers data when becoming visible
+      fetchUserFollowers();
       
       // Fade in background
       Animated.timing(fadeAnim, {
@@ -128,19 +103,35 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
     }
   }, [visible]);
   
-  // Function to fetch followers (using mock data)
-  const fetchFollowers = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Simulate network delay
-      setTimeout(() => {
-        setFollowers(MOCK_FOLLOWERS);
-        setLoading(false);
+  // Update followers when userState changes
+  useEffect(() => {
+    if (userState.followers?.length) {
+      // Map UserProfile[] to User[] to ensure type compatibility
+      const mappedFollowers = userState.followers.map(follower => {
+        // Check if the current user is following this follower
+        const isFollowingUser = userState.profile?.following?.includes(follower.id) || false;
         
-        // Animate list items in sequence
-        MOCK_FOLLOWERS.forEach((_, index) => {
+        return {
+          id: follower.id,
+          username: follower.username,
+          avatar: follower.avatar,
+          bio: follower.bio,
+          isFollowing: isFollowingUser, // Determine if current user follows this person
+          // Copy other fields as needed
+          email: follower.email,
+          firstName: follower.firstName,
+          lastName: follower.lastName
+        };
+      });
+
+      setFollowers(mappedFollowers);
+      
+      // Setup animations for new followers data
+      itemAnimations.current = mappedFollowers.map(() => new Animated.Value(0));
+      
+      // Animate list items in sequence if modal is visible
+      if (visible) {
+        mappedFollowers.forEach((_, index) => {
           Animated.timing(itemAnimations.current[index], {
             toValue: 1,
             duration: 300,
@@ -149,21 +140,19 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
             easing: Easing.out(Easing.quad)
           }).start();
         });
-      }, 1000);
-      
-      /* COMMENTED OUT API CALL
-      const response = await axios.get(`${API_URL}/users/${userId}/followers`, {
-        headers: {
-          Authorization: `Bearer ${authState.token}`
-        }
-      });
-      
-      if (response.data.success) {
-        setFollowers(response.data.followers || []);
-      } else {
-        setError('Failed to load followers');
       }
-      */
+    }
+  }, [userState.followers, visible]);
+  
+  // Function to fetch followers using context
+  const fetchUserFollowers = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Use the context function to fetch followers
+      await fetchFollowers(userId);
+      setLoading(false);
     } catch (err) {
       console.error('Error fetching followers:', err);
       setError('An error occurred while fetching followers');
@@ -174,17 +163,13 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
   // Handle follow/unfollow user
   const handleFollowToggle = async (targetUserId: string, isCurrentlyFollowing: boolean) => {
     try {
-      /* COMMENTED OUT API CALL
-      const endpoint = isCurrentlyFollowing ? 'unfollow' : 'follow';
+      if (isCurrentlyFollowing) {
+        await unfollowUser(targetUserId);
+      } else {
+        await followUser(targetUserId);
+      }
       
-      await axios.post(`${API_URL}/users/${targetUserId}/${endpoint}`, {}, {
-        headers: {
-          Authorization: `Bearer ${authState.token}`
-        }
-      });
-      */
-      
-      // Update local state to reflect the change
+      // Update local state to reflect the change immediately for better UX
       setFollowers(followers.map(user => 
         user.id === targetUserId 
           ? { ...user, isFollowing: !isCurrentlyFollowing }
@@ -387,7 +372,7 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
               <TouchableOpacity 
                 className="bg-purple-100 px-6 py-3 rounded-full mt-4"
                 style={styles.retryButton}
-                onPress={() => fetchFollowers()}
+                onPress={() => fetchUserFollowers()}
               >
                 <Text className="text-purple-700 font-bold">Try Again</Text>
               </TouchableOpacity>

@@ -14,64 +14,29 @@ import {
 import { Ionicons, Feather, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context';
+import { useUser } from '@/context';
 import { formatImageUrl } from '@/utils/mediaUtils';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
+import api from '@/utils/apiClient';
 
-// User type interface
+// User type interface - Adjusted to match UserProfile from context
 interface User {
   id: string;
   username: string;
-  avatar: string;
+  avatar?: string; // Make avatar optional to match UserProfile
   bio?: string;
   isFollowing?: boolean;
+  // Add other fields that might be in UserProfile but not required in our UI
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  followerCount?: number;
+  followingCount?: number;
+  following?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
-
-// Mock following data
-const MOCK_FOLLOWING: User[] = [
-  {
-    id: '10',
-    username: 'DoggyDaycare',
-    avatar: 'https://robohash.org/daycare?set=set4',
-    bio: 'Professional pet sitter and dog walker',
-    isFollowing: true
-  },
-  {
-    id: '11',
-    username: 'CatCafé',
-    avatar: 'https://robohash.org/cafe?set=set4',
-    bio: 'Cats and coffee, what more could you want?',
-    isFollowing: true
-  },
-  {
-    id: '12',
-    username: 'VetClinic',
-    avatar: 'https://robohash.org/vet?set=set4',
-    bio: 'Expert pet healthcare and advice',
-    isFollowing: true
-  },
-  {
-    id: '13',
-    username: 'PetSupplies',
-    avatar: 'https://robohash.org/supplies?set=set4',
-    bio: 'Everything your pet needs',
-    isFollowing: true
-  },
-  {
-    id: '14',
-    username: 'AnimalsHelp',
-    avatar: 'https://robohash.org/help?set=set4',
-    bio: 'Animal welfare organization',
-    isFollowing: true
-  },
-  {
-    id: '15',
-    username: 'PetPhotography',
-    avatar: 'https://robohash.org/photo?set=set4',
-    bio: 'Capturing your pets best moments',
-    isFollowing: true
-  }
-];
 
 interface FollowingModalProps {
   userId: string;
@@ -84,6 +49,7 @@ const { height, width } = Dimensions.get('window');
 const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
   const router = useRouter();
   const { state: authState } = useAuth();
+  const { state: userState, fetchFollowing, followUser, unfollowUser } = useUser();
   
   const [following, setFollowing] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -97,11 +63,13 @@ const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
   // Animate in/out when visibility changes
   useEffect(() => {
     if (visible) {
-      // Reset animations for list items
-      itemAnimations.current = MOCK_FOLLOWING.map(() => new Animated.Value(0));
+      // Reset animations for list items when data is available
+      if (userState.followedUsers?.length) {
+        itemAnimations.current = userState.followedUsers.map(() => new Animated.Value(0));
+      }
       
-      // Fetch mock data when becoming visible
-      fetchFollowing();
+      // Fetch following data when becoming visible
+      fetchUserFollowing();
       
       // Fade in background
       Animated.timing(fadeAnim, {
@@ -135,19 +103,33 @@ const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
     }
   }, [visible]);
   
-  // Function to fetch following (using mock data)
-  const fetchFollowing = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Simulate network delay
-      setTimeout(() => {
-        setFollowing(MOCK_FOLLOWING);
-        setLoading(false);
-        
-        // Animate list items in sequence
-        MOCK_FOLLOWING.forEach((_, index) => {
+  // Update following list when userState changes
+  useEffect(() => {
+    if (userState.followedUsers?.length) {
+      // Map UserProfile[] to User[] to ensure type compatibility
+      const mappedFollowing = userState.followedUsers.map(followedUser => {
+        // Users in the following list are always being followed by definition
+        return {
+          id: followedUser.id,
+          username: followedUser.username,
+          avatar: followedUser.avatar,
+          bio: followedUser.bio,
+          isFollowing: true, // By definition these are users we follow
+          // Copy other fields as needed
+          email: followedUser.email,
+          firstName: followedUser.firstName,
+          lastName: followedUser.lastName
+        };
+      });
+
+      setFollowing(mappedFollowing);
+      
+      // Setup animations for new following data
+      itemAnimations.current = mappedFollowing.map(() => new Animated.Value(0));
+      
+      // Animate list items in sequence if modal is visible
+      if (visible) {
+        mappedFollowing.forEach((_, index) => {
           Animated.timing(itemAnimations.current[index], {
             toValue: 1,
             duration: 300,
@@ -156,21 +138,19 @@ const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
             easing: Easing.out(Easing.quad)
           }).start();
         });
-      }, 1000);
-      
-      /* COMMENTED OUT API CALL
-      const response = await axios.get(`${API_URL}/users/${userId}/following`, {
-        headers: {
-          Authorization: `Bearer ${authState.token}`
-        }
-      });
-      
-      if (response.data.success) {
-        setFollowing(response.data.following || []);
-      } else {
-        setError('Failed to load following users');
       }
-      */
+    }
+  }, [userState.followedUsers, visible]);
+  
+  // Function to fetch following using context
+  const fetchUserFollowing = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Use the context function to fetch following
+      await fetchFollowing(userId);
+      setLoading(false);
     } catch (err) {
       console.error('Error fetching following users:', err);
       setError('An error occurred while fetching following users');
@@ -181,17 +161,13 @@ const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
   // Handle follow/unfollow user
   const handleFollowToggle = async (targetUserId: string, isCurrentlyFollowing: boolean) => {
     try {
-      /* COMMENTED OUT API CALL
-      const endpoint = isCurrentlyFollowing ? 'unfollow' : 'follow';
+      if (isCurrentlyFollowing) {
+        await unfollowUser(targetUserId);
+      } else {
+        await followUser(targetUserId);
+      }
       
-      await axios.post(`${API_URL}/users/${targetUserId}/${endpoint}`, {}, {
-        headers: {
-          Authorization: `Bearer ${authState.token}`
-        }
-      });
-      */
-      
-      // Update local state to reflect the change
+      // Update local state to reflect the change immediately for better UX
       setFollowing(following.map(user => 
         user.id === targetUserId 
           ? { ...user, isFollowing: !isCurrentlyFollowing }
@@ -394,7 +370,7 @@ const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
               <TouchableOpacity 
                 className="bg-purple-100 px-6 py-3 rounded-full mt-4"
                 style={styles.retryButton}
-                onPress={() => fetchFollowing()}
+                onPress={() => fetchUserFollowing()}
               >
                 <Text className="text-purple-700 font-bold">Try Again</Text>
               </TouchableOpacity>

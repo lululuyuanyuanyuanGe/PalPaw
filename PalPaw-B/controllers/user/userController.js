@@ -130,9 +130,11 @@ export const getUserFollowers = async (req, res) => {
       const follower = relation.follower.toJSON();
       
       // Add isFollowing flag to indicate if the current user follows this follower
-      if (req.user) {
+      if (req.user && req.user.following) {
         // Check if the current user follows this follower
         follower.isFollowing = req.user.following.includes(follower.id);
+      } else {
+        follower.isFollowing = false;
       }
       
       return follower;
@@ -205,6 +207,270 @@ export const getUserFollowing = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'An error occurred while fetching following users',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Follow a user
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Object} Response with success status or error
+ */
+export const followUser = async (req, res) => {
+  try {
+    // Get the ID of the user to follow
+    const { id } = req.params;
+    
+    // Get the current user's ID
+    const currentUserId = req.user.id;
+    
+    // Prevent users from following themselves
+    if (id === currentUserId) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot follow yourself'
+      });
+    }
+    
+    // Check if the user to follow exists
+    const userToFollow = await User.findByPk(id);
+    if (!userToFollow) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Check if already following
+    const existingFollow = await Follow.findOne({
+      where: {
+        followerId: currentUserId,
+        followingId: id
+      }
+    });
+    
+    if (existingFollow) {
+      // If already following, update status if needed
+      if (existingFollow.status !== 'accepted') {
+        await existingFollow.update({ status: 'accepted' });
+        
+        return res.status(200).json({
+          success: true,
+          message: 'Follow request accepted'
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Already following this user'
+      });
+    }
+    
+    // Create new follow relationship
+    await Follow.create({
+      followerId: currentUserId,
+      followingId: id,
+      status: 'accepted' // Direct accept for now, could implement request system later
+    });
+    
+    res.status(200).json({
+      success: true,
+      message: 'User followed successfully'
+    });
+  } catch (error) {
+    console.error('Error following user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred while following the user',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Unfollow a user
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Object} Response with success status or error
+ */
+export const unfollowUser = async (req, res) => {
+  try {
+    // Get the ID of the user to unfollow
+    const { id } = req.params;
+    
+    // Get the current user's ID
+    const currentUserId = req.user.id;
+    
+    // Check if the relationship exists
+    const followRelationship = await Follow.findOne({
+      where: {
+        followerId: currentUserId,
+        followingId: id
+      }
+    });
+    
+    if (!followRelationship) {
+      return res.status(400).json({
+        success: false,
+        message: 'You are not following this user'
+      });
+    }
+    
+    // Delete the follow relationship
+    await followRelationship.destroy();
+    
+    res.status(200).json({
+      success: true,
+      message: 'User unfollowed successfully'
+    });
+  } catch (error) {
+    console.error('Error unfollowing user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred while unfollowing the user',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Update user profile
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Object} Response with updated user data or error
+ */
+export const updateUserProfile = async (req, res) => {
+  try {
+    // Get current user ID
+    const userId = req.user.id;
+    
+    // Get updatable fields from request body
+    const { firstName, lastName, bio } = req.body;
+    
+    // Find user to update
+    const user = await User.findByPk(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Update only provided fields
+    const updates = {};
+    if (firstName !== undefined) updates.firstName = firstName;
+    if (lastName !== undefined) updates.lastName = lastName;
+    if (bio !== undefined) updates.bio = bio;
+    
+    // If there's nothing to update
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No fields to update were provided'
+      });
+    }
+    
+    // Update user profile
+    await user.update(updates);
+    
+    // Get updated user data
+    const updatedUser = await User.findByPk(userId, {
+      attributes: ['id', 'username', 'email', 'firstName', 'lastName', 'avatar', 'bio', 'createdAt', 'updatedAt']
+    });
+    
+    // Get follower and following counts
+    const followerCount = await Follow.count({
+      where: { followingId: userId, status: 'accepted' }
+    });
+    
+    const followingCount = await Follow.count({
+      where: { followerId: userId, status: 'accepted' }
+    });
+    
+    // Get array of users this user is following
+    const following = await Follow.findAll({
+      where: { followerId: userId, status: 'accepted' },
+      attributes: ['followingId']
+    });
+    
+    // Prepare response
+    const userData = updatedUser.toJSON();
+    userData.followerCount = followerCount;
+    userData.followingCount = followingCount;
+    userData.following = following.map(f => f.followingId);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: userData
+    });
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred while updating the profile',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get current user profile
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Object} Response with current user data or error
+ */
+export const getCurrentUserProfile = async (req, res) => {
+  try {
+    // Get the current user ID from authenticated user
+    const userId = req.user.id;
+    
+    // Find the user
+    const user = await User.findByPk(userId, {
+      attributes: ['id', 'username', 'email', 'firstName', 'lastName', 'avatar', 'bio', 'createdAt', 'updatedAt']
+    });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Get follower count
+    const followerCount = await Follow.count({
+      where: { followingId: userId, status: 'accepted' }
+    });
+    
+    // Get following count
+    const followingCount = await Follow.count({
+      where: { followerId: userId, status: 'accepted' }
+    });
+    
+    // Get following list
+    const following = await Follow.findAll({
+      where: { followerId: userId, status: 'accepted' },
+      attributes: ['followingId']
+    });
+    
+    // Create response data
+    const userData = user.toJSON();
+    userData.followerCount = followerCount;
+    userData.followingCount = followingCount;
+    userData.following = following.map(f => f.followingId);
+    
+    res.status(200).json({
+      success: true,
+      user: userData
+    });
+  } catch (error) {
+    console.error('Error fetching current user profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred while fetching your profile',
       error: error.message
     });
   }

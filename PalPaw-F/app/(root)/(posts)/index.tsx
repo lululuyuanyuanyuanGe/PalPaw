@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -102,8 +102,8 @@ const PostDetail = () => {
   const { state: postsState, likePost, unlikePost, addComment, fetchPostById, isPostLiked } = usePosts();
   const { currentPost, userPosts, feedPosts, likedPosts } = postsState;
   
-  // Get user context for profile data
-  const { state: userState } = useUser();
+  // Get user context for profile data and follow functionality
+  const { state: userState, followUser, unfollowUser } = useUser();
   
   // Get auth context for authentication status
   const { state: authState } = useAuth();
@@ -126,6 +126,87 @@ const PostDetail = () => {
       transform: [{ scale: likeScale.value }]
     };
   });
+
+  // Animation for the follow button
+  const followScale = useSharedValue(1);
+  const followAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: followScale.value }]
+    };
+  });
+  
+  // Check if the current user is following the post author
+  const isFollowingAuthor = React.useMemo(() => {
+    if (!userData || !post?.authorData) return false;
+    
+    // Get the following array from the user profile
+    const following = userState.profile?.following || [];
+    console.log('Following array:', following);
+    console.log('Author ID:', post.authorData.id);
+    
+    // Check if the author's ID is in the following array
+    return following.includes(post.authorData.id);
+  }, [userData, post, userState.profile?.following]);
+  
+  // Add local state for follow button to provide immediate feedback
+  const [isFollowing, setIsFollowing] = useState(isFollowingAuthor);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
+  
+  // Update local follow state when the memo value changes
+  useEffect(() => {
+    setIsFollowing(isFollowingAuthor);
+  }, [isFollowingAuthor]);
+
+  // Handle follow toggle with immediate UI feedback
+  const handleFollowToggle = async () => {
+    if (!authState.isAuthenticated) {
+      // Redirect to login if not authenticated
+      router.push('/(root)/(auth)/login');
+      return;
+    }
+
+    if (!post?.authorData?.id) {
+      console.error('No author ID available');
+      return;
+    }
+
+    // Don't allow following yourself
+    if (post.authorData.id === userData?.id) {
+      console.log('Cannot follow yourself');
+      return;
+    }
+
+    // Animate follow button with more noticeable feedback
+    followScale.value = withSpring(1.2, { damping: 8 }, () => {
+      followScale.value = withSpring(1);
+    });
+
+    // Set loading state and update UI immediately
+    setIsFollowLoading(true);
+    setIsFollowing(!isFollowing); // Optimistic UI update
+
+    try {
+      console.log('Toggling follow status for user:', post.authorData.id);
+      console.log('Current follow state:', isFollowing);
+      
+      if (isFollowing) {
+        console.log('Unfollowing user...');
+        await unfollowUser(post.authorData.id);
+        console.log('Unfollow successful');
+      } else {
+        console.log('Following user...');
+        await followUser(post.authorData.id);
+        console.log('Follow successful');
+      }
+    } catch (error) {
+      console.error('Error toggling follow status:', error);
+      // Revert optimistic update on error
+      setIsFollowing(isFollowing);
+      // Show error to user (could add a toast notification here)
+    } finally {
+      setIsFollowLoading(false);
+    }
+  };
   
   // Use useFocusEffect to ensure the post is fetched every time the screen comes into focus
   useFocusEffect(
@@ -284,9 +365,33 @@ const PostDetail = () => {
               <Text className="font-rubik-semibold text-gray-800">{post.authorData?.username || 'Unknown User'}</Text>
               <Text className="text-xs text-gray-500 font-rubik">{formatTimeAgo(post.createdAt || new Date())}</Text>
             </View>
-            <TouchableOpacity className="bg-purple-100 px-4 py-2 rounded-full">
-              <Text className="text-purple-600 font-rubik-medium">Follow</Text>
-            </TouchableOpacity>
+            
+            {/* Only show follow button if it's not the current user's post */}
+            {authState.isAuthenticated && post.authorData?.id !== userData?.id && (
+              <Animated.View style={followAnimatedStyle}>
+                <TouchableOpacity 
+                  className={`px-4 py-2 rounded-full ${isFollowing ? 'bg-purple-100' : 'bg-purple-600'}`}
+                  onPress={handleFollowToggle}
+                  activeOpacity={0.6}
+                  disabled={isFollowLoading}
+                >
+                  {isFollowLoading ? (
+                    <ActivityIndicator size="small" color={isFollowing ? '#9333EA' : '#ffffff'} />
+                  ) : (
+                    <View className="flex-row items-center">
+                      <Text 
+                        className={`font-rubik-medium ${isFollowing ? 'text-purple-600' : 'text-white'}`}
+                      >
+                        {isFollowing ? 'Following' : 'Follow'}
+                      </Text>
+                      {isFollowing && (
+                        <Ionicons name="checkmark" size={14} color="#9333EA" style={{ marginLeft: 2 }} />
+                      )}
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
+            )}
           </View>
         </View>
 
