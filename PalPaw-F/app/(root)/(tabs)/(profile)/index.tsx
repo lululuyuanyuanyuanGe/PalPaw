@@ -9,8 +9,7 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Alert,
-  RefreshControl,
-  ImageBackground,
+  RefreshControl
 } from "react-native";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -33,6 +32,8 @@ import AuthPrompt from "@/app/components/AuthPrompt";
 import { formatImageUrl } from "@/utils/mediaUtils";
 import { ProductItem as ContextProductItem } from "@/context/ProductsContext";
 import { FontAwesome5 } from "@expo/vector-icons";
+import FollowersModal from "../../(social)/FollowersModal";
+import FollowingModal from "../../(social)/FollowingModal";
 
 const ProfileScreen = () => {
   const router = useRouter();
@@ -213,7 +214,10 @@ const ProfileScreen = () => {
     );
   };
   
-
+  // Keep only these modal states
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [showFollowingModal, setShowFollowingModal] = useState(false);
+  
   // Show not authenticated state
   if (!authState.isAuthenticated) {
     return <AuthPrompt statusBarHeight={statusBarHeight} />;
@@ -326,14 +330,28 @@ const ProfileScreen = () => {
                   <Text className="text-purple-700 font-bold text-lg">{postsState.userPosts.length || 0}</Text>
                   <Text className="text-gray-500 text-xs">Posts</Text>
                 </View>
-                <View className="items-center">
+                <TouchableOpacity 
+                  className="items-center" 
+                  onPress={() => setShowFollowersModal(true)}
+                  activeOpacity={0.7}
+                >
                   <Text className="text-purple-700 font-bold text-lg">{userState.profile?.followerCount || 0}</Text>
-                  <Text className="text-gray-500 text-xs">Followers</Text>
-                </View>
-                <View className="items-center">
+                  <View className="flex-row items-center">
+                    <Text className="text-gray-500 text-xs">Followers</Text>
+                    <Feather name="chevron-right" size={12} color="#9333EA" style={{ marginLeft: 2 }} />
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  className="items-center"
+                  onPress={() => setShowFollowingModal(true)}
+                  activeOpacity={0.7}
+                >
                   <Text className="text-purple-700 font-bold text-lg">{userState.profile?.followingCount || 0}</Text>
-                  <Text className="text-gray-500 text-xs">Following</Text>
-                </View>
+                  <View className="flex-row items-center">
+                    <Text className="text-gray-500 text-xs">Following</Text>
+                    <Feather name="chevron-right" size={12} color="#9333EA" style={{ marginLeft: 2 }} />
+                  </View>
+                </TouchableOpacity>
                 <View className="items-center">
                   <Text className="text-purple-700 font-bold text-lg">{productsState.userProducts.length || 0}</Text>
                   <Text className="text-gray-500 text-xs">Products</Text>
@@ -388,6 +406,21 @@ const ProfileScreen = () => {
           )
         }
       />
+      
+      {/* Followers Overlay */}
+      <FollowersModal 
+        userId={user?.id || ''} 
+        visible={showFollowersModal} 
+        onClose={() => setShowFollowersModal(false)} 
+      />
+      
+      {/* Following Overlay */}
+      <FollowingModal 
+        userId={user?.id || ''} 
+        visible={showFollowingModal} 
+        onClose={() => setShowFollowingModal(false)} 
+      />
+      
     </SafeAreaView>
   );
 };
