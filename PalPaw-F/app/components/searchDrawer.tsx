@@ -5,6 +5,7 @@ import { Ionicons, MaterialCommunityIcons, AntDesign, Feather, FontAwesome5 } fr
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, useUser } from '@/context';
+import { formatImageUrl } from '@/utils/mediaUtils';
 
 const SearchDrawer = (props: any) => {
   const router = useRouter();
@@ -27,8 +28,8 @@ const SearchDrawer = (props: any) => {
   };
 
   // Get user information from context
-  const isLoggedIn = authState.isAuthenticated && !!authState.user;
-  const userData = authState.user;
+  const isLoggedIn = authState.isAuthenticated;
+  const userData = userState.profile || authState.user;
 
   return (
     <DrawerContentScrollView 
@@ -85,7 +86,7 @@ const SearchDrawer = (props: any) => {
             >
               {isLoggedIn && userData && userData.avatar ? (
                 <Image 
-                  source={{ uri: userData.avatar }} 
+                  source={{ uri: formatImageUrl(userData.avatar) }} 
                   className="w-16 h-16 rounded-full"
                   resizeMode="cover"
                 />
