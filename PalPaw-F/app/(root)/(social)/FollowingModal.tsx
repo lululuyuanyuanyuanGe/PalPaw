@@ -20,23 +20,11 @@ import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '@/utils/apiClient';
 
-// User type interface - Adjusted to match UserProfile from context
-interface User {
-  id: string;
-  username: string;
-  avatar?: string; // Make avatar optional to match UserProfile
-  bio?: string;
-  isFollowing?: boolean;
-  // Add other fields that might be in UserProfile but not required in our UI
-  email?: string;
-  firstName?: string;
-  lastName?: string;
-  followerCount?: number;
-  followingCount?: number;
-  following?: string[];
-  createdAt?: string;
-  updatedAt?: string;
-}
+// Import UserProfile type from the context directly
+import type { UserContextProps } from '@/context/UserContext';
+type UserProfile = NonNullable<UserContextProps['state']['profile']>;
+
+// User type interface is not needed since we're using UserProfile from context directly
 
 interface FollowingModalProps {
   userId: string;
@@ -51,21 +39,37 @@ const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
   const { state: authState } = useAuth();
   const { state: userState, fetchFollowing, followUser, unfollowUser } = useUser();
   
-  const [following, setFollowing] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [slideAnim] = useState(new Animated.Value(height));
   const [fadeAnim] = useState(new Animated.Value(0));
   
   // Animation refs for list items
   const itemAnimations = useRef<Animated.Value[]>([]);
   
+  // Ref to track if data has been fetched for the current userId
+  const hasFetchedRef = useRef<{[key: string]: boolean}>({});
+
+  // Reset fetch tracking when userId changes
+  useEffect(() => {
+    hasFetchedRef.current = {};
+  }, [userId]);
+
   // Animate in/out when visibility changes
   useEffect(() => {
     if (visible) {
       // Reset animations for list items when data is available
       if (userState.followedUsers?.length) {
         itemAnimations.current = userState.followedUsers.map(() => new Animated.Value(0));
+        
+        // Animate list items in sequence if modal is visible
+        userState.followedUsers.forEach((_, index) => {
+          Animated.timing(itemAnimations.current[index], {
+            toValue: 1,
+            duration: 300,
+            delay: 100 + (index * 50),
+            useNativeDriver: true,
+            easing: Easing.out(Easing.quad)
+          }).start();
+        });
       }
       
       // Fetch following data when becoming visible
@@ -103,58 +107,40 @@ const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
     }
   }, [visible]);
   
-  // Update following list when userState changes
+  // Setup animations when following data changes
   useEffect(() => {
-    if (userState.followedUsers?.length) {
-      // Map UserProfile[] to User[] to ensure type compatibility
-      const mappedFollowing = userState.followedUsers.map(followedUser => {
-        // Users in the following list are always being followed by definition
-        return {
-          id: followedUser.id,
-          username: followedUser.username,
-          avatar: followedUser.avatar,
-          bio: followedUser.bio,
-          isFollowing: true, // By definition these are users we follow
-          // Copy other fields as needed
-          email: followedUser.email,
-          firstName: followedUser.firstName,
-          lastName: followedUser.lastName
-        };
+    if (visible && userState.followedUsers?.length) {
+      // Update animations for new following data without triggering a new fetch
+      itemAnimations.current = userState.followedUsers.map(() => new Animated.Value(0));
+      
+      // Animate list items in sequence
+      userState.followedUsers.forEach((_, index) => {
+        Animated.timing(itemAnimations.current[index], {
+          toValue: 1,
+          duration: 300,
+          delay: 100 + (index * 50),
+          useNativeDriver: true,
+          easing: Easing.out(Easing.quad)
+        }).start();
       });
-
-      setFollowing(mappedFollowing);
-      
-      // Setup animations for new following data
-      itemAnimations.current = mappedFollowing.map(() => new Animated.Value(0));
-      
-      // Animate list items in sequence if modal is visible
-      if (visible) {
-        mappedFollowing.forEach((_, index) => {
-          Animated.timing(itemAnimations.current[index], {
-            toValue: 1,
-            duration: 300,
-            delay: 100 + (index * 50),
-            useNativeDriver: true,
-            easing: Easing.out(Easing.quad)
-          }).start();
-        });
-      }
     }
   }, [userState.followedUsers, visible]);
   
   // Function to fetch following using context
   const fetchUserFollowing = async () => {
-    setLoading(true);
-    setError(null);
+    // Skip if we've already fetched for this userId in this session
+    if (hasFetchedRef.current[userId]) {
+      console.log(`Following already fetched for user ${userId}, skipping duplicate fetch`);
+      return;
+    }
     
     try {
       // Use the context function to fetch following
       await fetchFollowing(userId);
-      setLoading(false);
+      // Mark this userId as fetched
+      hasFetchedRef.current[userId] = true;
     } catch (err) {
       console.error('Error fetching following users:', err);
-      setError('An error occurred while fetching following users');
-      setLoading(false);
     }
   };
   
@@ -166,23 +152,19 @@ const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
       } else {
         await followUser(targetUserId);
       }
-      
-      // Update local state to reflect the change immediately for better UX
-      setFollowing(following.map(user => 
-        user.id === targetUserId 
-          ? { ...user, isFollowing: !isCurrentlyFollowing }
-          : user
-      ));
-      
+      // No need to update local state, as context state will update automatically
     } catch (err) {
       console.error(`Error ${isCurrentlyFollowing ? 'unfollowing' : 'following'} user:`, err);
     }
   };
   
   // Render each item with animation
-  const renderUserItem = ({ item, index }: { item: User, index: number }) => {
+  const renderUserItem = ({ item, index }: { item: UserProfile, index: number }) => {
     // Don't show follow button for your own profile
     const isCurrentUser = item.id === authState.user?.id;
+    
+    // By definition, all users in followedUsers are being followed by the current user
+    const isFollowing = true;
     
     // Generate random banner color based on user id
     const bannerColor = `hsl(${parseInt(item.id) * 40 % 360}, 70%, 85%)`;
@@ -250,18 +232,14 @@ const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
               
               {!isCurrentUser && (
                 <TouchableOpacity 
-                  className={`px-5 py-2 rounded-full ${item.isFollowing ? 'bg-purple-100' : 'bg-purple-600'} ml-2`}
-                  style={item.isFollowing ? styles.followingButton : styles.followButton}
-                  onPress={() => handleFollowToggle(item.id, !!item.isFollowing)}
+                  className="px-5 py-2 rounded-full bg-purple-100 ml-2"
+                  style={styles.followingButton}
+                  onPress={() => handleFollowToggle(item.id, isFollowing)}
                 >
-                  {item.isFollowing ? (
-                    <View className="flex-row items-center">
-                      <Text className="text-sm font-medium text-purple-700 mr-1">Following</Text>
-                      <Feather name="check" size={14} color="#9333EA" />
-                    </View>
-                  ) : (
-                    <Text className="text-sm font-medium text-white">Follow</Text>
-                  )}
+                  <View className="flex-row items-center">
+                    <Text className="text-sm font-medium text-purple-700 mr-1">Following</Text>
+                    <Feather name="check" size={14} color="#9333EA" />
+                  </View>
                 </TouchableOpacity>
               )}
             </View>
@@ -355,18 +333,10 @@ const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
         
         {/* Content area */}
         <View style={styles.contentContainer}>
-          {loading ? (
-            <View className="flex-1 justify-center items-center p-4">
-              <ActivityIndicator size="large" color="#9333EA" />
-              <View className="items-center mt-4">
-                <Text className="text-purple-700 font-bold text-base">Loading following...</Text>
-                <Text className="text-gray-500 text-xs mt-1">Please wait</Text>
-              </View>
-            </View>
-          ) : error ? (
+          {userState.error ? (
             <View className="flex-1 justify-center items-center p-4">
               <Ionicons name="alert-circle-outline" size={48} color="#FF6B6B" />
-              <Text className="text-red-500 font-bold mt-4 text-center">{error}</Text>
+              <Text className="text-red-500 font-bold mt-4 text-center">{userState.error}</Text>
               <TouchableOpacity 
                 className="bg-purple-100 px-6 py-3 rounded-full mt-4"
                 style={styles.retryButton}
@@ -375,7 +345,7 @@ const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
                 <Text className="text-purple-700 font-bold">Try Again</Text>
               </TouchableOpacity>
             </View>
-          ) : following.length === 0 ? (
+          ) : userState.followedUsers && userState.followedUsers.length === 0 ? (
             <View className="flex-1 justify-center items-center p-6">
               <View style={styles.emptyStateIcon}>
                 <FontAwesome5 name="star" size={32} color="#9333EA" />
@@ -394,7 +364,7 @@ const FollowingModal = ({ userId, visible, onClose }: FollowingModalProps) => {
             </View>
           ) : (
             <FlatList
-              data={following}
+              data={userState.followedUsers}
               renderItem={renderUserItem}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.listContainer}

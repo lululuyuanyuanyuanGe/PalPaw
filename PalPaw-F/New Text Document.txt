@@ -1,1 +1,2 @@
 emulator -avd 8pro -accel auto
+emulator -avd 8pro2 -accel auto

@@ -20,23 +20,11 @@ import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '@/utils/apiClient';
 
-// User type interface - Adjusted to match UserProfile from context
-interface User {
-  id: string;
-  username: string;
-  avatar?: string; // Make avatar optional to match UserProfile
-  bio?: string;
-  isFollowing?: boolean;
-  // Add other fields that might be in UserProfile but not required in our UI
-  email?: string;
-  firstName?: string;
-  lastName?: string;
-  followerCount?: number;
-  followingCount?: number;
-  following?: string[];
-  createdAt?: string;
-  updatedAt?: string;
-}
+// Import UserProfile type from the context directly
+import type { UserContextProps } from '@/context/UserContext';
+type UserProfile = NonNullable<UserContextProps['state']['profile']>;
+
+// User type interface is not needed since we're using UserProfile from context directly
 
 interface FollowersModalProps {
   userId: string;
@@ -51,21 +39,37 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
   const { state: authState } = useAuth();
   const { state: userState, fetchFollowers, followUser, unfollowUser } = useUser();
   
-  const [followers, setFollowers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [slideAnim] = useState(new Animated.Value(height));
   const [fadeAnim] = useState(new Animated.Value(0));
   
   // Animation refs for list items
   const itemAnimations = useRef<Animated.Value[]>([]);
   
+  // Ref to track if data has been fetched for the current userId
+  const hasFetchedRef = useRef<{[key: string]: boolean}>({});
+
+  // Reset fetch tracking when userId changes
+  useEffect(() => {
+    hasFetchedRef.current = {};
+  }, [userId]);
+
   // Animate in/out when visibility changes
   useEffect(() => {
     if (visible) {
       // Reset animations for list items when data is available
       if (userState.followers?.length) {
         itemAnimations.current = userState.followers.map(() => new Animated.Value(0));
+        
+        // Animate list items in sequence if modal is visible
+        userState.followers.forEach((_, index) => {
+          Animated.timing(itemAnimations.current[index], {
+            toValue: 1,
+            duration: 300,
+            delay: 100 + (index * 50),
+            useNativeDriver: true,
+            easing: Easing.out(Easing.quad)
+          }).start();
+        });
       }
       
       // Fetch followers data when becoming visible
@@ -101,62 +105,43 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
         easing: Easing.ease
       }).start();
     }
+    // Only depend on visible state to prevent infinite loops
   }, [visible]);
   
-  // Update followers when userState changes
+  // Setup animations when followers data changes
   useEffect(() => {
-    if (userState.followers?.length) {
-      // Map UserProfile[] to User[] to ensure type compatibility
-      const mappedFollowers = userState.followers.map(follower => {
-        // Check if the current user is following this follower
-        const isFollowingUser = userState.profile?.following?.includes(follower.id) || false;
-        
-        return {
-          id: follower.id,
-          username: follower.username,
-          avatar: follower.avatar,
-          bio: follower.bio,
-          isFollowing: isFollowingUser, // Determine if current user follows this person
-          // Copy other fields as needed
-          email: follower.email,
-          firstName: follower.firstName,
-          lastName: follower.lastName
-        };
+    if (visible && userState.followers?.length) {
+      // Update animations for new followers data without triggering a new fetch
+      itemAnimations.current = userState.followers.map(() => new Animated.Value(0));
+      
+      // Animate list items in sequence
+      userState.followers.forEach((_, index) => {
+        Animated.timing(itemAnimations.current[index], {
+          toValue: 1,
+          duration: 300,
+          delay: 100 + (index * 50),
+          useNativeDriver: true,
+          easing: Easing.out(Easing.quad)
+        }).start();
       });
-
-      setFollowers(mappedFollowers);
-      
-      // Setup animations for new followers data
-      itemAnimations.current = mappedFollowers.map(() => new Animated.Value(0));
-      
-      // Animate list items in sequence if modal is visible
-      if (visible) {
-        mappedFollowers.forEach((_, index) => {
-          Animated.timing(itemAnimations.current[index], {
-            toValue: 1,
-            duration: 300,
-            delay: 100 + (index * 50),
-            useNativeDriver: true,
-            easing: Easing.out(Easing.quad)
-          }).start();
-        });
-      }
     }
   }, [userState.followers, visible]);
   
   // Function to fetch followers using context
   const fetchUserFollowers = async () => {
-    setLoading(true);
-    setError(null);
+    // Skip if we've already fetched for this userId in this session
+    if (hasFetchedRef.current[userId]) {
+      console.log(`Followers already fetched for user ${userId}, skipping duplicate fetch`);
+      return;
+    }
     
     try {
       // Use the context function to fetch followers
       await fetchFollowers(userId);
-      setLoading(false);
+      // Mark this userId as fetched
+      hasFetchedRef.current[userId] = true;
     } catch (err) {
       console.error('Error fetching followers:', err);
-      setError('An error occurred while fetching followers');
-      setLoading(false);
     }
   };
   
@@ -168,23 +153,19 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
       } else {
         await followUser(targetUserId);
       }
-      
-      // Update local state to reflect the change immediately for better UX
-      setFollowers(followers.map(user => 
-        user.id === targetUserId 
-          ? { ...user, isFollowing: !isCurrentlyFollowing }
-          : user
-      ));
-      
+      // No need to update local state, as context state will update automatically
     } catch (err) {
       console.error(`Error ${isCurrentlyFollowing ? 'unfollowing' : 'following'} user:`, err);
     }
   };
   
   // Render each item with animation
-  const renderUserItem = ({ item, index }: { item: User, index: number }) => {
+  const renderUserItem = ({ item, index }: { item: UserProfile, index: number }) => {
     // Don't show follow button for your own profile
     const isCurrentUser = item.id === authState.user?.id;
+    
+    // Check if the current user is following this follower
+    const isFollowingUser = userState.profile?.following?.includes(item.id) || false;
     
     // Generate random banner color based on user id
     const bannerColor = `hsl(${parseInt(item.id) * 40 % 360}, 70%, 85%)`;
@@ -252,11 +233,11 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
               
               {!isCurrentUser && (
                 <TouchableOpacity 
-                  className={`px-5 py-2 rounded-full ${item.isFollowing ? 'bg-purple-100' : 'bg-purple-600'} ml-2`}
-                  style={item.isFollowing ? styles.followingButton : styles.followButton}
-                  onPress={() => handleFollowToggle(item.id, !!item.isFollowing)}
+                  className={`px-5 py-2 rounded-full ${isFollowingUser ? 'bg-purple-100' : 'bg-purple-600'} ml-2`}
+                  style={isFollowingUser ? styles.followingButton : styles.followButton}
+                  onPress={() => handleFollowToggle(item.id, isFollowingUser)}
                 >
-                  {item.isFollowing ? (
+                  {isFollowingUser ? (
                     <View className="flex-row items-center">
                       <Text className="text-sm font-medium text-purple-700 mr-1">Following</Text>
                       <Feather name="check" size={14} color="#9333EA" />
@@ -357,18 +338,10 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
         
         {/* Content area */}
         <View style={styles.contentContainer}>
-          {loading ? (
-            <View className="flex-1 justify-center items-center p-4">
-              <ActivityIndicator size="large" color="#9333EA" />
-              <View className="items-center mt-4">
-                <Text className="text-purple-700 font-bold text-base">Loading followers...</Text>
-                <Text className="text-gray-500 text-xs mt-1">Please wait</Text>
-              </View>
-            </View>
-          ) : error ? (
+          {userState.error ? (
             <View className="flex-1 justify-center items-center p-4">
               <Ionicons name="alert-circle-outline" size={48} color="#FF6B6B" />
-              <Text className="text-red-500 font-bold mt-4 text-center">{error}</Text>
+              <Text className="text-red-500 font-bold mt-4 text-center">{userState.error}</Text>
               <TouchableOpacity 
                 className="bg-purple-100 px-6 py-3 rounded-full mt-4"
                 style={styles.retryButton}
@@ -377,7 +350,7 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
                 <Text className="text-purple-700 font-bold">Try Again</Text>
               </TouchableOpacity>
             </View>
-          ) : followers.length === 0 ? (
+          ) : userState.followers && userState.followers.length === 0 ? (
             <View className="flex-1 justify-center items-center p-6">
               <View style={styles.emptyStateIcon}>
                 <FontAwesome5 name="paw" size={32} color="#9333EA" />
@@ -396,7 +369,7 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
             </View>
           ) : (
             <FlatList
-              data={followers}
+              data={userState.followers}
               renderItem={renderUserItem}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.listContainer}
