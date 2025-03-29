@@ -7,7 +7,9 @@ import {
   getPostById,
   getUserProducts,
   getProductById,
-  createProductWithMedia
+  createProductWithMedia,
+  deletePost,
+  deleteProduct
 } from '../controllers/upload/uploadController.js';
 import { authenticate } from '../middlewares/authMiddleware.js';
 import { createProduct } from '../controllers/products/productController.js';
@@ -43,6 +45,13 @@ router.get('/posts/:userId', getUserPosts);
 router.get('/post/:postId', getPostById);
 
 /**
+ * @route DELETE /api/upload/post/:postId
+ * @desc Delete a post and its associated media files
+ * @access Private (only post owner)
+ */
+router.delete('/post/:postId', authenticate, deletePost);
+
+/**
  * @route POST /api/upload/product
  * @desc Upload media files and create a product
  * @access Private
@@ -76,5 +85,12 @@ router.post('/products', authenticate, createProduct);
  * @access Public
  */
 router.get('/product/:productId', getProductById);
+
+/**
+ * @route DELETE /api/upload/product/:productId
+ * @desc Delete a product and its associated media files
+ * @access Private (only product owner)
+ */
+router.delete('/product/:productId', authenticate, deleteProduct);
 
 export default router;

@@ -672,7 +672,7 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
   const deleteProduct = async (productId: string): Promise<boolean> => {
     try {
       console.log(`Attempting to delete product: ${productId}`);
-      const response = await api.delete(`/pg/products/${productId}`);
+      const response = await api.delete(`/upload/products/${productId}`);
       
       console.log(`Response from delete product ${productId}:`, response.status, JSON.stringify(response.data));
       

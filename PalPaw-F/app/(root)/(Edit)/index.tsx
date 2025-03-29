@@ -78,7 +78,6 @@ const EditProfileScreen = () => {
       if (!result.canceled) {
         setAvatarImage(result.assets[0].uri);
         setAvatarFile(result.assets[0]);
-        console.log("[MOCK] Avatar selected:", result.assets[0].uri);
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -107,16 +106,8 @@ const EditProfileScreen = () => {
         } as any);
       }
 
-      // Log instead of making actual API calls
-      console.log("[MOCK] Updating profile with:", {
-        username,
-        bio,
-        hasAvatar: !!avatarFile
-      });
-
-      // Comment out API calls to prevent crashes
-      // await updateUserProfile(formData);
-      // await fetchUserProfile();
+      await updateUserProfile(formData);
+      await fetchUserProfile();
       
       // Show success modal instead of alert
       setProfileSuccessModalVisible(true);
@@ -149,24 +140,10 @@ const EditProfileScreen = () => {
     setDeleteModalVisible(false);
     
     try {
-      // Comment out actual API calls to prevent crashes
       if (activeTab === "posts") {
-        // await deletePost(itemToDelete);
-        console.log(`[MOCK] Deleting post: ${itemToDelete}`);
+        await deletePost(itemToDelete);
       } else {
-        // await deleteProduct(itemToDelete);
-        console.log(`[MOCK] Deleting product: ${itemToDelete}`);
-      }
-      
-      // Simulate successful deletion in UI
-      if (activeTab === "posts") {
-        // Update userPosts in UI without API call
-        const updatedPosts = postsState.userPosts.filter(post => post.id !== itemToDelete);
-        // We're not dispatching to avoid API calls, but UI will update on next render
-      } else {
-        // Update userProducts in UI without API call
-        const updatedProducts = productsState.userProducts.filter(product => product.id !== itemToDelete);
-        // We're not dispatching to avoid API calls, but UI will update on next render
+        await deleteProduct(itemToDelete);
       }
       
       // Show success modal instead of alert
@@ -204,36 +181,28 @@ const EditProfileScreen = () => {
     
     // Handle like/unlike actions for posts
     const handleLike = async (postId: string) => {
-      // Comment out actual API calls
       // Check if post is already liked
       const isCurrentlyLiked = isPostLiked(postId);
       
-      // Just log instead of making API calls
-      console.log(`[MOCK] ${isCurrentlyLiked ? 'Unliking' : 'Liking'} post: ${postId}`);
-      
       // Call the appropriate function based on current liked status
-      // if (isCurrentlyLiked) {
-      //   await unlikePost(postId);
-      // } else {
-      //   await likePost(postId);
-      // }
+      if (isCurrentlyLiked) {
+        await unlikePost(postId);
+      } else {
+        await likePost(postId);
+      }
     };
     
     // Handle save/unsave actions for products
     const handleSave = async (productId: string) => {
-      // Comment out actual API calls
       // Check if product is already saved
       const isCurrentlySaved = isProductSaved(productId);
       
-      // Just log instead of making API calls
-      console.log(`[MOCK] ${isCurrentlySaved ? 'Unsaving' : 'Saving'} product: ${productId}`);
-      
       // Call the appropriate function based on current saved status
-      // if (isCurrentlySaved) {
-      //   await unsaveProduct(productId);
-      // } else {
-      //   await saveProduct(productId);
-      // }
+      if (isCurrentlySaved) {
+        await unsaveProduct(productId);
+      } else {
+        await saveProduct(productId);
+      }
     };
 
     // Add delete button overlay for Edit mode

@@ -8,6 +8,7 @@ import User from '../../models/User.js';
 import { generateVideoThumbnail } from '../../utils/videoThumbnail.js';
 import { promisify } from 'util';
 import Comment from '../../models/Comment.js';
+import { Op } from 'sequelize';
 
 // Configure multer storage
 const storage = multer.diskStorage({
@@ -19,8 +20,12 @@ const storage = multer.diskStorage({
       return cb(new Error('User ID not available for file upload'), null);
     }
     
-    // Create path structure: uploads/{userId}/posts
-    const userUploadDir = path.join(process.cwd(), 'uploads', userId.toString(), 'posts');
+    // Determine the appropriate directory based on the route
+    const isProduct = req.originalUrl.includes('/products/');
+    const dirType = isProduct ? 'products' : 'posts';
+    
+    // Create path structure: uploads/{userId}/posts or uploads/{userId}/products
+    const userUploadDir = path.join(process.cwd(), 'uploads', userId.toString(), dirType);
     
     // Create directories recursively if they don't exist
     if (!fs.existsSync(userUploadDir)) {
@@ -508,10 +513,16 @@ export const createProductWithMedia = async (req, res) => {
     // Get user ID from authenticated request
     const userId = req.user.id;
     
-    // Process media files - exactly as done for posts
+    // Process media files for products
     const mediaObjects = [];
     
     if (req.files && req.files.length > 0) {
+      // Create products directory if it doesn't exist
+      const productsDir = path.join(process.cwd(), 'uploads', userId.toString(), 'products');
+      if (!fs.existsSync(productsDir)) {
+        fs.mkdirSync(productsDir, { recursive: true });
+      }
+      
       // Create thumbnails directory if it doesn't exist
       const thumbnailDir = path.join(process.cwd(), 'uploads', userId.toString(), 'thumbnails');
       if (!fs.existsSync(thumbnailDir)) {
@@ -528,8 +539,36 @@ export const createProductWithMedia = async (req, res) => {
           filename: file.filename
         });
         
-        // Get the file path relative to the server - now includes user ID in path
-        const fileUrl = `/uploads/${userId}/posts/${file.filename}`;
+        // Move file from 'posts' to 'products' directory
+        const sourceFilePath = path.join(process.cwd(), 'uploads', userId.toString(), 'posts', file.filename);
+        const destFilePath = path.join(productsDir, file.filename);
+        
+        try {
+          // Create a read stream from the source file
+          const readStream = fs.createReadStream(sourceFilePath);
+          // Create a write stream to the destination file
+          const writeStream = fs.createWriteStream(destFilePath);
+          
+          // Pipe the read stream to the write stream
+          readStream.pipe(writeStream);
+          
+          // Wait for the write to finish
+          await new Promise((resolve, reject) => {
+            writeStream.on('finish', resolve);
+            writeStream.on('error', reject);
+          });
+          
+          // Delete the original file after successful copy
+          await unlinkAsync(sourceFilePath);
+          
+          console.log(`Moved file from ${sourceFilePath} to ${destFilePath}`);
+        } catch (moveError) {
+          console.error('Error moving file to products directory:', moveError);
+          // Continue with original path if move fails
+        }
+        
+        // Get the file path relative to the server - now includes user ID in path and uses products folder
+        const fileUrl = `/uploads/${userId}/products/${file.filename}`;
         
         // Determine media type based on mimetype
         const mediaType = file.mimetype.startsWith('image/') ? 'image' : 
@@ -546,8 +585,8 @@ export const createProductWithMedia = async (req, res) => {
         // Generate thumbnail for video files
         if (mediaType === 'video') {
           try {
-            // Full path to the uploaded video
-            const videoPath = path.join(process.cwd(), 'uploads', userId.toString(), 'posts', file.filename);
+            // Full path to the uploaded video (now in products folder)
+            const videoPath = path.join(process.cwd(), 'uploads', userId.toString(), 'products', file.filename);
             
             // Generate unique thumbnail filename
             const thumbnailFilename = `thumbnail_${uuidv4()}.jpg`;
@@ -639,6 +678,29 @@ export const deletePost = async (req, res) => {
       }
     }
 
+    // Remove this post from all users' likedPostIds arrays
+    try {
+      // Find all users who have liked this post
+      const users = await User.findAll({
+        where: {
+          likedPostIds: {
+            [Op.contains]: [postId]
+          }
+        }
+      });
+
+      console.log(`Found ${users.length} users who liked the post being deleted`);
+
+      // Remove the post ID from each user's likedPostIds
+      for (const user of users) {
+        user.likedPostIds = user.likedPostIds.filter(id => id !== postId);
+        await user.save();
+      }
+    } catch (err) {
+      console.warn('Error removing post from liked posts:', err.message);
+      // Continue with post deletion even if this fails
+    }
+
     // Finally delete the post from DB
     await post.destroy();
 
@@ -671,12 +733,22 @@ export const deleteProduct = async (req, res) => {
     // Remove associated media files
     if (product.media && Array.isArray(product.media)) {
       for (const file of product.media) {
-        const filePath = path.join(process.cwd(), 'uploads', userId.toString(), 'posts', file.filename);
+        // Check in products directory first, then posts as fallback
+        const productsFilePath = path.join(process.cwd(), 'uploads', userId.toString(), 'products', file.filename);
+        const postsFilePath = path.join(process.cwd(), 'uploads', userId.toString(), 'posts', file.filename);
+
+        // Try to delete from products directory
         try {
-          await unlinkAsync(filePath);
-          console.log(`Deleted media file: ${filePath}`);
-        } catch (err) {
-          console.warn(`Failed to delete media file ${filePath}:`, err.message);
+          await unlinkAsync(productsFilePath);
+          console.log(`Deleted media file: ${productsFilePath}`);
+        } catch (productsErr) {
+          // If file not found in products directory, try posts directory
+          try {
+            await unlinkAsync(postsFilePath);
+            console.log(`Deleted media file from posts directory: ${postsFilePath}`);
+          } catch (postsErr) {
+            console.warn(`Failed to delete media file, not found in products or posts directory: ${file.filename}`);
+          }
         }
 
         // Delete thumbnail if it exists
@@ -690,6 +762,29 @@ export const deleteProduct = async (req, res) => {
           }
         }
       }
+    }
+
+    // Remove this product from all users' savedProductIds arrays
+    try {
+      // Find all users who have saved this product
+      const users = await User.findAll({
+        where: {
+          savedProductIds: {
+            [Op.contains]: [productId]
+          }
+        }
+      });
+
+      console.log(`Found ${users.length} users who saved the product being deleted`);
+
+      // Remove the product ID from each user's savedProductIds
+      for (const user of users) {
+        user.savedProductIds = user.savedProductIds.filter(id => id !== productId);
+        await user.save();
+      }
+    } catch (err) {
+      console.warn('Error removing product from saved products:', err.message);
+      // Continue with product deletion even if this fails
     }
 
     // Delete product from database

@@ -911,7 +911,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const deletePost = async (postId: string): Promise<boolean> => {
     try {
       console.log(`Attempting to delete post: ${postId}`);
-      const response = await api.delete(`/pg/posts/${postId}`);
+      const response = await api.delete(`/upload/post/${postId}`);
       
       console.log(`Response from delete post ${postId}:`, response.status, JSON.stringify(response.data));
       
