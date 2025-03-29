@@ -140,7 +140,10 @@ export const getProductById = async (req, res) => {
     const productJson = product.toJSON();
     const formattedProduct = {
       ...productJson,
-      sellerData: productJson.seller,
+      sellerData: {
+        ...productJson.seller,
+        avatar: productJson.seller?.avatar || null // Ensure avatar is explicitly included even if null
+      },
       seller: undefined, // Remove the nested seller object
       isSaved // Add flag indicating if product is saved by current user
     };

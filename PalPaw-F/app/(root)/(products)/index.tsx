@@ -454,7 +454,7 @@ const ProductDetail = () => {
             <View className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-purple-400 to-purple-600 rounded-r-full" />
             
             <Image
-              source={{ uri: product.sellerData?.avatar || `https://robohash.org/${product.userId}?set=set4` }}
+              source={{ uri: formatImageUrl(product.sellerData?.avatar) || `https://robohash.org/${product.userId}?set=set4` }}
               className="w-12 h-12 rounded-full border-2 border-purple-100"
             />
             <View className="ml-3 flex-1">

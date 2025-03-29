@@ -528,7 +528,7 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
         
         // Try fallback endpoint as a last resort
         try {
-          const fallbackResponse = await api.get(`/upload/product/${id}`);
+          const fallbackResponse = await api.get(`/api/upload/product/${id}`);
           
           if (fallbackResponse.data && fallbackResponse.data.product) {
             console.log('Product fetched from fallback API endpoint');
