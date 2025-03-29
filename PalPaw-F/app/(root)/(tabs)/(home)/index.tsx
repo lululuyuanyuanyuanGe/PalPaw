@@ -114,6 +114,15 @@ const HomeScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   
+  // Refs to track last refresh time for each tab
+  const lastRefreshTimeRef = useRef<{
+    explore: number | null,
+    follow: number | null
+  }>({
+    explore: null,
+    follow: null
+  });
+  
   // Get posts context
   const { 
     state: postsState, 
@@ -122,6 +131,26 @@ const HomeScreen = () => {
     fetchFriendsPosts,
     setCurrentPost
   } = usePosts();
+  
+  // Helper function to check if refresh is needed (5 minute threshold)
+  const shouldRefresh = (tab: 'explore' | 'follow'): boolean => {
+    const lastRefreshTime = lastRefreshTimeRef.current[tab];
+    
+    // If never refreshed before, should refresh
+    if (lastRefreshTime === null) return true;
+    
+    const currentTime = Date.now();
+    const fiveMinutesInMs = 5 * 60 * 1000;
+    
+    // Return true if more than 5 minutes have passed since last refresh
+    return (currentTime - lastRefreshTime) > fiveMinutesInMs;
+  };
+  
+  // Update last refresh time for current tab
+  const updateLastRefreshTime = (tab: 'explore' | 'follow') => {
+    lastRefreshTimeRef.current[tab] = Date.now();
+    console.log(`Updated last refresh time for ${tab} tab: ${new Date().toLocaleTimeString()}`);
+  };
   
   // Handle device rotation or dimension changes
   useEffect(() => {
@@ -134,22 +163,39 @@ const HomeScreen = () => {
     return () => subscription.remove();
   }, []);
   
-  // Fetch posts when component mounts or tab changes
+  // Check if we need to refresh when tab changes
   useEffect(() => {
-    loadPosts();
+    if (shouldRefresh(activeTab)) {
+      console.log(`Tab changed to ${activeTab}. More than 5 minutes since last refresh, loading fresh data.`);
+      loadPosts();
+    } else {
+      console.log(`Tab changed to ${activeTab}. Using cached data (less than 5 minutes old).`);
+      // If we have data but don't need to refresh, just clear any errors
+      setLoadError(null);
+    }
   }, [activeTab]);
   
   // Function to load posts based on active tab
-  const loadPosts = async () => {
+  const loadPosts = async (forceRefresh = false) => {
+    // Skip if not forcing refresh and we refreshed recently
+    if (!forceRefresh && !shouldRefresh(activeTab)) {
+      console.log(`Skipping refresh for ${activeTab} tab - last refresh was less than 5 minutes ago`);
+      return;
+    }
+    
     setIsLoading(true);
     setLoadError(null);
     
     try {
       if (activeTab === 'explore') {
         await fetchFeedPosts();
+        // Update last refresh time
+        updateLastRefreshTime('explore');
       } else {
         try {
           await fetchFriendsPosts();
+          // Update last refresh time
+          updateLastRefreshTime('follow');
         } catch (friendsError) {
           console.error('Error fetching friends posts:', friendsError);
           setLoadError('Could not load friends posts. Showing recommended posts instead.');
@@ -165,11 +211,11 @@ const HomeScreen = () => {
     }
   };
   
-  // Handle refresh
+  // Handle manual refresh - always force refresh
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await loadPosts();
+      await loadPosts(true); // Pass true to force refresh regardless of time
     } catch (error) {
       console.error('Error refreshing posts:', error);
     } finally {
