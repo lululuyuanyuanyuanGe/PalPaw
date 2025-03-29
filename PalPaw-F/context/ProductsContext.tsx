@@ -454,42 +454,65 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
   const fetchSavedProducts = async (userId?: string): Promise<void> => {
     dispatch({ type: 'FETCH_PRODUCTS_REQUEST' });
     try {
+      console.log("ProductsContext: Starting to fetch saved products");
+      
       // Get auth token
       const token = await AsyncStorage.getItem('token');
       
       if (!token) {
+        console.warn("ProductsContext: No auth token found for saved products fetch");
         throw new Error('No auth token found');
       }
 
       // Call API to get saved products
+      console.log("ProductsContext: Calling API to fetch saved products");
       const response = await api.get('/pg/products/saved', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      console.log("Saved products API response structure:", Object.keys(response.data));
+      console.log("ProductsContext: Saved products API response received");
+      console.log("ProductsContext: Response status:", response.status);
+      console.log("ProductsContext: Response data keys:", Object.keys(response.data));
       
-      if (response?.data?.savedProducts && response?.data?.savedProductIds) {
-        const { savedProducts, savedProductIds } = response.data;
-        console.log(`ProductsContext: Received ${savedProducts.length} saved products`);
+      // Handle different possible response structures
+      let savedProducts = [];
+      let savedProductIds = [];
+      
+      if (response?.data?.products) {
+        // Handle response format: { products: [...], count: X }
+        savedProducts = response.data.products;
+        console.log(`ProductsContext: Found ${savedProducts.length} products in response.data.products`);
         
-        // Standardize product format for each product
-        const standardizedProducts = savedProducts.map((product: any) => standardizeProductFormat(product));
-        
-        // Save to AsyncStorage for offline access
-        // await AsyncStorage.setItem('savedProductIds', JSON.stringify(savedProductIds));
-        await AsyncStorage.removeItem('savedProductIds');
-        
-        dispatch({ 
-          type: 'FETCH_SAVED_PRODUCTS_SUCCESS', 
-          payload: { products: standardizedProducts, productIds: savedProductIds }
-        });
-      } else {
-        console.warn("No savedProducts field in API response");
-        dispatch({ 
-          type: 'FETCH_SAVED_PRODUCTS_SUCCESS', 
-          payload: { products: [], productIds: [] }
-        });
+        // Extract IDs from products if not provided separately
+        savedProductIds = savedProducts.map((product: any) => product.id);
+      } else if (response?.data?.savedProducts) {
+        // Handle response format: { savedProducts: [...], savedProductIds: [...] }
+        savedProducts = response.data.savedProducts;
+        savedProductIds = response.data.savedProductIds || savedProducts.map((product: any) => product.id);
+        console.log(`ProductsContext: Found ${savedProducts.length} products in response.data.savedProducts`);
+      } else if (Array.isArray(response.data)) {
+        // Handle direct array response
+        savedProducts = response.data;
+        savedProductIds = savedProducts.map((product: any) => product.id);
+        console.log(`ProductsContext: Found ${savedProducts.length} products in direct array response`);
       }
+      
+      // Log what we found
+      console.log(`ProductsContext: Final saved products count: ${savedProducts.length}`);
+      console.log(`ProductsContext: Final saved product IDs: ${JSON.stringify(savedProductIds)}`);
+      
+      // Standardize product format for each product
+      const standardizedProducts = savedProducts.map((product: any) => {
+        const formatted = standardizeProductFormat(product);
+        formatted.isSaved = true; // Explicitly mark as saved
+        return formatted;
+      });
+      
+      // Dispatch success action with products and IDs
+      dispatch({ 
+        type: 'FETCH_SAVED_PRODUCTS_SUCCESS', 
+        payload: { products: standardizedProducts, productIds: savedProductIds }
+      });
     } catch (error) {
       console.error('Error fetching saved products:', error);
       dispatch({
@@ -701,22 +724,11 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
     }
   };
 
-  // Initialize products data from AsyncStorage and API
+  // Initialize products data from database only
   useEffect(() => {
     const initProductsData = async () => {
       try {
-        console.log('Initializing products data from storage and API');
-        
-        // First attempt to load from storage
-        const storedSavedProductIds = await AsyncStorage.getItem('savedProductIds');
-        if (storedSavedProductIds) {
-          const savedProductIds = JSON.parse(storedSavedProductIds);
-          console.log(`Found ${savedProductIds.length} saved product IDs in storage`);
-          dispatch({ 
-            type: 'FETCH_SAVED_PRODUCTS_SUCCESS', 
-            payload: { products: [], productIds: savedProductIds } 
-          });
-        }
+        console.log('Initializing products data from database');
         
         // Initialize user data for fetching user-specific products
         const userData = await AsyncStorage.getItem('userData');

@@ -49,135 +49,6 @@ const DecorativePaw = ({ style, size = 24, color = '#9333EA', opacity = 0.2, rot
   );
 };
 
-// Mock data for demonstration purposes
-const mockProducts: ProductItem[] = [
-  {
-    id: '1',
-    userId: 'user1',
-    name: 'Luxury Cat Bed',
-    description: 'Plush, cozy bed for your feline friend with soft cushioning',
-    price: 79.99,
-    category: 'Bedding',
-    condition: 'New',
-    media: [],
-    quantity: 1,
-    status: 'active',
-    tags: ['cat', 'bed', 'plush'],
-    shipping: { method: 'standard' },
-    views: 42,
-    isDeleted: false,
-    createdAt: '2023-02-15T10:30:00Z',
-    updatedAt: '2023-02-15T10:30:00Z',
-    sellerData: {
-      id: 'user1',
-      username: 'CatLover',
-      avatar: 'https://randomuser.me/api/portraits/women/44.jpg'
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1602587365437-52a4ec0621c5?q=80&w=1974&auto=format&fit=crop&ixlib=rb-4.0.3',
-    isSaved: true
-  },
-  {
-    id: '2',
-    userId: 'user2',
-    name: 'Automatic Pet Feeder',
-    description: 'Schedule regular feeding times for your pet even when you\'re not home',
-    price: 129.99,
-    category: 'Accessories',
-    condition: 'New',
-    media: [],
-    quantity: 3,
-    status: 'active',
-    tags: ['automatic', 'feeder', 'food'],
-    shipping: { method: 'express' },
-    views: 78,
-    isDeleted: false,
-    createdAt: '2023-03-10T14:20:00Z',
-    updatedAt: '2023-03-11T09:15:00Z',
-    sellerData: {
-      id: 'user2',
-      username: 'PetSupplies',
-      avatar: 'https://randomuser.me/api/portraits/men/32.jpg'
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1603189343302-e603f7add05a?q=80&w=1974&auto=format&fit=crop&ixlib=rb-4.0.3',
-    isSaved: true
-  },
-  {
-    id: '3',
-    userId: 'user3',
-    name: 'Leather Dog Collar',
-    description: 'Premium handmade leather collar with custom name tag',
-    price: 45.50,
-    category: 'Accessories',
-    condition: 'New',
-    media: [],
-    quantity: 10,
-    status: 'active',
-    tags: ['dog', 'collar', 'leather'],
-    shipping: { method: 'standard' },
-    views: 36,
-    isDeleted: false,
-    createdAt: '2023-01-25T11:45:00Z',
-    updatedAt: '2023-01-25T11:45:00Z',
-    sellerData: {
-      id: 'user3',
-      username: 'LeatherCrafts',
-      avatar: 'https://randomuser.me/api/portraits/women/65.jpg'
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1598875184988-5e67b1a874b8?q=80&w=1974&auto=format&fit=crop&ixlib=rb-4.0.3',
-    isSaved: true
-  },
-  {
-    id: '4',
-    userId: 'user4',
-    name: 'Interactive Cat Toy Set',
-    description: 'Set of 5 interactive toys to keep your cat entertained and active',
-    price: 34.99,
-    category: 'Toys',
-    condition: 'New',
-    media: [],
-    quantity: 7,
-    status: 'active',
-    tags: ['cat', 'toys', 'interactive'],
-    shipping: { method: 'standard' },
-    views: 51,
-    isDeleted: false,
-    createdAt: '2023-04-05T16:30:00Z',
-    updatedAt: '2023-04-06T10:20:00Z',
-    sellerData: {
-      id: 'user4',
-      username: 'ToyMaster',
-      avatar: 'https://randomuser.me/api/portraits/men/22.jpg'
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1574158622682-e40e69881006?q=80&w=1980&auto=format&fit=crop&ixlib=rb-4.0.3',
-    isSaved: true
-  },
-  {
-    id: '5',
-    userId: 'user5',
-    name: 'Heated Pet Bed',
-    description: 'Thermostatically controlled pet bed for cold winter nights',
-    price: 89.99,
-    category: 'Bedding',
-    condition: 'New',
-    media: [],
-    quantity: 4,
-    status: 'active',
-    tags: ['heated', 'bed', 'winter'],
-    shipping: { method: 'express' },
-    views: 62,
-    isDeleted: false,
-    createdAt: '2023-05-12T09:10:00Z',
-    updatedAt: '2023-05-13T14:40:00Z',
-    sellerData: {
-      id: 'user5',
-      username: 'PetComfort',
-      avatar: 'https://randomuser.me/api/portraits/women/28.jpg'
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1591946614720-90a587da4a36?q=80&w=1974&auto=format&fit=crop&ixlib=rb-4.0.3',
-    isSaved: true
-  }
-];
-
 interface SavedProductsProps {
   statusBarHeight?: number;
   onClose?: () => void;
@@ -190,13 +61,9 @@ const SavedProducts: React.FC<SavedProductsProps> = ({
   const router = useRouter();
   const { state: productsState, fetchSavedProducts, unsaveProduct, setCurrentProduct } = useProducts();
   const { state: authState } = useAuth();
-  const { state: userState } = useUser();
   
   const [refreshing, setRefreshing] = useState(false);
   const [lastFetchTime, setLastFetchTime] = useState(0);
-  
-  // State for holding either mock data or real data
-  const [displayProducts, setDisplayProducts] = useState<ProductItem[]>(mockProducts);
 
   // Animation values for subtle paw rotations
   const [animation] = useState(new Animated.Value(0));
@@ -242,15 +109,13 @@ const SavedProducts: React.FC<SavedProductsProps> = ({
     if (!authState.user?.id) return;
     
     try {
-      await fetchSavedProducts(authState.user.id);
-      // If the API returns products, use them, otherwise keep using mock data
-      if (productsState.savedProducts.length > 0) {
-        setDisplayProducts(productsState.savedProducts);
-      }
+      console.log("SavedProducts: Starting to fetch saved products");
+      await fetchSavedProducts();
+      console.log("SavedProducts: Fetch complete, saved products count:", productsState.savedProducts.length);
+      console.log("SavedProducts: Saved product IDs:", productsState.savedProductIds);
       setLastFetchTime(Date.now());
     } catch (error) {
       console.error('Error loading saved products:', error);
-      // Keep mock data if error occurs
     }
   };
 
@@ -260,17 +125,12 @@ const SavedProducts: React.FC<SavedProductsProps> = ({
     
     setRefreshing(true);
     try {
-      if (authState.user?.id) {
-        await fetchSavedProducts(authState.user.id);
-        // If the API returns products, use them, otherwise keep using mock data
-        if (productsState.savedProducts.length > 0) {
-          setDisplayProducts(productsState.savedProducts);
-        }
-      }
+      console.log("SavedProducts: Refreshing saved products");
+      await fetchSavedProducts();
+      console.log("SavedProducts: Refresh complete, saved products count:", productsState.savedProducts.length);
       setLastFetchTime(Date.now());
     } catch (error) {
       console.error('Error refreshing saved products:', error);
-      // Keep mock data if error occurs
     } finally {
       setRefreshing(false);
     }
@@ -309,10 +169,6 @@ const SavedProducts: React.FC<SavedProductsProps> = ({
           style: "destructive",
           onPress: async () => {
             try {
-              // For demo purposes, just remove it from our local display state
-              setDisplayProducts(displayProducts.filter(p => p.id !== productId));
-              
-              // Also call the actual API function if authenticated
               if (authState.isAuthenticated) {
                 await unsaveProduct(productId);
               }
@@ -419,11 +275,6 @@ const SavedProducts: React.FC<SavedProductsProps> = ({
     </View>
   );
 
-  // For demo purposes, we'll skip the authentication check
-  // if (!authState.isAuthenticated) {
-  //   return <AuthPrompt statusBarHeight={statusBarHeight} />;
-  // }
-
   return (
     <SafeAreaView className="flex-1 bg-blue-50">
       <StatusBar
@@ -500,7 +351,7 @@ const SavedProducts: React.FC<SavedProductsProps> = ({
             <View className="flex-row items-center mt-1">
               <FontAwesome5 name="paw" size={12} color="#FFF" style={{ opacity: 0.8, marginRight: 4 }} />
               <Text className="text-white text-opacity-90 text-xs">
-                {displayProducts.length} items saved
+                {productsState.savedProducts.length} items saved
               </Text>
             </View>
           </View>
@@ -512,7 +363,7 @@ const SavedProducts: React.FC<SavedProductsProps> = ({
       
       {/* Content */}
       <FlatList
-        data={displayProducts}
+        data={productsState.savedProducts}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ 
@@ -554,7 +405,7 @@ const SavedProducts: React.FC<SavedProductsProps> = ({
                     shadowRadius: 5,
                     elevation: 3,
                   }}
-                  onPress={() => router.push('/(root)/(tabs)/market')}
+                  onPress={() => router.replace('/(root)/(tabs)/market')}
                 >
                   <FontAwesome5 name="paw" size={14} color="#FFF" style={{ marginRight: 6 }} />
                   <Text className="text-white font-bold">Browse Products</Text>

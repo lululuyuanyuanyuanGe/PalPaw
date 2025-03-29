@@ -158,6 +158,7 @@ const ProductDetail = () => {
   const footerOpacity = useSharedValue(0);
   const [loading, setLoading] = useState(true);
   const [isAtBottom, setIsAtBottom] = useState(false);
+  const [isSavedStatus, setIsSavedStatus] = useState(false);
   
   // Get context values
   const { state: authState } = useAuth();
@@ -193,6 +194,15 @@ const ProductDetail = () => {
     
     return null;
   }, [productId, productsState.currentProduct, productsState.userProducts, productsState.products, productsState.savedProducts]);
+  
+  // Update saved status when product or savedProductIds changes
+  useEffect(() => {
+    if (product) {
+      const saved = isProductSaved(product.id);
+      console.log(`ProductDetail: Setting saved status for ${product.id} to ${saved}`);
+      setIsSavedStatus(saved);
+    }
+  }, [product, productsState.savedProductIds]);
   
   // Load product data if not already in state
   useEffect(() => {
@@ -247,13 +257,23 @@ const ProductDetail = () => {
     if (!product) return;
     
     try {
-      if (isProductSaved(product.id)) {
-        await unsaveProduct(product.id);
-      } else {
+      // Update local state immediately for UI feedback
+      const newSavedStatus = !isSavedStatus;
+      console.log(`ProductDetail: Toggling save status for ${product.id} to ${newSavedStatus}`);
+      setIsSavedStatus(newSavedStatus);
+      
+      // Call the appropriate API function
+      if (newSavedStatus) {
         await saveProduct(product.id);
+      } else {
+        await unsaveProduct(product.id);
       }
+      
+      console.log(`ProductDetail: Successfully ${newSavedStatus ? 'saved' : 'unsaved'} product ${product.id}`);
     } catch (error) {
+      // If API call fails, revert the local state
       console.error('Error toggling save status:', error);
+      setIsSavedStatus(!isSavedStatus);
       Alert.alert('Error', 'Failed to update product save status');
     }
   };
@@ -386,9 +406,9 @@ const ProductDetail = () => {
         </Text>
         <TouchableOpacity onPress={handleToggleSave} className="p-2">
           <FontAwesome 
-            name={isProductSaved(product.id) ? "bookmark" : "bookmark-o"} 
+            name={isSavedStatus ? "bookmark" : "bookmark-o"} 
             size={22} 
-            color={isProductSaved(product.id) ? "#9333EA" : "#374151"} 
+            color={isSavedStatus ? "#9333EA" : "#374151"} 
           />
         </TouchableOpacity>
       </Animated.View>
@@ -408,9 +428,9 @@ const ProductDetail = () => {
             <Text className="flex-1 text-lg font-rubik-medium text-gray-800 ml-2">Product Details</Text>
             <TouchableOpacity onPress={handleToggleSave} className="p-2">
               <FontAwesome 
-                name={isProductSaved(product.id) ? "bookmark" : "bookmark-o"} 
+                name={isSavedStatus ? "bookmark" : "bookmark-o"} 
                 size={22} 
-                color={isProductSaved(product.id) ? "#9333EA" : "#374151"} 
+                color={isSavedStatus ? "#9333EA" : "#374151"} 
               />
             </TouchableOpacity>
           </View>

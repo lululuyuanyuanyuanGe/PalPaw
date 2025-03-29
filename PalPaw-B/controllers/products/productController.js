@@ -42,7 +42,7 @@ export const getAllProducts = async (req, res) => {
     const products = await Product.findAll({
       attributes: [
         'id', 'userId', 'name', 'description', 'price', 'media', 
-        'category', 'condition', 'status', 'tags', 'savedCount', 
+        'category', 'condition', 'status', 'tags', 'views',
         'isDeleted', 'createdAt', 'updatedAt'
       ],
       where,
@@ -225,17 +225,6 @@ export const saveProduct = async (req, res) => {
     // Save product to user's collection
     const saved = await req.user.saveProduct(id);
     
-    // Try to update savedCount if it exists in the Product model
-    try {
-      if (saved && product.get('savedCount') !== undefined) {
-        product.savedCount = (product.savedCount || 0) + 1;
-        await product.save();
-      }
-    } catch (error) {
-      console.log('Could not update savedCount:', error.message);
-      // Continue even if updating savedCount fails
-    }
-    
     res.json({
       success: true,
       message: saved ? 'Product saved to collection' : 'Product already in collection',
@@ -270,17 +259,6 @@ export const unsaveProduct = async (req, res) => {
     
     // Remove product from user's collection
     const removed = await req.user.unsaveProduct(id);
-    
-    // Try to update savedCount if it exists in the Product model
-    try {
-      if (removed && product.get('savedCount') !== undefined && product.savedCount > 0) {
-        product.savedCount -= 1;
-        await product.save();
-      }
-    } catch (error) {
-      console.log('Could not update savedCount:', error.message);
-      // Continue even if updating savedCount fails
-    }
     
     res.json({
       success: true,
