@@ -4,7 +4,6 @@ import { fetchUserPosts as fetchPostsFallback } from '../app/(root)/(tabs)/(prof
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../utils/apiClient';
 import { processMediaFiles } from '../utils/mediaUtils';
-import { Image, Text } from 'react-native';
 
 
 // Comment interface
@@ -193,7 +192,8 @@ const processPost = async (post: any, postId: string): Promise<PostItem> => {
 
 // Define the context state interface
 interface PostsState {
-  posts: PostItem[];
+  Posts: PostItem[];
+  feedPosts: PostItem[];
   userPosts: PostItem[];
   likedPosts: PostItem[];
   likedPostIds: string[];
@@ -226,7 +226,8 @@ export type PostsAction =
 
 // Define initial state
 const initialState: PostsState = {
-  posts: [],
+  Posts: [],
+  feedPosts: [],
   userPosts: [],
   likedPosts: [],
   likedPostIds: [],
@@ -241,13 +242,13 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
     case 'FETCH_POSTS_REQUEST':
       return {
         ...state,
-        loading: false,
+        loading: true,
         error: null,
       };
     case 'FETCH_POSTS_SUCCESS':
       return {
         ...state,
-        posts: action.payload,
+        feedPosts: action.payload,
         loading: false,
         error: null,
       };
@@ -297,7 +298,7 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
     case 'LIKE_POST_SUCCESS': {
       // Find all instances of the post and update them
       const postId = action.payload.postId;
-      const updatedPosts = state.posts.map(post => 
+      const updatedPosts = state.feedPosts.map(post => 
         post.id === postId 
           ? { ...post, likes: Math.max(0, (post.likes || 0) + 1) } 
           : post
@@ -330,7 +331,7 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
       
       return {
         ...state,
-        posts: updatedPosts,
+        feedPosts: updatedPosts,
         userPosts: updatedUserPosts,
         likedPosts: newLikedPosts,
         likedPostIds: action.payload.likedPostIds,
@@ -341,7 +342,7 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
     case 'UNLIKE_POST_SUCCESS': {
       // Find all instances of the post and update them
       const postId = action.payload.postId;
-      const updatedPosts = state.posts.map(post => 
+      const updatedPosts = state.feedPosts.map(post => 
         post.id === postId 
           ? { ...post, likes: Math.max(0, (post.likes || 0) - 1) } 
           : post
@@ -368,7 +369,7 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
       
       return {
         ...state,
-        posts: updatedPosts,
+        feedPosts: updatedPosts,
         userPosts: updatedUserPosts,
         likedPosts: updatedLikedPosts,
         likedPostIds: action.payload.likedPostIds,
@@ -384,7 +385,7 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
     case 'INCREMENT_POST_VIEWS':
       return {
         ...state,
-        posts: state.posts.map(post =>
+        feedPosts: state.feedPosts.map(post =>
           post.id === action.payload.postId
             ? { ...post, views: (post.views || 0) + 1 }
             : post
@@ -407,7 +408,7 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
       // Update the post to include the new comment
       return {
         ...state,
-        posts: state.posts.map(post =>
+        feedPosts: state.feedPosts.map(post =>
           post.id === action.payload.postId
             ? { 
                 ...post, 
@@ -439,7 +440,7 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
     case 'DELETE_POST_SUCCESS':
       return {
         ...state,
-        posts: state.posts.filter(post => post.id !== action.payload),
+        feedPosts: state.feedPosts.filter(post => post.id !== action.payload),
         userPosts: state.userPosts.filter(post => post.id !== action.payload),
         likedPosts: state.likedPosts.filter(post => post.id !== action.payload),
         likedPostIds: state.likedPostIds.filter(id => id !== action.payload),
@@ -461,7 +462,7 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
     case 'UPDATE_POST_IN_ALL_COLLECTIONS':
       return {
         ...state,
-        posts: state.posts.map(post =>
+        feedPosts: state.feedPosts.map(post =>
           post.id === action.payload.id ? action.payload : post
         ),
         userPosts: state.userPosts.map(post =>
@@ -482,6 +483,7 @@ interface PostsContextType {
   state: PostsState;
   dispatch: React.Dispatch<PostsAction>;
   fetchPosts: () => Promise<void>;
+  fetchFeedPosts: () => Promise<void>;
   fetchUserPosts: (userId: string) => Promise<void>;
   fetchLikedPosts: (userId?: string) => Promise<void>;
   fetchPostById: (postId: string) => Promise<void>;
@@ -505,9 +507,6 @@ interface PostsProviderProps {
 export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(postsReducer, initialState);
 
-  // Move initialization to a separate useEffect with proper dependencies
-  // Will define the functions first, then call initialization in another useEffect
-
   // Function to fetch all posts
   const fetchPosts = async () => {
     dispatch({ type: 'FETCH_POSTS_REQUEST' });
@@ -530,6 +529,65 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         type: 'FETCH_POSTS_FAILURE',
         payload: 'Failed to fetch posts',
       });
+    }
+  };
+
+  // Function to fetch feed posts (for discovery)
+  const fetchFeedPosts = async () => {
+    dispatch({ type: 'FETCH_POSTS_REQUEST' });
+    try {
+      console.log("Fetching posts for feed...");
+      
+      // Make API call to fetch feed posts (random posts for discovery)
+      const response = await api.get('/pg/posts/feed');
+      let posts = [];
+      
+      if (Array.isArray(response.data)) {
+        posts = response.data;
+      } else if (response.data.posts && Array.isArray(response.data.posts)) {
+        posts = response.data.posts;
+      }
+      
+      console.log(`Received ${posts.length} feed posts`);
+      
+      // Standardize the posts format
+      const standardizedPosts = posts.map((post: any) => standardizePostFormat(post));
+      
+      // Update state with feed posts
+      dispatch({ type: 'FETCH_POSTS_SUCCESS', payload: standardizedPosts });
+    } catch (error) {
+      console.error('Error fetching feed posts:', error);
+      
+      // Fallback to regular posts if feed endpoint fails
+      try {
+        console.log("Falling back to regular posts endpoint");
+        const fallbackResponse = await api.get('/pg/posts');
+        let posts = [];
+        
+        if (Array.isArray(fallbackResponse.data)) {
+          posts = fallbackResponse.data;
+        } else if (fallbackResponse.data.posts && Array.isArray(fallbackResponse.data.posts)) {
+          posts = fallbackResponse.data.posts;
+        }
+        
+        // Get a random sample of up to 6 posts for the feed
+        const shuffled = [...posts].sort(() => 0.5 - Math.random());
+        const feedPosts = shuffled.slice(0, 6);
+        
+        console.log(`Using ${feedPosts.length} random posts as fallback for feed`);
+        
+        // Standardize the posts format
+        const standardizedPosts = feedPosts.map((post: any) => standardizePostFormat(post));
+        
+        // Update state with feed posts
+        dispatch({ type: 'FETCH_POSTS_SUCCESS', payload: standardizedPosts });
+      } catch (fallbackError) {
+        console.error('Error with fallback posts fetch:', fallbackError);
+        dispatch({
+          type: 'FETCH_POSTS_FAILURE',
+          payload: 'Failed to fetch feed posts',
+        });
+      }
     }
   };
 
@@ -994,6 +1052,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         state,
         dispatch,
         fetchPosts,
+        fetchFeedPosts,
         fetchUserPosts,
         fetchLikedPosts,
         fetchPostById,

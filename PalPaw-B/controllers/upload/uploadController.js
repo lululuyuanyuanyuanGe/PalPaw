@@ -307,6 +307,100 @@ export const getUserPosts = async (req, res) => {
 };
 
 /**
+ * Get random posts for feed/discovery feature
+ * Retrieves 6 random posts from all users
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const getRandomPosts = async (req, res) => {
+  try {
+    console.log('Getting random posts for feed/discovery');
+    
+    // Get count parameter with default of 6
+    const count = parseInt(req.query.count) || 6;
+    
+    // Validate count to prevent excessive queries
+    if (count > 20) {
+      return res.status(400).json({
+        success: false,
+        message: 'Maximum count allowed is 20'
+      });
+    }
+    
+    // Get all public posts with their authors
+    const allPosts = await Post.findAll({
+      where: { 
+        visibility: 'public',
+        isDeleted: false
+      },
+      include: [
+        {
+          model: User,
+          as: 'author',
+          attributes: ['id', 'username', 'avatar']
+        },
+        {
+          model: Comment,
+          as: 'comments',
+          include: [
+            {
+              model: User,
+              as: 'author',
+              attributes: ['id', 'username', 'avatar']
+            }
+          ]
+        }
+      ]
+    });
+    
+    console.log(`Found ${allPosts.length} total posts to choose from`);
+    
+    // Fisher-Yates shuffle algorithm
+    const shuffleArray = (array) => {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    };
+    
+    // Shuffle and select 'count' posts
+    const shuffledPosts = shuffleArray([...allPosts]);
+    const randomPosts = shuffledPosts.slice(0, count);
+    
+    // Transform posts to ensure proper data structure
+    const formattedPosts = randomPosts.map(post => {
+      const postJSON = post.toJSON();
+      
+      // Ensure author data is in the expected format
+      if (postJSON.author) {
+        postJSON.authorData = {
+          id: postJSON.author.id,
+          username: postJSON.author.username || 'User',
+          avatar: postJSON.author.avatar || `https://robohash.org/${postJSON.author.id}?set=set4`
+        };
+      }
+      
+      return postJSON;
+    });
+    
+    console.log(`Returning ${formattedPosts.length} random posts`);
+    
+    return res.status(200).json({
+      success: true,
+      posts: formattedPosts
+    });
+  } catch (error) {
+    console.error('Error fetching random posts:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while fetching random posts',
+      error: error.message
+    });
+  }
+};
+
+/**
  * Get a specific post by ID
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object

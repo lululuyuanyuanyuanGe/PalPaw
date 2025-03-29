@@ -7,6 +7,7 @@ import {
   updatePost, 
   deletePost 
 } from '../controllers/posts/index.js';
+import { getRandomPosts } from '../controllers/upload/uploadController.js';
 
 const router = express.Router();
 
@@ -16,6 +17,13 @@ const router = express.Router();
  * @access Public
  */
 router.get('/', optionalAuthenticate, getAllPosts);
+
+/**
+ * @route GET /api/pg/posts/feed
+ * @desc Get random posts for the discovery feed (6 by default)
+ * @access Public
+ */
+router.get('/feed', optionalAuthenticate, getRandomPosts);
 
 /**
  * @route GET /api/pg/posts/:id
