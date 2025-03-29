@@ -75,7 +75,8 @@ const CreateProductScreen: React.FC = () => {
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [condition, setCondition] = useState<string>('New');
   const [quantity, setQuantity] = useState('1');
-  const [freeShipping, setFreeShipping] = useState(false);
+  const [offersPickup, setOffersPickup] = useState(false);
+  const [offersDelivery, setOffersDelivery] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
@@ -99,7 +100,8 @@ const CreateProductScreen: React.FC = () => {
       category !== '' ||
       condition !== 'New' ||
       quantity !== '1' ||
-      freeShipping !== false
+      offersPickup !== false ||
+      offersDelivery !== false
     );
   };
 
@@ -124,7 +126,7 @@ const CreateProductScreen: React.FC = () => {
         category,
         condition,
         quantity: parseInt(quantity, 10),
-        shippingOptions: freeShipping ? ['Free Shipping'] : [],
+        shippingOptions: getShippingOptions(),
         lastUpdated: Date.now()
       };
       
@@ -136,6 +138,14 @@ const CreateProductScreen: React.FC = () => {
     } finally {
       setDraftSaving(false);
     }
+  };
+
+  // Helper function to generate shipping options array
+  const getShippingOptions = (): string[] => {
+    const options: string[] = [];
+    if (offersPickup) options.push('Pickup');
+    if (offersDelivery) options.push('Delivery');
+    return options;
   };
 
   // Load draft data from AsyncStorage
@@ -151,7 +161,8 @@ const CreateProductScreen: React.FC = () => {
         setCategory(draft.category || '');
         setCondition(draft.condition || 'New');
         setQuantity(draft.quantity?.toString() || '1');
-        setFreeShipping(draft.shippingOptions?.includes('Free Shipping') || false);
+        setOffersPickup(draft.shippingOptions?.includes('Pickup') || false);
+        setOffersDelivery(draft.shippingOptions?.includes('Delivery') || false);
         setHasDraft(true);
         setIsDraftRestored(true);
         console.log('Product draft loaded');
@@ -181,7 +192,7 @@ const CreateProductScreen: React.FC = () => {
       
       return () => clearTimeout(timer);
     }
-  }, [name, description, price, media, category, condition, quantity, freeShipping, isDraftRestored]);
+  }, [name, description, price, media, category, condition, quantity, offersPickup, offersDelivery, isDraftRestored]);
 
   // Check for existing draft and load categories on mount
   useEffect(() => {
@@ -220,7 +231,7 @@ const CreateProductScreen: React.FC = () => {
     return () => {
       backHandler.remove();
     };
-  }, [name, description, price, media, category, condition, quantity, freeShipping, draftSaving]);
+  }, [name, description, price, media, category, condition, quantity, offersPickup, offersDelivery, draftSaving]);
 
   // Load categories
   const loadCategories = async () => {
@@ -254,39 +265,40 @@ const CreateProductScreen: React.FC = () => {
         : type === 'video'
           ? 'videos'
           : ['images', 'videos'],
-      allowsEditing: true,
-      aspect: [4, 3],
+      allowsEditing: false, // Disable editing/cropping
+      allowsMultipleSelection: true, // Allow multiple selection
       quality: 0.8,
     };
 
     const result = await ImagePicker.launchImageLibraryAsync(options);
 
     if (!result.canceled && result.assets.length > 0) {
-      const asset = result.assets[0];
-      const mediaType = asset.uri.endsWith('.mp4') || asset.type === 'video' ? 'video' : 'image';
+      // Handle multiple selected assets
+      const newMedia = result.assets.map(asset => {
+        const mediaType = asset.uri.endsWith('.mp4') || asset.type === 'video' ? 'video' : 'image';
+        return {
+          uri: asset.uri,
+          type: mediaType as 'image' | 'video',
+          width: asset.width,
+          height: asset.height
+        };
+      });
       
-      setMedia([...media, {
-        uri: asset.uri,
-        type: mediaType,
-        width: asset.width,
-        height: asset.height
-      }]);
+      setMedia([...media, ...newMedia]);
     }
   };
 
-  // Take photo with camera - update to use custom error modal
+  // Take photo with camera
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     
     if (status !== 'granted') {
-      showErrorModal('Permission Denied', 'We need camera permissions to take photos.');
+      alert('Sorry, we need camera permissions to make this work!');
       return;
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: 'images',
-      allowsEditing: true,
-      aspect: [4, 3],
+      allowsEditing: false,
       quality: 0.8,
     });
 
@@ -338,7 +350,7 @@ const CreateProductScreen: React.FC = () => {
         category,
         condition,
         quantity: parseInt(quantity, 10),
-        shippingOptions: freeShipping ? ['Free Shipping'] : [],
+        shippingOptions: getShippingOptions(),
       };
       
       // Send data to the API
@@ -375,7 +387,8 @@ const CreateProductScreen: React.FC = () => {
     setCategory('');
     setCondition('New');
     setQuantity('1');
-    setFreeShipping(false);
+    setOffersPickup(false);
+    setOffersDelivery(false);
     // Navigate back
     router.back();
   };
@@ -663,20 +676,47 @@ const CreateProductScreen: React.FC = () => {
               </View>
             </View>
             
-            {/* Free Shipping */}
-            <View className="flex-row items-center justify-between py-3 mt-2 border-t border-gray-100">
-              <View className="flex-row items-center">
-                <View className="bg-amber-100 rounded-full p-2 mr-3">
-                  <Feather name="package" size={18} color="#F59E0B" />
+            {/* Shipping Options */}
+            <View className="mt-4 pt-4 border-t border-gray-100">
+              <Text className="text-base text-gray-700 font-rubik-medium mb-3">Shipping Options</Text>
+              
+              {/* Pickup Option */}
+              <View className="flex-row items-center justify-between py-3 mb-2 bg-gray-50 px-4 rounded-xl">
+                <View className="flex-row items-center">
+                  <View className="bg-indigo-100 rounded-full p-2 mr-3">
+                    <Feather name="map-pin" size={18} color="#6366F1" />
+                  </View>
+                  <View>
+                    <Text className="text-gray-700 font-rubik">Pickup</Text>
+                    <Text className="text-xs text-gray-500 font-rubik">Buyer can pick up the item</Text>
+                  </View>
                 </View>
-                <Text className="text-gray-700 font-rubik">Free Shipping</Text>
+                <Switch
+                  value={offersPickup}
+                  onValueChange={setOffersPickup}
+                  trackColor={{ false: '#E5E7EB', true: '#C084FC' }}
+                  thumbColor={offersPickup ? '#8B5CF6' : '#f4f3f4'}
+                />
               </View>
-              <Switch
-                value={freeShipping}
-                onValueChange={setFreeShipping}
-                trackColor={{ false: '#E5E7EB', true: '#C084FC' }}
-                thumbColor={freeShipping ? '#8B5CF6' : '#f4f3f4'}
-              />
+              
+              {/* Delivery Option */}
+              <View className="flex-row items-center justify-between py-3 bg-gray-50 px-4 rounded-xl">
+                <View className="flex-row items-center">
+                  <View className="bg-amber-100 rounded-full p-2 mr-3">
+                    <Feather name="package" size={18} color="#F59E0B" />
+                  </View>
+                  <View>
+                    <Text className="text-gray-700 font-rubik">Delivery</Text>
+                    <Text className="text-xs text-gray-500 font-rubik">You'll deliver or ship the item</Text>
+                  </View>
+                </View>
+                <Switch
+                  value={offersDelivery}
+                  onValueChange={setOffersDelivery}
+                  trackColor={{ false: '#E5E7EB', true: '#C084FC' }}
+                  thumbColor={offersDelivery ? '#8B5CF6' : '#f4f3f4'}
+                />
+              </View>
             </View>
           </View>
         </View>

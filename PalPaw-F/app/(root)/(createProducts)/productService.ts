@@ -116,7 +116,7 @@ export const createProduct = async (data: ProductData): Promise<{ success: boole
     
     // Add media files using the same pattern as createPost
     if (data.media && data.media.length > 0) {
-      const mediaCount = Math.min(data.media.length, 10); // Limit to 10 media items
+      const mediaCount = Math.min(data.media.length, 10); // Limit to 10 media itemsa
       console.log(`Processing ${mediaCount} media items (limited to 10 max)`);
       
       // Add media files

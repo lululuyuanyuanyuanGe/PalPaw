@@ -5,7 +5,9 @@ import {
   getProductById,
   saveProduct,
   unsaveProduct,
-  getSavedProducts
+  getSavedProducts,
+  getFeedProducts,
+  searchProducts
 } from '../controllers/products/index.js';
 
 const router = express.Router();
@@ -24,6 +26,20 @@ router.get('/', optionalAuthenticate, getAllProducts);
  * @access Private
  */
 router.get('/saved', authenticate, getSavedProducts);
+
+/**
+ * @route GET /api/pg/products/feed
+ * @desc Get personalized feed of products, optionally filtered by category
+ * @access Public
+ */
+router.get('/feed', optionalAuthenticate, getFeedProducts);
+
+/**
+ * @route GET /api/pg/products/search
+ * @desc Search products by query string
+ * @access Public
+ */
+router.get('/search', optionalAuthenticate, searchProducts);
 
 /**
  * @route GET /api/pg/products/:id

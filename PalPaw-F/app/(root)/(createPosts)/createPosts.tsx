@@ -245,23 +245,26 @@ const CreatePostScreen: React.FC = () => {
         : type === 'video'
           ? 'videos'
           : ['images', 'videos'],
-      allowsEditing: true,
-      aspect: [4, 3],
+      allowsEditing: false, // Disable editing/cropping
+      allowsMultipleSelection: true, // Allow multiple selection
       quality: 0.8,
     };
 
     const result = await ImagePicker.launchImageLibraryAsync(options);
 
     if (!result.canceled && result.assets.length > 0) {
-      const asset = result.assets[0];
-      const mediaType = asset.uri.endsWith('.mp4') || asset.type === 'video' ? 'video' : 'image';
+      // Handle multiple selected assets
+      const newMedia = result.assets.map(asset => {
+        const mediaType = asset.uri.endsWith('.mp4') || asset.type === 'video' ? 'video' : 'image';
+        return {
+          uri: asset.uri,
+          type: mediaType as 'image' | 'video',
+          width: asset.width,
+          height: asset.height
+        };
+      });
       
-      setMedia([...media, {
-        uri: asset.uri,
-        type: mediaType,
-        width: asset.width,
-        height: asset.height
-      }]);
+      setMedia([...media, ...newMedia]);
     }
   };
 
@@ -275,8 +278,7 @@ const CreatePostScreen: React.FC = () => {
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [4, 3],
+      allowsEditing: false,
       quality: 0.8,
     });
 

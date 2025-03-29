@@ -43,7 +43,7 @@ export const getAllProducts = async (req, res) => {
       attributes: [
         'id', 'userId', 'name', 'description', 'price', 'media', 
         'category', 'condition', 'status', 'tags', 'views',
-        'isDeleted', 'createdAt', 'updatedAt'
+        'isDeleted', 'createdAt', 'updatedAt', 'shipping'
       ],
       where,
       limit: parseInt(limit),
@@ -300,6 +300,11 @@ export const getSavedProducts = async (req, res) => {
         },
         isDeleted: false
       },
+      attributes: [
+        'id', 'userId', 'name', 'description', 'price', 'media', 
+        'category', 'condition', 'status', 'tags', 'views',
+        'isDeleted', 'createdAt', 'updatedAt', 'shipping', 'quantity'
+      ],
       include: [
         {
           model: User,
@@ -333,6 +338,213 @@ export const getSavedProducts = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Failed to fetch saved products',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get personalized feed of products, optionally filtered by category
+ * @route GET /api/pg/products/feed
+ */
+export const getFeedProducts = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      sort = 'createdAt', 
+      order = 'DESC',
+      category
+    } = req.query;
+    
+    const offset = (page - 1) * limit;
+    const where = { 
+      isDeleted: false,
+      status: 'active'
+    };
+    
+    // Filter by category if specified
+    if (category && category !== 'All') {
+      where.category = category;
+    }
+    
+    // Get total count for pagination
+    const total = await Product.count({ where });
+    
+    // Get products with seller info
+    const products = await Product.findAll({
+      attributes: [
+        'id', 'userId', 'name', 'description', 'price', 'media', 
+        'category', 'condition', 'status', 'tags', 'views',
+        'isDeleted', 'createdAt', 'updatedAt', 'shipping'
+      ],
+      where,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      order: [[sort, order]],
+      include: [
+        {
+          model: User,
+          as: 'seller',
+          attributes: ['id', 'username', 'avatar']
+        }
+      ]
+    });
+    
+    // Check if user has saved any of these products
+    const userSavedProductIds = req.user ? req.user.savedProductIds || [] : [];
+    
+    // Transform products to include seller info and saved status
+    const formattedProducts = products.map(product => {
+      const productJson = product.toJSON();
+      return {
+        ...productJson,
+        views: productJson.views || 0,
+        sellerData: {
+          ...productJson.seller,
+          avatar: productJson.seller?.avatar || null
+        },
+        seller: undefined, // Remove the nested seller object
+        isSaved: userSavedProductIds.includes(productJson.id)
+      };
+    });
+    
+    res.json({
+      success: true,
+      products: formattedProducts,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching feed products:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch feed products',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Search products by query string
+ * @route GET /api/pg/products/search
+ */
+export const searchProducts = async (req, res) => {
+  try {
+    const { 
+      q,
+      page = 1, 
+      limit = 10, 
+      sort = 'createdAt', 
+      order = 'DESC',
+      category
+    } = req.query;
+    
+    if (!q || q.trim() === '') {
+      return res.json({
+        success: true,
+        products: [],
+        pagination: {
+          total: 0,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: 0
+        }
+      });
+    }
+    
+    const searchTerm = q.trim().toLowerCase();
+    const offset = (page - 1) * limit;
+    
+    // Build the where clause for search
+    const where = { 
+      isDeleted: false,
+      status: 'active',
+      [Op.or]: [
+        {
+          name: {
+            [Op.iLike]: `%${searchTerm}%`
+          }
+        },
+        {
+          description: {
+            [Op.iLike]: `%${searchTerm}%`
+          }
+        },
+        // Search in tags if it's an array field
+        {
+          tags: {
+            [Op.overlap]: [searchTerm]
+          }
+        }
+      ]
+    };
+    
+    // Filter by category if specified
+    if (category && category !== 'All') {
+      where.category = category;
+    }
+    
+    // Get total count for pagination
+    const total = await Product.count({ where });
+    
+    // Get products with seller info
+    const products = await Product.findAll({
+      attributes: [
+        'id', 'userId', 'name', 'description', 'price', 'media', 
+        'category', 'condition', 'status', 'tags', 'views',
+        'isDeleted', 'createdAt', 'updatedAt', 'shipping'
+      ],
+      where,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      order: [[sort, order]],
+      include: [
+        {
+          model: User,
+          as: 'seller',
+          attributes: ['id', 'username', 'avatar']
+        }
+      ]
+    });
+    
+    // Check if user has saved any of these products
+    const userSavedProductIds = req.user ? req.user.savedProductIds || [] : [];
+    
+    // Transform products to include seller info and saved status
+    const formattedProducts = products.map(product => {
+      const productJson = product.toJSON();
+      return {
+        ...productJson,
+        views: productJson.views || 0,
+        sellerData: {
+          ...productJson.seller,
+          avatar: productJson.seller?.avatar || null
+        },
+        seller: undefined, // Remove the nested seller object
+        isSaved: userSavedProductIds.includes(productJson.id)
+      };
+    });
+    
+    res.json({
+      success: true,
+      products: formattedProducts,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error searching products:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to search products',
       error: error.message
     });
   }

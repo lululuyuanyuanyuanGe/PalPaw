@@ -117,6 +117,8 @@ const standardizeProductFormat = (product: any): ProductItem => {
 // Define the context state interface
 interface ProductsState {
   products: ProductItem[];
+  feedProducts: ProductItem[];
+  searchProducts: ProductItem[];
   userProducts: ProductItem[];
   savedProducts: ProductItem[];
   savedProductIds: string[];
@@ -130,6 +132,10 @@ export type ProductsAction =
   | { type: 'FETCH_PRODUCTS_REQUEST' }
   | { type: 'FETCH_PRODUCTS_SUCCESS'; payload: ProductItem[] }
   | { type: 'FETCH_PRODUCTS_FAILURE'; payload: string }
+  | { type: 'FETCH_FEED_PRODUCTS_SUCCESS'; payload: ProductItem[] }
+  | { type: 'FETCH_FEED_PRODUCTS_FAILURE'; payload: string }
+  | { type: 'FETCH_SEARCH_PRODUCTS_SUCCESS'; payload: ProductItem[] }
+  | { type: 'FETCH_SEARCH_PRODUCTS_FAILURE'; payload: string }
   | { type: 'FETCH_USER_PRODUCTS_SUCCESS'; payload: ProductItem[] }
   | { type: 'FETCH_USER_PRODUCTS_FAILURE'; payload: string }
   | { type: 'FETCH_SAVED_PRODUCTS_SUCCESS'; payload: { products: ProductItem[], productIds: string[] } }
@@ -148,6 +154,8 @@ export type ProductsAction =
 // Define initial state
 const initialState: ProductsState = {
   products: [],
+  feedProducts: [],
+  searchProducts: [],
   userProducts: [],
   savedProducts: [],
   savedProductIds: [],
@@ -173,6 +181,32 @@ const productsReducer = (state: ProductsState, action: ProductsAction): Products
         error: null,
       };
     case 'FETCH_PRODUCTS_FAILURE':
+      return {
+        ...state,
+        loading: false,
+        error: action.payload,
+      };
+    case 'FETCH_FEED_PRODUCTS_SUCCESS':
+      return {
+        ...state,
+        feedProducts: action.payload,
+        loading: false,
+        error: null,
+      };
+    case 'FETCH_FEED_PRODUCTS_FAILURE':
+      return {
+        ...state,
+        loading: false,
+        error: action.payload,
+      };
+    case 'FETCH_SEARCH_PRODUCTS_SUCCESS':
+      return {
+        ...state,
+        searchProducts: action.payload,
+        loading: false,
+        error: null,
+      };
+    case 'FETCH_SEARCH_PRODUCTS_FAILURE':
       return {
         ...state,
         loading: false,
@@ -351,6 +385,8 @@ interface ProductsContextType {
   state: ProductsState;
   dispatch: React.Dispatch<ProductsAction>;
   fetchProducts: () => Promise<void>;
+  fetchFeedProducts: (category?: string) => Promise<void>;
+  fetchSearchProducts: (query: string) => Promise<void>;
   fetchUserProducts: (userId: string) => Promise<void>;
   fetchSavedProducts: (userId?: string) => Promise<void>;
   fetchProductById: (productId: string | any) => Promise<void>;
@@ -724,6 +760,87 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
     }
   };
 
+  // Function to fetch feed products - can be filtered by category
+  const fetchFeedProducts = async (category?: string) => {
+    dispatch({ type: 'FETCH_PRODUCTS_REQUEST' });
+    try {
+      // Build the URL with optional category filter
+      let url = '/pg/products/feed';
+      if (category && category !== 'All') {
+        url += `?category=${encodeURIComponent(category)}`;
+      }
+      
+      console.log(`ProductsContext: Fetching feed products with URL: ${url}`);
+      const response = await api.get(url);
+      let products = [];
+      
+      if (Array.isArray(response.data)) {
+        products = response.data;
+      } else if (response.data.products && Array.isArray(response.data.products)) {
+        products = response.data.products;
+      }
+      
+      console.log(`ProductsContext: Retrieved ${products.length} feed products`);
+      const standardizedProducts = products.map((product: any) => standardizeProductFormat(product));
+      
+      // Update saved status for each product
+      const productsWithSavedStatus = standardizedProducts.map((product: ProductItem) => ({
+        ...product,
+        isSaved: state.savedProductIds.includes(product.id)
+      }));
+      
+      dispatch({ type: 'FETCH_FEED_PRODUCTS_SUCCESS', payload: productsWithSavedStatus });
+    } catch (error) {
+      console.error('Error fetching feed products:', error);
+      dispatch({
+        type: 'FETCH_FEED_PRODUCTS_FAILURE',
+        payload: 'Failed to fetch feed products',
+      });
+    }
+  };
+
+  // Function to fetch search products
+  const fetchSearchProducts = async (query: string) => {
+    if (!query || query.trim() === '') {
+      // If query is empty, set empty search results
+      dispatch({ type: 'FETCH_SEARCH_PRODUCTS_SUCCESS', payload: [] });
+      return;
+    }
+    
+    dispatch({ type: 'FETCH_PRODUCTS_REQUEST' });
+    try {
+      const trimmedQuery = query.trim().toLowerCase();
+      console.log(`ProductsContext: Searching products with query: ${trimmedQuery}`);
+      
+      // Call search API endpoint
+      const response = await api.get(`/pg/products/search?q=${encodeURIComponent(trimmedQuery)}`);
+      let products = [];
+      
+      if (Array.isArray(response.data)) {
+        products = response.data;
+      } else if (response.data.products && Array.isArray(response.data.products)) {
+        products = response.data.products;
+      }
+      
+      console.log(`ProductsContext: Found ${products.length} products matching search query`);
+      const standardizedProducts = products.map((product: any) => standardizeProductFormat(product));
+      
+      // Update saved status for each product
+      const productsWithSavedStatus = standardizedProducts.map((product: ProductItem) => ({
+        ...product,
+        isSaved: state.savedProductIds.includes(product.id)
+      }));
+      
+      dispatch({ type: 'FETCH_SEARCH_PRODUCTS_SUCCESS', payload: productsWithSavedStatus });
+    } catch (error) {
+      console.error('Error searching products:', error);
+      dispatch({
+        type: 'FETCH_SEARCH_PRODUCTS_FAILURE',
+        payload: 'Failed to search products',
+      });
+    }
+  };
+
   // Initialize products data from database only
   useEffect(() => {
     const initProductsData = async () => {
@@ -774,6 +891,8 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
         state,
         dispatch,
         fetchProducts,
+        fetchFeedProducts,
+        fetchSearchProducts,
         fetchUserProducts,
         fetchSavedProducts,
         fetchProductById,
