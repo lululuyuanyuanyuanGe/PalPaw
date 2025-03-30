@@ -242,25 +242,6 @@ const LoginScreen: React.FC = () => {
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* Social login options (placeholders) */}
-          <View className="flex-row items-center mt-8 mb-6">
-            <View className="flex-1 h-0.5 bg-gray-200" />
-            <Text className="mx-4 text-gray-500">Or continue with</Text>
-            <View className="flex-1 h-0.5 bg-gray-200" />
-          </View>
-          
-          <View className="flex-row justify-center space-x-6">
-            <TouchableOpacity className="w-12 h-12 bg-white rounded-full items-center justify-center shadow-sm border border-gray-100">
-              <Ionicons name="logo-google" size={24} color="#DB4437" />
-            </TouchableOpacity>
-            <TouchableOpacity className="w-12 h-12 bg-white rounded-full items-center justify-center shadow-sm border border-gray-100">
-              <Ionicons name="logo-apple" size={24} color="black" />
-            </TouchableOpacity>
-            <TouchableOpacity className="w-12 h-12 bg-white rounded-full items-center justify-center shadow-sm border border-gray-100">
-              <Ionicons name="logo-facebook" size={24} color="#4267B2" />
-            </TouchableOpacity>
-          </View>
-
           {/* Signup Link */}
           <View className="flex-row mt-auto mb-8 justify-center">
             <Text className="text-gray-600">Don't have an account? </Text>
