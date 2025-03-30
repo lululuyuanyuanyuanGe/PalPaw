@@ -6,6 +6,9 @@ import Like from './Like.js';
 import Product from './Product.js';
 import Notification from './Notification.js';
 import Follow from './Follow.js';
+import Chat from './Chat.js';
+import Message from './Message.js';
+import MongoUser from './MongoUser.js';
 
 // ===================================================
 // Define model relationships
@@ -98,5 +101,8 @@ export {
   Product,
   Follow,
   Notification,
-  syncModels
+  syncModels,
+  Chat,
+  Message,
+  MongoUser
 }; 

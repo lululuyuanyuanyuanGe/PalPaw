@@ -1,6 +1,7 @@
 import React, { createContext, useReducer, useContext, ReactNode, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../utils/apiClient';
+import { syncUserToMongoDB } from '../utils/userSync';
 
 // Define user interface
 interface User {
@@ -183,6 +184,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Set auth token in API client
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         
+        // Sync user to MongoDB for chat functionality
+        await syncUserToMongoDB();
+        
         dispatch({
           type: 'LOGIN_SUCCESS',
           payload: { user, token },
@@ -221,6 +225,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Set auth token in API client
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         
+        // Sync user to MongoDB for chat functionality
+        await syncUserToMongoDB();
+        
         dispatch({
           type: 'REGISTER_SUCCESS',
           payload: { user, token },
@@ -248,6 +255,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Remove token and user from AsyncStorage
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
+      await AsyncStorage.removeItem('mongoUserId'); // Also remove MongoDB user ID
       
       // Remove auth token from API client
       delete api.defaults.headers.common['Authorization'];

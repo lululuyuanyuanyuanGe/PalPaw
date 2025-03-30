@@ -3,8 +3,10 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import path from 'path';
+import http from 'http';
 
 import { testConnection } from './config/postgres.js'; // PostgreSQL connection
+import { connectMongoDB } from './config/mongoDB.js'; // MongoDB connection
 import { syncModels } from './models/index.js'; // Sequelize models
 
 // Import routes
@@ -15,9 +17,10 @@ import postsRoutes from './routes/posts.js'; // Posts routes
 import productsRoutes from './routes/products.js'; // Products
 import commentRoutes from './routes/commentRoutes.js'; // Comments routes
 import userRoutes from './routes/user.js'; // User routes
-// Import WebSocket server
-import { initializeWebSocket } from './websocket/websocket.js';
-import http from 'http';
+import setupSocketServer from './socketServer.js';
+import chatRoutes from './routes/chat.js';
+import userMongoRoutes from './routes/userMongoRoute.js'; // MongoDB user routes
+
 // Load environment variables
 dotenv.config();
 
@@ -32,7 +35,10 @@ const app = express();
     // Sync models
     await syncModels();
     
-    console.log('Database setup completed successfully');
+    console.log('PostgreSQL database setup completed successfully');
+
+    // Connect to MongoDB for chat functionality
+    await connectMongoDB();
   } catch (error) {
     console.error('Database setup failed:', error);
   }
@@ -40,7 +46,9 @@ const app = express();
 
 // Initialize WebSocket server
 const server = http.createServer(app);
-const websocket = initializeWebSocket(server);
+
+// Set up Socket.io server
+const io = setupSocketServer(server);
 
 app.use(cors());
 
@@ -96,6 +104,11 @@ console.log('- /api/comments');
 app.use("/api/users", userRoutes); // User routes
 console.log('- /api/users');
 
+app.use('/api/chats', chatRoutes);
+console.log('- /api/chats');
+
+app.use('/api/mongo/users', userMongoRoutes); // MongoDB user routes
+console.log('- /api/mongo/users');
 
 // Home route
 app.get('/', (req, res) => {
@@ -114,10 +127,8 @@ app.use((err, req, res, next) => {
   res.status(500).send('Server error');
 });
 
-// Set port from environment variable or default
+// Start server using the HTTP server instead of Express app
 const PORT = process.env.PORT || 5001;
-
-// Start server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
