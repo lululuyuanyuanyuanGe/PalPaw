@@ -436,6 +436,26 @@ const ProductItemCard = React.memo(({
   const firstLetter = username.charAt(0).toUpperCase();
   const robohashUrl = `https://robohash.org/${item.sellerData?.id || item.id}?set=set4`;
   
+  // Get category color to match with category tab
+  const getCategoryColor = (categoryName: string): string => {
+    const colorMap: {[key: string]: string} = {
+      'Pet Food': '#8B5CF6',     // Violet-500
+      'Pet Toys': '#A855F7',     // Purple-500
+      'Pet Beds': '#D946EF',     // Fuchsia-500
+      'Pet Clothing': '#EC4899', // Pink-500
+      'Health & Wellness': '#06B6D4', // Cyan-500
+      'Grooming': '#14B8A6',     // Teal-500
+      'Training': '#F59E0B',     // Amber-500
+      'Carriers & Travel': '#10B981', // Emerald-500
+      'Accessories': '#6366F1'   // Indigo-500
+    };
+    
+    return colorMap[categoryName] || '#9333EA';
+  };
+  
+  // Get the color for this product's category
+  const categoryColor = item.category ? getCategoryColor(item.category) : '#9333EA';
+  
   return (
     <TouchableOpacity 
       className="bg-white rounded-xl shadow-md overflow-hidden mb-3 border border-gray-50"
@@ -463,8 +483,11 @@ const ProductItemCard = React.memo(({
               <Text className="text-white text-[10px] font-bold">NEW</Text>
             </View>
           )}
-          {/* Image overlay decoration with correct category icon */}
-          <View className="absolute bottom-0 right-0 w-6 h-6 bg-purple-500 rounded-tl-lg items-center justify-center opacity-80">
+          {/* Image overlay decoration with correct category icon and color */}
+          <View 
+            className="absolute bottom-0 right-0 w-6 h-6 rounded-tl-lg items-center justify-center opacity-90"
+            style={{ backgroundColor: categoryColor }}
+          >
             <MaterialCommunityIcons 
               name={item.category ? getCategoryIcon(item.category) : 'paw'} 
               size={14} 

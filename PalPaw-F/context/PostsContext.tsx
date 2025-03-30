@@ -647,7 +647,10 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         
         // Update posts in all collections to ensure consistency 
         standardizedPosts.forEach((post: PostItem) => {
-          updatePostInAllCollections(post);
+          dispatch({
+            type: 'UPDATE_POST_IN_ALL_COLLECTIONS',
+            payload: post
+          });
         });
       } else {
         // Fallback to general posts and filter by userId
@@ -774,12 +777,12 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
           // Backend already incremented the view count in the database.
           // Decrement it locally before setting the state so we can increment it
           // back using the INCREMENT_POST_VIEWS action for consistency
-          if (formattedPost.views !== undefined && formattedPost.views > 0) {
-            formattedPost.views -= 1;
-          }
           
-          // Update ALL instances of this post in the state with decremented view count
-          updatePostInAllCollections(formattedPost);
+          // Update post in all collections directly
+          dispatch({
+            type: 'UPDATE_POST_IN_ALL_COLLECTIONS',
+            payload: formattedPost
+          });
           
           // Now increment the view count locally to match the backend count
           dispatch({ 
@@ -803,8 +806,11 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
           // Process the fallback post data with our helper function
           const formattedPost = await processPost(fallbackPost, postId);
           
-          // Update ALL instances of this post in the state
-          updatePostInAllCollections(formattedPost);
+          // Update post in all collections directly
+          dispatch({
+            type: 'UPDATE_POST_IN_ALL_COLLECTIONS',
+            payload: formattedPost
+          });
           
           // Increment view count for fallback posts as well
           incrementPostViews(postId);
@@ -820,25 +826,16 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     }
   };
 
-  // Helper function to update a post in all state collections
-  const updatePostInAllCollections = (post: PostItem) => {
-    // First update the currentPost
-    dispatch({ type: 'SET_CURRENT_POST', payload: post });
-    
-    // Create a helper action to update the post in all state arrays
-    dispatch({
-      type: 'UPDATE_POST_IN_ALL_COLLECTIONS',
-      payload: post
-    });
-  };
-
   // Function to set the current post
   const setCurrentPost = (post: PostItem) => {
     // Fetch the full post data if possible
     fetchPostById(post.id).catch(() => {
       // If we can't fetch, at least standardize and update everywhere
       const formattedPost = standardizePostFormat(post);
-      updatePostInAllCollections(formattedPost);
+      dispatch({
+        type: 'UPDATE_POST_IN_ALL_COLLECTIONS',
+        payload: formattedPost
+      });
     });
   };
 

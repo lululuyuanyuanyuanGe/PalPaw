@@ -73,10 +73,14 @@ const Card = ({ post, onPress, index }: { post: PostItem, onPress: (post: PostIt
           className="w-full"
           resizeMode="cover" 
         />
-        <View className="absolute bottom-2 right-2 bg-white bg-opacity-80 rounded-full px-2 py-0.5">
+        <View className="absolute bottom-2 right-2 bg-purple-100 bg-opacity-90 rounded-full px-2 py-0.5 flex-row shadow-sm">
+          <View className="flex-row items-center mr-2">
+            <Ionicons name="eye-outline" size={12} color="#9333EA" />
+            <Text className="ml-1 text-xs font-medium text-purple-800">{post.views || 0}</Text>
+          </View>
           <View className="flex-row items-center">
             <Ionicons name="heart" size={12} color="#FF2442" />
-            <Text className="ml-1 text-xs font-medium">{post.likes || 0}</Text>
+            <Text className="ml-1 text-xs font-medium text-purple-800">{post.likes || 0}</Text>
           </View>
         </View>
       </View>
@@ -96,7 +100,11 @@ const Card = ({ post, onPress, index }: { post: PostItem, onPress: (post: PostIt
             />
             <Text className="ml-1 text-xs text-gray-600">{post.authorData?.username || "User"}</Text>
           </View>
-          <TouchableOpacity className="bg-purple-100 px-2 py-1 rounded-full">
+          <TouchableOpacity 
+            className="bg-purple-100 px-2 py-1 rounded-full"
+            onPress={() => onPress(post)}
+            activeOpacity={0.7}
+          >
             <Text className="text-purple-600 text-xs font-medium">View</Text>
           </TouchableOpacity>
         </View>

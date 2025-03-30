@@ -482,9 +482,10 @@ const PostDetail = () => {
               <Ionicons name="chatbubble-outline" size={22} color="#374151" />
               <Text className="ml-2 text-gray-600 font-rubik-medium">{post.comments?.length || 0}</Text>
             </TouchableOpacity>
-            <TouchableOpacity className="flex-row items-center">
-              <Ionicons name="bookmark-outline" size={22} color="#374151" />
-            </TouchableOpacity>
+            <View className="flex-row items-center mr-6">
+              <Ionicons name="eye-outline" size={22} color="#374151" />
+              <Text className="ml-2 text-gray-600 font-rubik-medium">{Math.max(0, post.views || 0)}</Text>
+            </View>
           </View>
           <TouchableOpacity className="flex-row items-center">
             <LinearGradient
