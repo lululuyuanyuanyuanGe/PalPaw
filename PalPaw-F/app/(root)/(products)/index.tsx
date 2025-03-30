@@ -473,17 +473,33 @@ const ProductDetail = () => {
             {/* Decorative element */}
             <View className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-purple-400 to-purple-600 rounded-r-full" />
             
-            <Image
-              source={{ uri: formatImageUrl(product.sellerData?.avatar) || `https://robohash.org/${product.userId}?set=set4` }}
-              className="w-12 h-12 rounded-full border-2 border-purple-100"
-            />
-            <View className="ml-3 flex-1">
-              <Text className="font-rubik-semibold text-gray-800">{product.sellerData?.username || 'User'}</Text>
-              <View className="flex-row items-center">
-                <Ionicons name="time-outline" size={12} color="#9CA3AF" />
-                <Text className="text-xs text-gray-500 font-rubik ml-1">Member since {new Date().getFullYear()}</Text>
+            <TouchableOpacity 
+              className="flex-row items-center flex-1"
+              onPress={() => {
+                // Allow navigation for non-authenticated users
+                // Only prevent navigation if this is the current user's product
+                if (!authState.isAuthenticated || product.userId !== authState.user?.id) {
+                  router.push({
+                    pathname: "/(root)/(userProfile)" as any,
+                    params: { userId: product.userId }
+                  });
+                }
+              }}
+              activeOpacity={product.userId === authState.user?.id ? 1 : 0.7}
+            >
+              <Image
+                source={{ uri: formatImageUrl(product.sellerData?.avatar) || `https://robohash.org/${product.userId}?set=set4` }}
+                className="w-12 h-12 rounded-full border-2 border-purple-100"
+              />
+              <View className="ml-3 flex-1">
+                <Text className="font-rubik-semibold text-gray-800">{product.sellerData?.username || 'User'}</Text>
+                <View className="flex-row items-center">
+                  <Ionicons name="time-outline" size={12} color="#9CA3AF" />
+                  <Text className="text-xs text-gray-500 font-rubik ml-1">Member since {new Date().getFullYear()}</Text>
+                </View>
               </View>
-            </View>
+            </TouchableOpacity>
+            
             <TouchableOpacity 
               className="bg-purple-600 px-4 py-2 rounded-full"
               onPress={handleContactSeller}

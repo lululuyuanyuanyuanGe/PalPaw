@@ -66,25 +66,51 @@ interface CommentProps {
 }
 
 const Comment: React.FC<CommentProps> = ({ author, content, timestamp, avatarUri, likes = 0 }) => {
+  // Get auth context to check if the comment author is the current user
+  const { state: authState } = useAuth();
+  const router = useRouter();
+  
   // Extract author name based on whether it's a string or object
   const authorName = typeof author === 'string' ? author : author?.username || 'Unknown';
+  
+  // Extract author ID if author is an object
+  const authorId = typeof author === 'object' && author?.id ? author.id : null;
   
   // Use author's avatar if author is an object and has avatar property
   const displayAvatarUri = typeof author === 'object' && author?.avatar 
     ? author.avatar 
     : avatarUri || `https://robohash.org/${authorName}?set=set4`;
   
+  // Check if this comment is by the current user
+  const isCurrentUser = authState.isAuthenticated && 
+    ((typeof author === 'object' && author?.id === authState.user?.id) || 
+     (typeof author === 'string' && author === authState.user?.username));
+  
   return (
     <View className="bg-white p-4 rounded-xl mb-3 shadow-sm border border-gray-50">
       <View className="flex-row items-center mb-3">
-        <Image
-          source={{ uri: formatImageUrl(displayAvatarUri) }}
-          className="w-9 h-9 rounded-full border-2 border-purple-100"
-        />
-        <View className="ml-3 flex-1">
-          <Text className="font-rubik-semibold text-gray-800">{authorName}</Text>
-          <Text className="font-rubik text-xs text-gray-500">{formatTimeAgo(timestamp)}</Text>
-        </View>
+        <TouchableOpacity
+          activeOpacity={isCurrentUser || !authorId ? 1 : 0.7}
+          onPress={() => {
+            // Only navigate if this is not the current user and we have an author ID
+            if (authorId && (!authState.isAuthenticated || !isCurrentUser)) {
+              router.push({
+                pathname: "/(root)/(userProfile)" as any,
+                params: { userId: authorId }
+              });
+            }
+          }}
+          className="flex-row items-center flex-1"
+        >
+          <Image
+            source={{ uri: formatImageUrl(displayAvatarUri) }}
+            className="w-9 h-9 rounded-full border-2 border-purple-100"
+          />
+          <View className="ml-3 flex-1">
+            <Text className="font-rubik-semibold text-gray-800">{authorName}</Text>
+            <Text className="font-rubik text-xs text-gray-500">{formatTimeAgo(timestamp)}</Text>
+          </View>
+        </TouchableOpacity>
       </View>
       <Text className="font-rubik text-gray-700 leading-5 mb-2">{content}</Text>
     </View>
@@ -376,17 +402,32 @@ const PostDetail = () => {
         {/* User Info with Enhanced Design */}
         <View className="p-4 bg-white shadow-sm">
           <View className="flex-row items-center">
-            <View className="w-12 h-12 rounded-full border-2 border-purple-100 overflow-hidden">
-              <Image
-                source={{ uri: formatImageUrl(post.authorData?.avatar) || 'https://robohash.org/user123?set=set4' }}
-                className="w-full h-full"
-                resizeMode="cover"
-              />
-            </View>
-            <View className="ml-3 flex-1">
-              <Text className="font-rubik-semibold text-gray-800">{post.authorData?.username || 'Unknown User'}</Text>
-              <Text className="text-xs text-gray-500 font-rubik">{formatTimeAgo(post.createdAt || new Date())}</Text>
-            </View>
+            <TouchableOpacity 
+              className="flex-row items-center flex-1"
+              onPress={() => {
+                // Allow navigation for non-authenticated users
+                // Only prevent navigation if this is the current user's post
+                if (!authState.isAuthenticated || post.authorData?.id !== userData?.id) {
+                  router.push({
+                    pathname: "/(root)/(userProfile)" as any,
+                    params: { userId: post.authorData?.id }
+                  });
+                }
+              }}
+              activeOpacity={post.authorData?.id === userData?.id ? 1 : 0.7}
+            >
+              <View className="w-12 h-12 rounded-full border-2 border-purple-100 overflow-hidden">
+                <Image
+                  source={{ uri: formatImageUrl(post.authorData?.avatar) || 'https://robohash.org/user123?set=set4' }}
+                  className="w-full h-full"
+                  resizeMode="cover"
+                />
+              </View>
+              <View className="ml-3 flex-1">
+                <Text className="font-rubik-semibold text-gray-800">{post.authorData?.username || 'Unknown User'}</Text>
+                <Text className="text-xs text-gray-500 font-rubik">{formatTimeAgo(post.createdAt || new Date())}</Text>
+              </View>
+            </TouchableOpacity>
             
             {/* Only show follow button if it's not the current user's post */}
             {authState.isAuthenticated && post.authorData?.id !== userData?.id && (
