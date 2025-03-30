@@ -190,10 +190,16 @@ const FollowersModal = ({ userId, visible, onClose }: FollowersModalProps) => {
           activeOpacity={0.7}
           onPress={() => {
             onClose();
-            router.push({
-              pathname: "/(root)/(tabs)/(profile)" as any, 
-              params: { userId: item.id }
-            });
+            // If this is the current user's profile, navigate to main profile tab
+            if (item.id === authState.user?.id) {
+              router.push("/(root)/(tabs)/(profile)");
+            } else {
+              // Otherwise navigate to view other user's profile
+              router.push({
+                pathname: "/(root)/(userProfile)" as any,
+                params: { userId: item.id }
+              });
+            }
           }}
         >
           {/* User banner */}

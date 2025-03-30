@@ -193,6 +193,7 @@ const processPost = async (post: any, postId: string): Promise<PostItem> => {
 // Define the context state interface
 interface PostsState {
   Posts: PostItem[];
+  otherUserPosts: PostItem[];
   friendsPosts: PostItem[];
   feedPosts: PostItem[];
   userPosts: PostItem[];
@@ -210,6 +211,9 @@ export type PostsAction =
   | { type: 'FETCH_POSTS_FAILURE'; payload: string }
   | { type: 'FETCH_USER_POSTS_SUCCESS'; payload: PostItem[] }
   | { type: 'FETCH_USER_POSTS_FAILURE'; payload: string }
+  | { type: 'FETCH_OTHER_USER_POSTS_REQUEST' }
+  | { type: 'FETCH_OTHER_USER_POSTS_SUCCESS'; payload: PostItem[] }
+  | { type: 'FETCH_OTHER_USER_POSTS_FAILURE'; payload: string }
   | { type: 'FETCH_LIKED_POSTS_SUCCESS'; payload: { posts: PostItem[], postIds: string[] } }
   | { type: 'FETCH_LIKED_POSTS_FAILURE'; payload: string }
   | { type: 'FETCH_FRIENDS_POSTS_SUCCESS'; payload: PostItem[] }
@@ -225,11 +229,13 @@ export type PostsAction =
   | { type: 'DELETE_POST_SUCCESS'; payload: string }
   | { type: 'DELETE_POST_FAILURE'; payload: string }
   | { type: 'CLEAR_ERRORS' }
-  | { type: 'UPDATE_POST_IN_ALL_COLLECTIONS'; payload: PostItem };
+  | { type: 'UPDATE_POST_IN_ALL_COLLECTIONS'; payload: PostItem }
+  | { type: 'CLEAR_OTHER_USER_POSTS' };
 
 // Define initial state
 const initialState: PostsState = {
   Posts: [],
+  otherUserPosts: [],
   friendsPosts: [],
   feedPosts: [],
   userPosts: [],
@@ -244,6 +250,7 @@ const initialState: PostsState = {
 const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
   switch (action.type) {
     case 'FETCH_POSTS_REQUEST':
+    case 'FETCH_OTHER_USER_POSTS_REQUEST':
       return {
         ...state,
         loading: true,
@@ -274,6 +281,24 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
         ...state,
         loading: false,
         error: action.payload,
+      };
+    case 'FETCH_OTHER_USER_POSTS_SUCCESS':
+      return {
+        ...state,
+        otherUserPosts: action.payload,
+        loading: false,
+        error: null,
+      };
+    case 'FETCH_OTHER_USER_POSTS_FAILURE':
+      return {
+        ...state,
+        loading: false,
+        error: action.payload,
+      };
+    case 'CLEAR_OTHER_USER_POSTS':
+      return {
+        ...state,
+        otherUserPosts: [],
       };
     case 'FETCH_LIKED_POSTS_SUCCESS':
       return {
@@ -331,6 +356,13 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
           : post
       );
       
+      // Update otherUserPosts
+      const updatedOtherUserPosts = state.otherUserPosts.map(post => 
+        post.id === postId 
+          ? { ...post, likes: Math.max(0, (post.likes || 0) + 1) } 
+          : post
+      );
+      
       // Update currentPost if it's the liked post
       const updatedCurrentPost = state.currentPost?.id === postId
         ? { ...state.currentPost, likes: Math.max(0, (state.currentPost.likes || 0) + 1) }
@@ -340,7 +372,8 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
       let newLikedPosts = [...state.likedPosts];
       if (!state.likedPosts.some(post => post.id === postId)) {
         const postToAdd = updatedPosts.find(post => post.id === postId) || 
-                         updatedUserPosts.find(post => post.id === postId);
+                         updatedUserPosts.find(post => post.id === postId) ||
+                         updatedOtherUserPosts.find(post => post.id === postId);
         if (postToAdd) {
           newLikedPosts = [postToAdd, ...newLikedPosts];
         }
@@ -350,6 +383,7 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
         ...state,
         feedPosts: updatedPosts,
         userPosts: updatedUserPosts,
+        otherUserPosts: updatedOtherUserPosts,
         likedPosts: newLikedPosts,
         likedPostIds: action.payload.likedPostIds,
         currentPost: updatedCurrentPost
@@ -365,6 +399,13 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
           : post
       );
       const updatedUserPosts = state.userPosts.map(post => 
+        post.id === postId 
+          ? { ...post, likes: Math.max(0, (post.likes || 0) - 1) } 
+          : post
+      );
+      
+      // Update otherUserPosts
+      const updatedOtherUserPosts = state.otherUserPosts.map(post => 
         post.id === postId 
           ? { ...post, likes: Math.max(0, (post.likes || 0) - 1) } 
           : post
@@ -388,6 +429,7 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
         ...state,
         feedPosts: updatedPosts,
         userPosts: updatedUserPosts,
+        otherUserPosts: updatedOtherUserPosts,
         likedPosts: updatedLikedPosts,
         likedPostIds: action.payload.likedPostIds,
         currentPost: updatedCurrentPost
@@ -408,6 +450,11 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
             : post
         ),
         userPosts: state.userPosts.map(post =>
+          post.id === action.payload.postId
+            ? { ...post, views: (post.views || 0) + 1 }
+            : post
+        ),
+        otherUserPosts: state.otherUserPosts.map(post =>
           post.id === action.payload.postId
             ? { ...post, views: (post.views || 0) + 1 }
             : post
@@ -450,6 +497,16 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
               }
             : post
         ),
+        otherUserPosts: state.otherUserPosts.map(post =>
+          post.id === action.payload.postId
+            ? { 
+                ...post, 
+                comments: post.comments 
+                  ? [action.payload.comment, ...post.comments]
+                  : [action.payload.comment]
+              }
+            : post
+        ),
         currentPost: state.currentPost?.id === action.payload.postId
           ? { 
               ...state.currentPost, 
@@ -464,6 +521,7 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
         ...state,
         feedPosts: state.feedPosts.filter(post => post.id !== action.payload),
         userPosts: state.userPosts.filter(post => post.id !== action.payload),
+        otherUserPosts: state.otherUserPosts.filter(post => post.id !== action.payload),
         likedPosts: state.likedPosts.filter(post => post.id !== action.payload),
         likedPostIds: state.likedPostIds.filter(id => id !== action.payload),
         currentPost: state.currentPost?.id === action.payload ? null : state.currentPost,
@@ -490,13 +548,16 @@ const postsReducer = (state: PostsState, action: PostsAction): PostsState => {
         userPosts: state.userPosts.map(post =>
           post.id === action.payload.id ? action.payload : post
         ),
+        otherUserPosts: state.otherUserPosts.map(post =>
+          post.id === action.payload.id ? action.payload : post
+        ),
         likedPosts: state.likedPosts.map(post =>
           post.id === action.payload.id ? action.payload : post
         ),
         friendsPosts: state.friendsPosts.map(post =>
           post.id === action.payload.id ? action.payload : post
         ),
-        currentPost: action.payload,
+        currentPost: state.currentPost?.id === action.payload.id ? action.payload : state.currentPost,
       };
     default:
       return state;
@@ -510,6 +571,8 @@ interface PostsContextType {
   fetchPosts: () => Promise<void>;
   fetchFeedPosts: () => Promise<void>;
   fetchUserPosts: (userId: string) => Promise<void>;
+  fetchOtherUserPosts: (userId: string) => Promise<PostItem[]>;
+  clearOtherUserPosts: () => void;
   fetchLikedPosts: (userId?: string) => Promise<void>;
   fetchFriendsPosts: () => Promise<void>;
   fetchPostById: (postId: string) => Promise<void>;
@@ -1143,6 +1206,88 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     }
   };
 
+  // Function to fetch other user posts
+  const fetchOtherUserPosts = async (userId: string): Promise<PostItem[]> => {
+    if (!userId) {
+      console.error('PostsContext: No userId provided for fetchOtherUserPosts');
+      return [];
+    }
+
+    dispatch({ type: 'FETCH_OTHER_USER_POSTS_REQUEST' });
+
+    try {
+      console.log(`PostsContext: Fetching posts for other user ${userId}`);
+      // Direct API call to fetch user posts
+      const response = await api.get(`/upload/posts/${userId}`);
+      
+      if (response?.data?.success && response.data.posts) {
+        const posts = response.data.posts;
+        console.log(`PostsContext: Received ${posts.length} posts for other user ${userId}`);
+
+        // Standardize the post format
+        const standardizedPosts = posts.map((post: any) => {
+          console.log(`PostsContext: Standardizing other user post ${post.id}`);
+          return standardizePostFormat(post);
+        });
+        
+        // Update saved status for each post using the current likedPostIds
+        const postsWithLikedStatus = standardizedPosts.map((post: PostItem) => ({
+          ...post,
+          liked: state.likedPostIds.includes(post.id)
+        }));
+        
+        console.log(`PostsContext: Formatted ${standardizedPosts.length} other user posts with proper types`);
+        // Only update otherUserPosts, not any other collection
+        dispatch({ type: 'FETCH_OTHER_USER_POSTS_SUCCESS', payload: postsWithLikedStatus });
+        return postsWithLikedStatus;
+      } else {
+        // Fallback to general posts and filter by userId
+        try {
+          console.log(`PostsContext: Using fallback method to fetch other user posts`);
+          const fallbackResponse = await api.get('/pg/posts');
+          let userPosts = [];
+
+          if (Array.isArray(fallbackResponse.data)) {
+            userPosts = fallbackResponse.data.filter((post: any) => post.userId === userId);
+          } else if (fallbackResponse.data.posts && Array.isArray(fallbackResponse.data.posts)) {
+            userPosts = fallbackResponse.data.posts.filter((post: any) => post.userId === userId);
+          }
+  
+          console.log(`PostsContext: Found ${userPosts.length} posts with fallback for other user ${userId}`);
+
+          // Standardize the posts
+          const standardizedPosts = userPosts.map((post: any) => standardizePostFormat(post));
+          
+          // Update liked status for each post
+          const postsWithLikedStatus = standardizedPosts.map((post: PostItem) => ({
+            ...post,
+            liked: state.likedPostIds.includes(post.id)
+          }));
+          
+          console.log(`PostsContext: Formatted ${standardizedPosts.length} fallback other user posts`);
+          // Only update otherUserPosts, not any other collection
+          dispatch({ type: 'FETCH_OTHER_USER_POSTS_SUCCESS', payload: postsWithLikedStatus });
+          return postsWithLikedStatus;
+        } catch (fallbackError) {
+          console.error('PostsContext: Error in fallback fetch for other user posts:', fallbackError);
+          throw fallbackError;
+        }
+      }
+    } catch (error) {
+      console.error("PostsContext: Error fetching other user posts:", error);
+      dispatch({
+        type: 'FETCH_OTHER_USER_POSTS_FAILURE',
+        payload: 'Failed to fetch other user posts',
+      });
+      return [];
+    }
+  };
+
+  // Function to clear other user posts
+  const clearOtherUserPosts = () => {
+    dispatch({ type: 'CLEAR_OTHER_USER_POSTS' });
+  };
+
   // Initialize posts data from AsyncStorage after functions are defined
   useEffect(() => {
     const initPostsData = async () => {
@@ -1225,6 +1370,8 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         fetchPosts,
         fetchFeedPosts,
         fetchUserPosts,
+        fetchOtherUserPosts,
+        clearOtherUserPosts,
         fetchLikedPosts,
         fetchFriendsPosts,
         fetchPostById,

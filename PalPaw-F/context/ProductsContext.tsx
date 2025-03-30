@@ -117,6 +117,7 @@ const standardizeProductFormat = (product: any): ProductItem => {
 // Define the context state interface
 interface ProductsState {
   products: ProductItem[];
+  otherUserProducts: ProductItem[];
   feedProducts: ProductItem[];
   searchProducts: ProductItem[];
   userProducts: ProductItem[];
@@ -138,6 +139,9 @@ export type ProductsAction =
   | { type: 'FETCH_SEARCH_PRODUCTS_FAILURE'; payload: string }
   | { type: 'FETCH_USER_PRODUCTS_SUCCESS'; payload: ProductItem[] }
   | { type: 'FETCH_USER_PRODUCTS_FAILURE'; payload: string }
+  | { type: 'FETCH_OTHER_USER_PRODUCTS_REQUEST' }
+  | { type: 'FETCH_OTHER_USER_PRODUCTS_SUCCESS'; payload: ProductItem[] }
+  | { type: 'FETCH_OTHER_USER_PRODUCTS_FAILURE'; payload: string }
   | { type: 'FETCH_SAVED_PRODUCTS_SUCCESS'; payload: { products: ProductItem[], productIds: string[] } }
   | { type: 'FETCH_SAVED_PRODUCTS_FAILURE'; payload: string }
   | { type: 'SET_CURRENT_PRODUCT'; payload: ProductItem }
@@ -149,11 +153,13 @@ export type ProductsAction =
   | { type: 'INCREMENT_PRODUCT_VIEWS'; payload: { productId: string } }
   | { type: 'DELETE_PRODUCT_SUCCESS'; payload: string }
   | { type: 'DELETE_PRODUCT_FAILURE'; payload: string }
-  | { type: 'CLEAR_ERRORS' };
+  | { type: 'CLEAR_ERRORS' }
+  | { type: 'CLEAR_OTHER_USER_PRODUCTS' };
 
 // Define initial state
 const initialState: ProductsState = {
   products: [],
+  otherUserProducts: [],
   feedProducts: [],
   searchProducts: [],
   userProducts: [],
@@ -168,6 +174,7 @@ const initialState: ProductsState = {
 const productsReducer = (state: ProductsState, action: ProductsAction): ProductsState => {
   switch (action.type) {
     case 'FETCH_PRODUCTS_REQUEST':
+    case 'FETCH_OTHER_USER_PRODUCTS_REQUEST':
       return {
         ...state,
         loading: true,
@@ -185,6 +192,24 @@ const productsReducer = (state: ProductsState, action: ProductsAction): Products
         ...state,
         loading: false,
         error: action.payload,
+      };
+    case 'FETCH_OTHER_USER_PRODUCTS_SUCCESS':
+      return {
+        ...state,
+        otherUserProducts: action.payload,
+        loading: false,
+        error: null,
+      };
+    case 'FETCH_OTHER_USER_PRODUCTS_FAILURE':
+      return {
+        ...state,
+        loading: false,
+        error: action.payload,
+      };
+    case 'CLEAR_OTHER_USER_PRODUCTS':
+      return {
+        ...state,
+        otherUserProducts: [],
       };
     case 'FETCH_FEED_PRODUCTS_SUCCESS':
       return {
@@ -263,6 +288,13 @@ const productsReducer = (state: ProductsState, action: ProductsAction): Products
           : product
       );
       
+      // Also update otherUserProducts
+      const updatedOtherUserProducts = state.otherUserProducts.map(product => 
+        product.id === productId 
+          ? { ...product, isSaved: true } 
+          : product
+      );
+      
       // Update currentProduct if it's the saved product
       const updatedCurrentProduct = state.currentProduct?.id === productId
         ? { ...state.currentProduct, isSaved: true }
@@ -272,7 +304,8 @@ const productsReducer = (state: ProductsState, action: ProductsAction): Products
       let newSavedProducts = [...state.savedProducts];
       if (!state.savedProducts.some(product => product.id === productId)) {
         const productToAdd = updatedProducts.find(product => product.id === productId) || 
-                           updatedUserProducts.find(product => product.id === productId);
+                           updatedUserProducts.find(product => product.id === productId) ||
+                           updatedOtherUserProducts.find(product => product.id === productId);
         if (productToAdd) {
           newSavedProducts = [productToAdd, ...newSavedProducts];
         }
@@ -282,6 +315,7 @@ const productsReducer = (state: ProductsState, action: ProductsAction): Products
         ...state,
         products: updatedProducts,
         userProducts: updatedUserProducts,
+        otherUserProducts: updatedOtherUserProducts,
         savedProducts: newSavedProducts,
         savedProductIds: action.payload.savedProductIds,
         currentProduct: updatedCurrentProduct
@@ -297,6 +331,13 @@ const productsReducer = (state: ProductsState, action: ProductsAction): Products
           : product
       );
       const updatedUserProducts = state.userProducts.map(product => 
+        product.id === productId 
+          ? { ...product, isSaved: false } 
+          : product
+      );
+      
+      // Also update otherUserProducts
+      const updatedOtherUserProducts = state.otherUserProducts.map(product => 
         product.id === productId 
           ? { ...product, isSaved: false } 
           : product
@@ -320,6 +361,7 @@ const productsReducer = (state: ProductsState, action: ProductsAction): Products
         ...state,
         products: updatedProducts,
         userProducts: updatedUserProducts,
+        otherUserProducts: updatedOtherUserProducts,
         savedProducts: updatedSavedProducts,
         savedProductIds: action.payload.savedProductIds,
         currentProduct: updatedCurrentProduct
@@ -344,6 +386,11 @@ const productsReducer = (state: ProductsState, action: ProductsAction): Products
             ? { ...product, views: (product.views || 0) + 1 }
             : product
         ),
+        otherUserProducts: state.otherUserProducts.map(product =>
+          product.id === action.payload.productId
+            ? { ...product, views: (product.views || 0) + 1 }
+            : product
+        ),
         savedProducts: state.savedProducts.map(product =>
           product.id === action.payload.productId
             ? { ...product, views: (product.views || 0) + 1 }
@@ -358,6 +405,7 @@ const productsReducer = (state: ProductsState, action: ProductsAction): Products
         ...state,
         products: state.products.filter(product => product.id !== action.payload),
         userProducts: state.userProducts.filter(product => product.id !== action.payload),
+        otherUserProducts: state.otherUserProducts.filter(product => product.id !== action.payload),
         savedProducts: state.savedProducts.filter(product => product.id !== action.payload),
         savedProductIds: state.savedProductIds.filter(id => id !== action.payload),
         currentProduct: state.currentProduct?.id === action.payload ? null : state.currentProduct,
@@ -388,6 +436,8 @@ interface ProductsContextType {
   fetchFeedProducts: (category?: string) => Promise<void>;
   fetchSearchProducts: (query: string) => Promise<void>;
   fetchUserProducts: (userId: string) => Promise<void>;
+  fetchOtherUserProducts: (userId: string) => Promise<ProductItem[]>;
+  clearOtherUserProducts: () => void;
   fetchSavedProducts: (userId?: string) => Promise<void>;
   fetchProductById: (productId: string | any) => Promise<void>;
   setCurrentProduct: (product: ProductItem) => void;
@@ -866,6 +916,87 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
     }
   };
 
+  // Function to fetch other user's products
+  const fetchOtherUserProducts = async (userId: string): Promise<ProductItem[]> => {
+    if (!userId) {
+      console.error('ProductsContext: No userId provided for fetchOtherUserProducts');
+      return [];
+    }
+
+    dispatch({ type: 'FETCH_OTHER_USER_PRODUCTS_REQUEST' });
+
+    try {
+      console.log(`ProductsContext: Fetching products for other user ${userId}`);
+      const response = await api.get(`/upload/products/${userId}`);
+      
+      if (response?.data?.success && response.data.products) {
+        const products = response.data.products;
+        console.log(`ProductsContext: Received ${products.length} products for other user ${userId}`);
+
+        // Standardize the product format
+        const standardizedProducts = products.map((product: any) => {
+          console.log(`ProductsContext: Standardizing other user product ${product.id}`);
+          return standardizeProductFormat(product);
+        });
+        
+        // Update saved status for each product using the current savedProductIds
+        const productsWithSavedStatus = standardizedProducts.map((product: ProductItem) => ({
+          ...product,
+          isSaved: state.savedProductIds.includes(product.id)
+        }));
+        
+        console.log(`ProductsContext: Formatted ${standardizedProducts.length} other user products with proper types`);
+        // Only update otherUserProducts state, not any other product collections
+        dispatch({ type: 'FETCH_OTHER_USER_PRODUCTS_SUCCESS', payload: productsWithSavedStatus });
+        return productsWithSavedStatus;
+      } else {
+        // Fallback to general products and filter by userId
+        try {
+          console.log(`ProductsContext: Using fallback method to fetch other user products`);
+          const fallbackResponse = await api.get('/pg/products');
+          let userProducts = [];
+
+          if (Array.isArray(fallbackResponse.data)) {
+            userProducts = fallbackResponse.data.filter((product: any) => product.userId === userId);
+          } else if (fallbackResponse.data.products && Array.isArray(fallbackResponse.data.products)) {
+            userProducts = fallbackResponse.data.products.filter((product: any) => product.userId === userId);
+          }
+  
+          console.log(`ProductsContext: Found ${userProducts.length} products with fallback for other user ${userId}`);
+
+          // Standardize the products
+          const standardizedProducts = userProducts.map((product: any) => standardizeProductFormat(product));
+          
+          // Update saved status for each product
+          const productsWithSavedStatus = standardizedProducts.map((product: ProductItem) => ({
+            ...product,
+            isSaved: state.savedProductIds.includes(product.id)
+          }));
+          
+          console.log(`ProductsContext: Formatted ${standardizedProducts.length} fallback other user products`);
+          // Only update otherUserProducts state, not any other product collections
+          dispatch({ type: 'FETCH_OTHER_USER_PRODUCTS_SUCCESS', payload: productsWithSavedStatus });
+          return productsWithSavedStatus;
+        } catch (fallbackError) {
+          console.error('ProductsContext: Error in fallback fetch for other user products:', fallbackError);
+          throw fallbackError;
+        }
+      }
+    } catch (error) {
+      console.error("ProductsContext: Error fetching other user products:", error);
+      dispatch({
+        type: 'FETCH_OTHER_USER_PRODUCTS_FAILURE',
+        payload: 'Failed to fetch other user products',
+      });
+      return [];
+    }
+  };
+
+  // Function to clear other user products
+  const clearOtherUserProducts = () => {
+    dispatch({ type: 'CLEAR_OTHER_USER_PRODUCTS' });
+  };
+
   // Initialize products data from database only
   useEffect(() => {
     const initProductsData = async () => {
@@ -919,6 +1050,8 @@ const fetchUserProducts = async (userId: string): Promise<void> => {
         fetchFeedProducts,
         fetchSearchProducts,
         fetchUserProducts,
+        fetchOtherUserProducts,
+        clearOtherUserProducts,
         fetchSavedProducts,
         fetchProductById,
         setCurrentProduct,

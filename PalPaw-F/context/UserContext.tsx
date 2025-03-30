@@ -22,6 +22,9 @@ interface UserProfile {
 // Simplified user state interface
 interface UserState {
   profile: UserProfile | null;
+  otherUserProfile: UserProfile | null;
+  otherUserFollowers: UserProfile[];
+  otherUserFollowing: UserProfile[];
   followedUsers: UserProfile[];
   followers: UserProfile[];
   loading: boolean;
@@ -51,7 +54,16 @@ type UserAction =
   | { type: 'CLEAR_ERROR' }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string }
-  | { type: 'SET_USER_PROFILE'; payload: UserProfile };
+  | { type: 'SET_USER_PROFILE'; payload: UserProfile }
+  | { type: 'FETCH_OTHER_USER_PROFILE_REQUEST' }
+  | { type: 'FETCH_OTHER_USER_PROFILE_SUCCESS'; payload: UserProfile }
+  | { type: 'FETCH_OTHER_USER_PROFILE_FAILURE'; payload: string }
+  | { type: 'FETCH_OTHER_USER_FOLLOWERS_REQUEST' }
+  | { type: 'FETCH_OTHER_USER_FOLLOWERS_SUCCESS'; payload: UserProfile[] }
+  | { type: 'FETCH_OTHER_USER_FOLLOWERS_FAILURE'; payload: string }
+  | { type: 'FETCH_OTHER_USER_FOLLOWING_REQUEST' }
+  | { type: 'FETCH_OTHER_USER_FOLLOWING_SUCCESS'; payload: UserProfile[] }
+  | { type: 'FETCH_OTHER_USER_FOLLOWING_FAILURE'; payload: string };
 
 // Define interface for profile update data
 interface ProfileUpdateData {
@@ -64,6 +76,9 @@ interface ProfileUpdateData {
 // Initial state
 const initialState: UserState = {
   profile: null,
+  otherUserProfile: null,
+  otherUserFollowers: [],
+  otherUserFollowing: [],
   followedUsers: [],
   followers: [],
   loading: false,
@@ -77,6 +92,9 @@ const userReducer = (state: UserState, action: UserAction): UserState => {
     case 'UPDATE_PROFILE_REQUEST':
     case 'FETCH_FOLLOWERS_REQUEST':
     case 'FETCH_FOLLOWING_REQUEST':
+    case 'FETCH_OTHER_USER_PROFILE_REQUEST':
+    case 'FETCH_OTHER_USER_FOLLOWERS_REQUEST':
+    case 'FETCH_OTHER_USER_FOLLOWING_REQUEST':
       return {
         ...state,
         loading: true,
@@ -90,10 +108,20 @@ const userReducer = (state: UserState, action: UserAction): UserState => {
         loading: false,
         error: null,
       };
+    case 'FETCH_OTHER_USER_PROFILE_SUCCESS':
+      return {
+        ...state,
+        otherUserProfile: action.payload,
+        loading: false,
+        error: null,
+      };
     case 'FETCH_PROFILE_FAILURE':
     case 'UPDATE_PROFILE_FAILURE':
     case 'FETCH_FOLLOWERS_FAILURE':
     case 'FETCH_FOLLOWING_FAILURE':
+    case 'FETCH_OTHER_USER_PROFILE_FAILURE':
+    case 'FETCH_OTHER_USER_FOLLOWERS_FAILURE':
+    case 'FETCH_OTHER_USER_FOLLOWING_FAILURE':
       return {
         ...state,
         loading: false,
@@ -106,10 +134,24 @@ const userReducer = (state: UserState, action: UserAction): UserState => {
         loading: false,
         error: null,
       };
+    case 'FETCH_OTHER_USER_FOLLOWERS_SUCCESS':
+      return {
+        ...state,
+        otherUserFollowers: action.payload,
+        loading: false,
+        error: null,
+      };
     case 'FETCH_FOLLOWING_SUCCESS':
       return {
         ...state,
         followedUsers: action.payload,
+        loading: false,
+        error: null,
+      };
+    case 'FETCH_OTHER_USER_FOLLOWING_SUCCESS':
+      return {
+        ...state,
+        otherUserFollowing: action.payload,
         loading: false,
         error: null,
       };
@@ -174,6 +216,9 @@ export interface UserContextProps {
   clearError: () => void;
   getUserProfile: () => Promise<UserProfile | null>;
   updateUserProfile: (formData: FormData) => Promise<void>;
+  fetchOtherUserProfile: (userId: string) => Promise<void>;
+  fetchOtherUserFollowers: (userId: string) => Promise<void>;
+  fetchOtherUserFollowing: (userId: string) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextProps | undefined>(undefined);
@@ -500,6 +545,117 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     }
   };
 
+  // Fetch another user's profile
+  const fetchOtherUserProfile = async (userId: string) => {
+    if (!userId) {
+      dispatch({
+        type: 'FETCH_OTHER_USER_PROFILE_FAILURE',
+        payload: 'User ID is required',
+      });
+      return;
+    }
+
+    dispatch({ type: 'FETCH_OTHER_USER_PROFILE_REQUEST' });
+
+    try {
+      const response = await api.get(`/users/${userId}`);
+      
+      if (response.data && response.data.success) {
+        dispatch({
+          type: 'FETCH_OTHER_USER_PROFILE_SUCCESS',
+          payload: response.data.user,
+        });
+      } else {
+        throw new Error('Failed to fetch user profile');
+      }
+    } catch (error) {
+      let errorMessage = 'Failed to fetch user profile';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      dispatch({
+        type: 'FETCH_OTHER_USER_PROFILE_FAILURE',
+        payload: errorMessage,
+      });
+    }
+  };
+
+  // Fetch another user's followers
+  const fetchOtherUserFollowers = async (userId: string) => {
+    if (!userId) {
+      dispatch({
+        type: 'FETCH_OTHER_USER_FOLLOWERS_FAILURE',
+        payload: 'User ID is required',
+      });
+      return;
+    }
+
+    dispatch({ type: 'FETCH_OTHER_USER_FOLLOWERS_REQUEST' });
+
+    try {
+      const response = await api.get(`/users/${userId}/followers`);
+      
+      if (response.data && response.data.success) {
+        dispatch({
+          type: 'FETCH_OTHER_USER_FOLLOWERS_SUCCESS',
+          payload: response.data.followers,
+        });
+      } else {
+        throw new Error('Failed to fetch followers');
+      }
+    } catch (error) {
+      let errorMessage = 'Failed to fetch followers';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      dispatch({
+        type: 'FETCH_OTHER_USER_FOLLOWERS_FAILURE',
+        payload: errorMessage,
+      });
+    }
+  };
+
+  // Fetch another user's following
+  const fetchOtherUserFollowing = async (userId: string) => {
+    if (!userId) {
+      dispatch({
+        type: 'FETCH_OTHER_USER_FOLLOWING_FAILURE',
+        payload: 'User ID is required',
+      });
+      return;
+    }
+
+    dispatch({ type: 'FETCH_OTHER_USER_FOLLOWING_REQUEST' });
+
+    try {
+      const response = await api.get(`/users/${userId}/following`);
+      
+      if (response.data && response.data.success) {
+        dispatch({
+          type: 'FETCH_OTHER_USER_FOLLOWING_SUCCESS',
+          payload: response.data.following,
+        });
+      } else {
+        throw new Error('Failed to fetch following users');
+      }
+    } catch (error) {
+      let errorMessage = 'Failed to fetch following users';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      dispatch({
+        type: 'FETCH_OTHER_USER_FOLLOWING_FAILURE',
+        payload: errorMessage,
+      });
+    }
+  };
+
   return (
     <UserContext.Provider
       value={{
@@ -514,6 +670,9 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         clearError,
         getUserProfile,
         updateUserProfile,
+        fetchOtherUserProfile,
+        fetchOtherUserFollowers,
+        fetchOtherUserFollowing,
       }}
     >
       {children}
