@@ -164,6 +164,8 @@ const ChatDetail: React.FC = () => {
     duration: number;
     startPosition: { x: number; y: number };
   }>>([]);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showImagePreview, setShowImagePreview] = useState(false);
   
   // Add robust null checks with default values
   const messages = chatState?.messages && currentChatId && chatState.messages[currentChatId] ? 
@@ -639,7 +641,12 @@ const ChatDetail: React.FC = () => {
                   console.log(`Processed image URI for message ${item._id}:`, imageUri);
                   
                   return imageUri ? (
-                    <TouchableOpacity key={`${item._id}-attachment-${index}`} className="mt-1">
+                    <TouchableOpacity 
+                      key={`${item._id}-attachment-${index}`} 
+                      className="mt-1"
+                      onPress={() => openImagePreview(imageUri)}
+                      activeOpacity={0.8}
+                    >
                       <Image 
                         source={{ uri: imageUri }}
                         className="rounded-lg"
@@ -821,13 +828,15 @@ const ChatDetail: React.FC = () => {
           return (
             <View key={`media-${index}`} className="mr-2 relative">
               {isImage ? (
-                // Just render a basic purple background with a label for all image previews
-                // This avoids the file:// URL issues
-                <View className="w-20 h-20 bg-purple-100 rounded-md items-center justify-center">
-                  <Feather name="image" size={24} color="#9333EA" />
-                  <Text className="text-xs text-purple-700 mt-1 px-1 text-center" numberOfLines={1}>
-                    {media.name?.split('/').pop()?.substring(0, 10) || "Image"}
-                  </Text>
+                <View className="w-20 h-20 rounded-md overflow-hidden">
+                  <Image 
+                    source={{ uri: media.url }} 
+                    className="w-20 h-20"
+                    resizeMode="cover"
+                    onError={(e) => {
+                      console.log(`Error loading image preview: ${e.nativeEvent.error}`);
+                    }}
+                  />
                 </View>
               ) : isVideo ? (
                 <View className="w-20 h-20 bg-purple-100 rounded-md items-center justify-center">
@@ -849,6 +858,12 @@ const ChatDetail: React.FC = () => {
         })}
       </ScrollView>
     );
+  };
+
+  // Add this function to handle opening the image preview
+  const openImagePreview = (imageUrl: string) => {
+    setPreviewImage(imageUrl);
+    setShowImagePreview(true);
   };
 
   return (
@@ -1032,6 +1047,35 @@ const ChatDetail: React.FC = () => {
         {/* Add a spacer at the bottom to prevent FlatList content from being hidden behind the input */}
         <View style={{ height: 80 }} />
       </KeyboardAvoidingView>
+
+      {/* Image Preview Modal */}
+      <Modal
+        visible={showImagePreview}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowImagePreview(false)}
+      >
+        <View className="flex-1 bg-black/80 justify-center items-center">
+          <TouchableOpacity 
+            className="absolute top-12 right-5 z-10 bg-black/50 rounded-full p-2"
+            onPress={() => setShowImagePreview(false)}
+          >
+            <Ionicons name="close" size={24} color="white" />
+          </TouchableOpacity>
+          
+          {previewImage && (
+            <View className="w-full h-full justify-center items-center px-2">
+              <Image
+                source={{ uri: previewImage }}
+                style={{ width: '100%', height: '80%' }}
+                resizeMode="contain"
+              />
+            </View>
+          )}
+          
+          {/* Optional: Add pinch to zoom functionality later */}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
