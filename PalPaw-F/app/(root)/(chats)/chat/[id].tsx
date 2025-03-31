@@ -153,7 +153,6 @@ const ChatDetail: React.FC = () => {
   
   const [messageText, setMessageText] = useState('');
   const [isTypingLocal, setIsTypingLocal] = useState(false);
-  const [showEmoji, setShowEmoji] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<Array<{type: string, url: string, name?: string, mimeType: string, size: number}>>([]);
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
   const messageListRef = useRef<FlatList>(null);
@@ -398,31 +397,42 @@ const ChatDetail: React.FC = () => {
     }
   };
   
-  // Handle picking a document from the device
-  const handlePickDocument = async () => {
+  // Handle picking a video from the device
+  const handlePickVideo = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['*/*'],
-        multiple: true,
-        copyToCacheDirectory: true,
+      // Request permission first
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        alert("You need to allow access to your photos to send videos.");
+        return;
+      }
+      
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: false,
+        quality: 0.8,
+        allowsMultipleSelection: true,
+        selectionLimit: 2,
       });
       
-      if (result.canceled === false && result.assets.length > 0) {
+      if (!result.canceled && result.assets.length > 0) {
+        // Log the video assets
+        console.log('Video picker returned assets:', result.assets.map(a => ({
+          uri: a.uri.substring(0, 30) + (a.uri.length > 30 ? '...' : ''),
+          fileSize: a.fileSize,
+          fileName: a.uri.split('/').pop()
+        })));
+        
         const newMedia = result.assets.map(asset => {
-          // Determine type based on mimeType
-          let fileType = 'file';
-          if (asset.mimeType) {
-            if (asset.mimeType.startsWith('image/')) fileType = 'image';
-            else if (asset.mimeType.startsWith('video/')) fileType = 'video';
-            else if (asset.mimeType.startsWith('audio/')) fileType = 'audio';
-          }
+          const videoUri = asset.uri;
           
           return {
-            type: fileType, // Use enum value from backend schema
-            url: asset.uri,
-            name: asset.name || `file-${Date.now()}`,
-            mimeType: asset.mimeType || 'application/octet-stream',
-            size: asset.size || 0
+            type: 'video' as const,
+            url: videoUri,
+            name: asset.uri.split('/').pop() || `video-${Date.now()}.mp4`,
+            mimeType: 'video/mp4',
+            size: asset.fileSize || 0
           };
         });
         
@@ -430,8 +440,8 @@ const ChatDetail: React.FC = () => {
         setShowAttachmentOptions(false);
       }
     } catch (error) {
-      console.error('Error picking document:', error);
-      alert('Failed to select document. Please try again.');
+      console.error('Error picking video:', error);
+      alert('Failed to select video. Please try again.');
     }
   };
   
@@ -451,11 +461,6 @@ const ChatDetail: React.FC = () => {
     console.log(`ChatDetail: Message sent, should display as temp message until confirmed`);
     setMessageText('');
     setSelectedMedia([]);
-  };
-
-  // Toggle emoji panel
-  const toggleEmojiPanel = () => {
-    setShowEmoji(!showEmoji);
   };
 
   // Format date for messages
@@ -669,40 +674,9 @@ const ChatDetail: React.FC = () => {
                       </Text>
                     </TouchableOpacity>
                   );
-                } else if (attachment.type === 'audio') {
-                  return (
-                    <TouchableOpacity 
-                      key={`${item._id}-attachment-${index}`}
-                      className="flex-row items-center bg-black bg-opacity-10 p-2 rounded-lg mt-1"
-                    >
-                      <Feather name="music" size={18} color={isCurrentUser ? "#fff" : "#6B46C1"} />
-                      <Text 
-                        className={`ml-2 ${isCurrentUser ? "text-white" : "text-purple-900"} text-sm`}
-                        numberOfLines={1}
-                        ellipsizeMode="middle"
-                      >
-                        {attachment.name || "Audio"}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                } else {
-                  // Files
-                  return (
-                    <TouchableOpacity 
-                      key={`${item._id}-attachment-${index}`}
-                      className="flex-row items-center bg-black bg-opacity-10 p-2 rounded-lg mt-1"
-                    >
-                      <Feather name="file" size={18} color={isCurrentUser ? "#fff" : "#6B46C1"} />
-                      <Text 
-                        className={`ml-2 ${isCurrentUser ? "text-white" : "text-purple-900"} text-sm`}
-                        numberOfLines={1}
-                        ellipsizeMode="middle"
-                      >
-                        {attachment.name || "File"}
-                      </Text>
-                    </TouchableOpacity>
-                  );
                 }
+                // Remove audio and file attachment types as they're no longer needed
+                return null;
               })}
             </View>
           )}
@@ -810,12 +784,12 @@ const ChatDetail: React.FC = () => {
           
           <TouchableOpacity 
             className="items-center"
-            onPress={handlePickDocument}
+            onPress={handlePickVideo}
           >
             <View className="w-12 h-12 bg-purple-100 rounded-full items-center justify-center mb-1">
-              <Feather name="file" size={22} color="#9333EA" />
+              <Feather name="video" size={22} color="#9333EA" />
             </View>
-            <Text className="text-xs text-gray-600">Document</Text>
+            <Text className="text-xs text-gray-600">Video</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -835,7 +809,6 @@ const ChatDetail: React.FC = () => {
         {selectedMedia.map((media, index) => {
           const isImage = media.type === 'image';
           const isVideo = media.type === 'video';
-          const isAudio = media.type === 'audio';
           
           // Log media for debugging
           console.log(`Rendering preview for media ${index}:`, {
@@ -848,15 +821,14 @@ const ChatDetail: React.FC = () => {
           return (
             <View key={`media-${index}`} className="mr-2 relative">
               {isImage ? (
-                <Image 
-                  source={{ uri: media.url }} // Use the local URL directly for previews
-                  className="w-20 h-20 rounded-md"
-                  onError={(e) => {
-                    console.error(`Failed to load preview image: ${e.nativeEvent.error}`);
-                    console.error(`Failed URL: ${media.url.substring(0, 50)}...`);
-                  }}
-                  onLoad={() => console.log(`Preview image loaded successfully: ${index}`)}
-                />
+                // Just render a basic purple background with a label for all image previews
+                // This avoids the file:// URL issues
+                <View className="w-20 h-20 bg-purple-100 rounded-md items-center justify-center">
+                  <Feather name="image" size={24} color="#9333EA" />
+                  <Text className="text-xs text-purple-700 mt-1 px-1 text-center" numberOfLines={1}>
+                    {media.name?.split('/').pop()?.substring(0, 10) || "Image"}
+                  </Text>
+                </View>
               ) : isVideo ? (
                 <View className="w-20 h-20 bg-purple-100 rounded-md items-center justify-center">
                   <Feather name="video" size={24} color="#9333EA" />
@@ -864,21 +836,7 @@ const ChatDetail: React.FC = () => {
                     {media.name || "Video"}
                   </Text>
                 </View>
-              ) : isAudio ? (
-                <View className="w-20 h-20 bg-purple-100 rounded-md items-center justify-center">
-                  <Feather name="music" size={24} color="#9333EA" />
-                  <Text className="text-xs text-purple-700 mt-1 px-1 text-center" numberOfLines={1}>
-                    {media.name || "Audio"}
-                  </Text>
-                </View>
-              ) : (
-                <View className="w-20 h-20 bg-purple-100 rounded-md items-center justify-center">
-                  <Feather name="file" size={24} color="#9333EA" />
-                  <Text className="text-xs text-purple-700 mt-1 px-1 text-center" numberOfLines={1}>
-                    {media.name || "File"}
-                  </Text>
-                </View>
-              )}
+              ) : null}
               
               <TouchableOpacity 
                 className="absolute -top-2 -right-2 bg-red-500 rounded-full w-5 h-5 items-center justify-center"
@@ -993,7 +951,7 @@ const ChatDetail: React.FC = () => {
               keyExtractor={(item) => `${item._id}`}
               contentContainerStyle={{ 
                 paddingVertical: 12,
-                paddingBottom: showEmoji ? 350 : 80
+                paddingBottom: 40
               }}
               ListHeaderComponent={renderListHeader()}
               inverted={false}
@@ -1021,23 +979,22 @@ const ChatDetail: React.FC = () => {
         {/* Attachment options overlay */}
         {renderAttachmentOptions()}
         
-        {/* Message input */}
-        <View className="bg-white border-t border-gray-200 px-4 py-3">
+        {/* Move the input area up by using absolute positioning */}
+        <View 
+          className="bg-white border-t border-gray-200 px-4 py-3"
+          style={{
+            position: 'absolute',
+            bottom: Platform.OS === 'ios' ? 30 : 20, // Move up by setting a higher bottom value
+            left: 0,
+            right: 0,
+            zIndex: 10
+          }}
+        >
           {/* Selected media preview */}
           {renderSelectedMediaPreview()}
           
           <View className="flex-row items-center">
-            <TouchableOpacity 
-              className="pr-3" 
-              onPress={toggleEmojiPanel}
-            >
-              <MaterialCommunityIcons 
-                name={showEmoji ? "keyboard-outline" : "emoticon-outline"} 
-                size={24} 
-                color="#9333EA" 
-              />
-            </TouchableOpacity>
-            
+            {/* Input field and buttons - no changes needed here */}
             <View className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex-row items-center">
               <TextInput
                 className="flex-1 text-base text-gray-800"
@@ -1052,18 +1009,10 @@ const ChatDetail: React.FC = () => {
               <TouchableOpacity 
                 className="ml-2"
                 onPress={() => {
-                  setShowEmoji(false);
                   setShowAttachmentOptions(!showAttachmentOptions);
                 }}
               >
                 <Feather name="paperclip" size={20} color="#9333EA" />
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                className="ml-2"
-                onPress={handleTakePhoto}
-              >
-                <Feather name="camera" size={20} color="#9333EA" />
               </TouchableOpacity>
             </View>
             
@@ -1078,31 +1027,10 @@ const ChatDetail: React.FC = () => {
               <Feather name="send" size={18} color="white" />
             </TouchableOpacity>
           </View>
-          
-          {/* Simple Emoji Panel */}
-          {showEmoji && (
-            <View className="bg-white p-2 rounded-lg mt-2 border border-gray-200">
-              <Text className="text-xs text-gray-500 mb-2 px-2">Quick Emojis</Text>
-              <View className="flex-row flex-wrap">
-                {["😊", "👍", "❤️", "😂", "🙏", "🎉", "👏", "🐶", "🐱", "🐾"].map((emoji) => (
-                  <TouchableOpacity 
-                    key={emoji} 
-                    className="p-2 m-1 bg-gray-100 rounded-md"
-                    onPress={() => setMessageText(prev => prev + emoji)}
-                  >
-                    <Text className="text-xl">{emoji}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View className="flex-row justify-between mt-2 px-2">
-                <Text className="text-xs text-gray-500">More options coming soon!</Text>
-                <TouchableOpacity onPress={toggleEmojiPanel}>
-                  <Text className="text-xs text-purple-600">Close</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
         </View>
+        
+        {/* Add a spacer at the bottom to prevent FlatList content from being hidden behind the input */}
+        <View style={{ height: 80 }} />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
