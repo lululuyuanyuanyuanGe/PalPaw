@@ -23,7 +23,7 @@ import Animated, {
   Extrapolate,
   withTiming
 } from 'react-native-reanimated';
-import { usePosts, useAuth, useProducts } from "@/context";
+import { usePosts, useAuth, useProducts, useChat } from "@/context";
 import MediaCarousel from '../../components/MediaCarousel';
 import { formatImageUrl } from '@/utils/mediaUtils';
 import { getCategoryIcon, getCategoryColor, getCategoryBgColor } from './decorations';
@@ -169,6 +169,7 @@ const ProductDetail = () => {
     saveProduct,
     unsaveProduct
   } = useProducts();
+  const { createChat, loadMessages } = useChat();
   
   // Using memoized product to avoid unnecessary re-renders
   const product = React.useMemo(() => {
@@ -278,8 +279,8 @@ const ProductDetail = () => {
     }
   };
   
-  // Handle contact seller
-  const handleContactSeller = () => {
+  // Updated handler with more debugging
+  const handleContactSeller = async () => {
     if (!authState.isAuthenticated) {
       Alert.alert("Authentication Required", "Please login to contact sellers");
       return;
@@ -290,23 +291,44 @@ const ProductDetail = () => {
       return;
     }
     
-    Alert.alert(
-      "Contact Seller",
-      `Would you like to contact ${product.sellerData?.username} about "${product.name}"?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        {
-          text: "Contact",
-          onPress: () => {
-            // Navigate to chat or messenger screen
-            Alert.alert("Coming Soon", "Messaging functionality will be available soon!");
+    try {
+      // Show loading indicator
+      setLoading(false);
+      
+      console.log("Starting chat with seller:", product.userId);
+      console.log("Current auth state:", JSON.stringify({
+        isAuthenticated: authState.isAuthenticated,
+        userId: authState.user?.id
+      }));
+      
+      // Create or get existing chat with the seller
+      const chatId = await createChat(product.userId);
+      console.log("Chat creation result:", chatId);
+      
+      if (chatId) {
+        // Load messages for this chat
+        console.log("Loading messages for chat:", chatId);
+        await loadMessages(chatId);
+        
+        // Navigate to chat detail screen
+        console.log("Navigating to chat:", chatId);
+        router.push({
+          pathname: "/(root)/(chats)/chat/[id]",
+          params: { 
+            id: chatId, 
+            chatName: product.sellerData.username 
           }
-        }
-      ]
-    );
+        });
+      } else {
+        console.error("Failed to get valid chatId:", chatId);
+        Alert.alert("Error", "Could not start chat with seller");
+      }
+    } catch (error) {
+      console.error('Error starting chat:', error);
+      Alert.alert("Error", "Failed to initiate chat with seller");
+    } finally {
+      setLoading(false);
+    }
   };
   
   // Animated header style based on scroll position

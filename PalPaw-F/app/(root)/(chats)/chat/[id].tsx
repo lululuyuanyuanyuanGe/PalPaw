@@ -12,105 +12,21 @@ import {
   Platform,
   ActivityIndicator,
   Animated,
-  Dimensions
+  Dimensions,
+  Modal,
+  ScrollView
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Feather, MaterialCommunityIcons, FontAwesome5, AntDesign, Ionicons } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons, FontAwesome5, AntDesign, Ionicons, Entypo } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useAuth, useUser } from '@/context';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { useAuth } from '@/context';
+import { useChat } from '@/context/chatContext';
+import type { Message, Participant } from '@/context/chatContext';
+import { formatImageUrl } from '@/utils/mediaUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Mock chat data
-interface ChatMessage {
-  id: string;
-  text: string;
-  sender: string;
-  timestamp: string;
-  read: boolean;
-  isOwnMessage: boolean;
-}
-
-// Mock messages for chats
-const mockMessages: { [key: string]: ChatMessage[] } = {
-  '1': [
-    {
-      id: 'm1',
-      text: 'Hi there! I saw your luxury cat bed listing',
-      sender: '1',
-      timestamp: '10:25 AM',
-      read: true,
-      isOwnMessage: false
-    },
-    {
-      id: 'm2',
-      text: 'Is it still available?',
-      sender: '1',
-      timestamp: '10:26 AM',
-      read: true,
-      isOwnMessage: false
-    },
-    {
-      id: 'm3',
-      text: "Hello! Yes, it's still available",
-      sender: 'me',
-      timestamp: '10:28 AM',
-      read: true,
-      isOwnMessage: true
-    },
-    {
-      id: 'm4',
-      text: 'Great! Does it come with the cushion shown in the photos?',
-      sender: '1',
-      timestamp: '10:29 AM',
-      read: true,
-      isOwnMessage: false
-    },
-    {
-      id: 'm5',
-      text: 'And is the price negotiable?',
-      sender: '1',
-      timestamp: '10:30 AM',
-      read: false,
-      isOwnMessage: false
-    }
-  ],
-  '2': [
-    {
-      id: 'm1',
-      text: "Hi, I'm interested in the dog collar you posted",
-      sender: '2',
-      timestamp: '9:10 AM',
-      read: true,
-      isOwnMessage: false
-    },
-    {
-      id: 'm2',
-      text: "It looks perfect for my Golden Retriever",
-      sender: '2',
-      timestamp: '9:11 AM',
-      read: true,
-      isOwnMessage: false
-    },
-    {
-      id: 'm3',
-      text: "Hello! Yes, it's a high-quality leather collar",
-      sender: 'me',
-      timestamp: '9:15 AM',
-      read: true,
-      isOwnMessage: true
-    }
-  ]
-};
-
-// Mock user avatar mapping
-const userAvatars: { [key: string]: string } = {
-  '1': 'https://randomuser.me/api/portraits/women/44.jpg',
-  '2': 'https://randomuser.me/api/portraits/men/32.jpg',
-  '3': 'https://randomuser.me/api/portraits/women/65.jpg',
-  '4': 'https://randomuser.me/api/portraits/men/22.jpg',
-  '5': 'https://randomuser.me/api/portraits/women/28.jpg',
-};
 
 // Decorative floating paw component
 const FloatingPaw = ({ size, color, duration, delay, startPosition }: { 
@@ -185,16 +101,61 @@ const FloatingPaw = ({ size, color, duration, delay, startPosition }: {
   );
 };
 
+// Date separator component
+const DateSeparator = ({ date }: { date: string }) => {
+  const formattedDate = formatDateSeparator(date);
+  
+  return (
+    <View className="flex-row items-center justify-center my-4">
+      <View className="flex-1 h-px bg-gray-200" />
+      <View className="px-4 py-1 mx-2 bg-purple-100 rounded-full">
+        <Text className="text-xs text-purple-700 font-medium">{formattedDate}</Text>
+      </View>
+      <View className="flex-1 h-px bg-gray-200" />
+    </View>
+  );
+};
+
+// Format date for the separator
+const formatDateSeparator = (date: string) => {
+  const messageDate = new Date(date);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  if (messageDate.toDateString() === today.toDateString()) {
+    return 'Today';
+  } else if (messageDate.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday';
+  } else {
+    return messageDate.toLocaleDateString(undefined, { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  }
+};
+
+// Helper function to check if two dates are the same day
+const isSameDay = (date1: Date, date2: Date) => {
+  return (
+    date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate()
+  );
+};
+
 const ChatDetail: React.FC = () => {
   const router = useRouter();
   const { id, chatName } = useLocalSearchParams();
   const { state: authState } = useAuth();
-  const { state: userState } = useUser();
+  const { state: chatState, sendMessage, markAsRead, setTyping, loadMessages, joinChatRoom } = useChat();
+  
   const [messageText, setMessageText] = useState('');
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
+  const [isTypingLocal, setIsTypingLocal] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<Array<{type: string, url: string, name?: string, mimeType: string, size: number}>>([]);
+  const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
   const messageListRef = useRef<FlatList>(null);
   const currentChatId = id as string;
   const [pawsConfig, setPawsConfig] = useState<Array<{
@@ -204,68 +165,292 @@ const ChatDetail: React.FC = () => {
     duration: number;
     startPosition: { x: number; y: number };
   }>>([]);
-
-  // Generate random timestamps for "active X hours ago"
-  const lastActiveDuration = Math.floor(Math.random() * 24) + 1;
+  
+  // Add robust null checks with default values
+  const messages = chatState?.messages && currentChatId && chatState.messages[currentChatId] ? 
+    chatState.messages[currentChatId] : [];
+  const typingUsers = chatState?.typingUsers && currentChatId && chatState.typingUsers[currentChatId] ? 
+    chatState.typingUsers[currentChatId] : [];
+  const activeChat = chatState?.chats && Array.isArray(chatState.chats) ? 
+    chatState.chats.find(chat => chat?._id === currentChatId) : undefined;
+  const otherParticipant = activeChat?.participants && Array.isArray(activeChat.participants) ? 
+    activeChat.participants.find(p => p?.postgresId !== authState.user?.id) : undefined;
+  
+  // For debugging
+  useEffect(() => {
+    console.log("ChatState:", JSON.stringify({
+      isConnected: chatState?.isConnected,
+      chatsArray: Array.isArray(chatState?.chats),
+      chatsLength: chatState?.chats?.length,
+      messagesForChat: Boolean(chatState?.messages?.[currentChatId])
+    }));
+  }, [chatState]);
+  
+  // Generate floating paws configuration on mount
+  useEffect(() => {
+    const newPawsConfig = [];
+    const pawCount = 8;
+    
+    for (let i = 0; i < pawCount; i++) {
+      newPawsConfig.push({
+        id: i,
+        size: Math.floor(Math.random() * 15) + 10,
+        delay: Math.random() * 2000,
+        duration: Math.random() * 5000 + 8000,
+        startPosition: {
+          x: Math.random() * SCREEN_WIDTH,
+          y: Math.random() * 400 + 400
+        }
+      });
+    }
+    
+    setPawsConfig(newPawsConfig);
+  }, []);
   
   // Get specific chat messages when chat ID changes
   useEffect(() => {
     if (currentChatId) {
-      setLoading(true);
-      // Simulate loading messages
-      setTimeout(() => {
-        setChatMessages(mockMessages[currentChatId] || []);
-        setLoading(false);
-        
-        // Scroll to bottom of messages
-        if (messageListRef.current) {
-          messageListRef.current.scrollToEnd({ animated: false });
-        }
-      }, 500);
-    } else {
-      setChatMessages([]);
+      loadMessages(currentChatId);
+      
+      // Explicitly join this chat room
+      joinChatRoom(currentChatId);
+      
+      console.log(`ChatDetail: Opening chat ${currentChatId}, joining room`);
     }
   }, [currentChatId]);
 
+  // Scroll to bottom of messages when they change
+  useEffect(() => {
+    if (messageListRef.current && messages.length > 0) {
+      setTimeout(() => {
+        messageListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages]);
+
   // Handle typing indicator
   useEffect(() => {
-    if (messageText.length > 0) {
-      setIsTyping(true);
-    } else {
-      setIsTyping(false);
+    let typingTimeout: NodeJS.Timeout;
+    
+    if (messageText.length > 0 && !isTypingLocal) {
+      setIsTypingLocal(true);
+      setTyping(currentChatId, true);
+    } else if (messageText.length === 0 && isTypingLocal) {
+      setIsTypingLocal(false);
+      setTyping(currentChatId, false);
     }
-  }, [messageText]);
+    
+    // Clear typing indicator after 5 seconds of inactivity
+    typingTimeout = setTimeout(() => {
+      if (isTypingLocal) {
+        setIsTypingLocal(false);
+        setTyping(currentChatId, false);
+      }
+    }, 5000);
+    
+    return () => {
+      clearTimeout(typingTimeout);
+    };
+  }, [messageText, isTypingLocal, currentChatId]);
+
+  // Debug function to log chat and participant information
+  useEffect(() => {
+    if (activeChat && otherParticipant) {
+      console.log(`Active chat info: ${activeChat._id}`, {
+        participantCount: activeChat.participants.length,
+        otherParticipantId: otherParticipant.postgresId,
+        otherParticipantAvatar: otherParticipant.avatar
+      });
+    }
+  }, [activeChat, otherParticipant]);
+
+  // Helper to get avatar for a specific postgresId from participants
+  const getParticipantAvatar = (postgresId: string) => {
+    if (!activeChat) return null;
+    
+    const participant = activeChat.participants.find(p => p.postgresId === postgresId);
+    if (participant?.avatar) {
+      return { uri: participant.avatar };
+    }
+    return null;
+  };
 
   // Handle navigation back
   const handleGoBack = () => {
     router.back();
   };
 
-  // Handle sending a message
-  const handleSendMessage = () => {
-    if (!messageText.trim() || !currentChatId) return;
-    
-    const newMessage: ChatMessage = {
-      id: `m${Date.now()}`,
-      text: messageText.trim(),
-      sender: 'me',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      read: false,
-      isOwnMessage: true
-    };
-    
-    setChatMessages([...chatMessages, newMessage]);
-    setMessageText('');
-    
-    // Scroll to the new message
-    setTimeout(() => {
-      messageListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-    
-    // Hide emoji panel if open
-    if (showEmoji) {
-      setShowEmoji(false);
+  // Handle picking an image from the device
+  const handlePickImage = async () => {
+    try {
+      // Request permission first
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        alert("You need to allow access to your photos to send media files.");
+        return;
+      }
+      
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+        allowsMultipleSelection: true,
+        selectionLimit: 5,
+      });
+      
+      if (!result.canceled && result.assets.length > 0) {
+        // Log the image assets received from the picker
+        console.log('Image picker returned assets:', result.assets.map(a => ({
+          uri: a.uri.substring(0, 30) + (a.uri.length > 30 ? '...' : ''),
+          fileSize: a.fileSize,
+          fileName: a.uri.split('/').pop()
+        })));
+        
+        const newMedia = result.assets.map(asset => {
+          // Get the full URI for the image - preserve the original URI exactly as-is
+          // Don't use formatImageUrl here since we want to keep the original URI 
+          // for uploading. The formatImageUrl will be applied when displaying.
+          const imageUri = asset.uri;
+          
+          // Log the URI processing
+          console.log(`Processing image URI: ${imageUri.substring(0, 30)}${imageUri.length > 30 ? '...' : ''}`);
+          
+          return {
+            type: 'image' as const,
+            url: imageUri, // Keep the original URI for upload
+            name: asset.uri.split('/').pop() || `image-${Date.now()}.jpg`,
+            mimeType: 'image/jpeg',
+            size: asset.fileSize || 0
+          };
+        });
+        
+        // Log the processed media objects
+        console.log('Created media objects:', newMedia.map(m => ({
+          type: m.type,
+          url: m.url.substring(0, 30) + (m.url.length > 30 ? '...' : ''),
+          name: m.name,
+          size: Math.round(m.size / 1024) + 'KB'
+        })));
+        
+        setSelectedMedia([...selectedMedia, ...newMedia]);
+        setShowAttachmentOptions(false);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      alert('Failed to select image. Please try again.');
     }
+  };
+  
+  // Handle taking a photo with the camera
+  const handleTakePhoto = async () => {
+    try {
+      // Request permission first
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        alert("You need to allow access to your camera to take photos.");
+        return;
+      }
+      
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets.length > 0) {
+        // Log the camera asset information
+        console.log('Camera returned asset:', {
+          uri: result.assets[0].uri.substring(0, 30) + (result.assets[0].uri.length > 30 ? '...' : ''),
+          fileSize: result.assets[0].fileSize,
+          fileName: result.assets[0].uri.split('/').pop()
+        });
+        
+        // Process the image URI - preserve the original URI exactly as-is
+        // Don't use formatImageUrl here since we want to keep the original URI
+        // for uploading. The formatImageUrl will be applied when displaying.
+        const imageUri = result.assets[0].uri;
+        console.log(`Processing camera image URI: ${imageUri.substring(0, 30)}${imageUri.length > 30 ? '...' : ''}`);
+        
+        const newMedia = {
+          type: 'image' as const,
+          url: imageUri, // Keep the original URI for upload
+          name: result.assets[0].uri.split('/').pop() || `camera-${Date.now()}.jpg`,
+          mimeType: 'image/jpeg',
+          size: result.assets[0].fileSize || 0
+        };
+        
+        // Log the created media object
+        console.log('Created camera media object:', {
+          type: newMedia.type,
+          url: newMedia.url.substring(0, 30) + (newMedia.url.length > 30 ? '...' : ''),
+          name: newMedia.name,
+          size: Math.round(newMedia.size / 1024) + 'KB'
+        });
+        
+        setSelectedMedia([...selectedMedia, newMedia]);
+        setShowAttachmentOptions(false);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      alert('Failed to take photo. Please try again.');
+    }
+  };
+  
+  // Handle picking a document from the device
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['*/*'],
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+      
+      if (result.canceled === false && result.assets.length > 0) {
+        const newMedia = result.assets.map(asset => {
+          // Determine type based on mimeType
+          let fileType = 'file';
+          if (asset.mimeType) {
+            if (asset.mimeType.startsWith('image/')) fileType = 'image';
+            else if (asset.mimeType.startsWith('video/')) fileType = 'video';
+            else if (asset.mimeType.startsWith('audio/')) fileType = 'audio';
+          }
+          
+          return {
+            type: fileType, // Use enum value from backend schema
+            url: asset.uri,
+            name: asset.name || `file-${Date.now()}`,
+            mimeType: asset.mimeType || 'application/octet-stream',
+            size: asset.size || 0
+          };
+        });
+        
+        setSelectedMedia([...selectedMedia, ...newMedia]);
+        setShowAttachmentOptions(false);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      alert('Failed to select document. Please try again.');
+    }
+  };
+  
+  // Remove a selected media item
+  const removeSelectedMedia = (index: number) => {
+    const updatedMedia = [...selectedMedia];
+    updatedMedia.splice(index, 1);
+    setSelectedMedia(updatedMedia);
+  };
+
+  // Handle sending a message with attachments
+  const handleSendMessage = () => {
+    if ((!messageText.trim() && selectedMedia.length === 0) || !currentChatId) return;
+    
+    console.log(`ChatDetail: Sending message to chat ${currentChatId} with ${selectedMedia.length} attachments`);
+    sendMessage(currentChatId, messageText.trim(), selectedMedia);
+    console.log(`ChatDetail: Message sent, should display as temp message until confirmed`);
+    setMessageText('');
+    setSelectedMedia([]);
   };
 
   // Toggle emoji panel
@@ -273,165 +458,309 @@ const ChatDetail: React.FC = () => {
     setShowEmoji(!showEmoji);
   };
 
-  // Format timestamp relative to current day
+  // Format date for messages
   const formatMessageDate = (timestamp: string) => {
-    if (timestamp.includes('AM') || timestamp.includes('PM')) {
-      return timestamp;
-    }
-    if (timestamp === 'Yesterday') {
-      return 'Yesterday';
-    }
-    return timestamp;
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Get avatar for current chat
-  const getAvatar = () => {
-    return userAvatars[currentChatId] || 'https://randomuser.me/api/portraits/lego/1.jpg';
-  };
-
-  // Initialize paws and set up timer for continuous spawning
-  useEffect(() => {
-    // Create initial paws
-    const initialPaws = Array(5).fill(0).map((_, i) => ({
-      id: i,
-      size: 10 + Math.random() * 15,
-      delay: i * 500,
-      duration: 3000 + Math.random() * 2000,
-      startPosition: {
-        x: Math.random() * SCREEN_WIDTH,
-        y: 400 + Math.random() * 300
+  // Get avatar for message sender
+  const getSenderAvatar = (sender: Message['sender']) => {
+    if (!sender) {
+      return { uri: `https://robohash.org/user?set=set4` };
+    }
+    
+    // Generate initials for avatar fallback
+    const getInitials = (): string => {
+      if (sender.firstName && sender.lastName) {
+        return `${sender.firstName.charAt(0)}${sender.lastName.charAt(0)}`;
+      } else if (sender.username) {
+        return sender.username.substring(0, 2).toUpperCase();
       }
-    }));
+      return 'U';
+    };
     
-    setPawsConfig(initialPaws);
+    // Use avatar if available and properly formatted
+    if (sender.avatar && (
+      sender.avatar.startsWith('http://') || 
+      sender.avatar.startsWith('https://') || 
+      sender.avatar.startsWith('/uploads/')
+    )) {
+      return { uri: sender.avatar };
+    }
     
-    // Set up interval to add new paws periodically
-    const interval = setInterval(() => {
-      setPawsConfig(prev => {
-        // Keep only the latest 8 paws to avoid performance issues
-        const currentPaws = prev.slice(-7);
-        
-        // Add a new paw with a unique ID
-        return [...currentPaws, {
-          id: Date.now(),
-          size: 10 + Math.random() * 15,
-          delay: 0, // No delay for new paws
-          duration: 3000 + Math.random() * 2000,
-          startPosition: {
-            x: Math.random() * SCREEN_WIDTH,
-            y: 400 + Math.random() * 300
-          }
-        }];
-      });
-    }, 2000); // Add a new paw every 2 seconds
-    
-    // Cleanup
-    return () => clearInterval(interval);
-  }, []);
+    // Use Robohash as fallback
+    const initials = getInitials();
+    return { uri: `https://robohash.org/${sender.postgresId || initials}?set=set4&bgset=bg1` };
+  };
 
-  // Render a message in the chat
-  const renderMessageItem = ({ item, index }: { item: ChatMessage, index: number }) => {
-    // Check if this is the first message or if the previous message was from a different sender
-    const isFirstMessageFromSender = index === 0 || 
-      chatMessages[index - 1].isOwnMessage !== item.isOwnMessage;
+  // Handle message press (for future features like reply, etc)
+  const handleMessagePress = (messageId: string) => {
+    // Mark message as read
+    if (currentChatId) {
+      markAsRead(currentChatId, messageId);
+    }
+  };
+
+  // Process messages to include date separators
+  const processedMessages = React.useMemo(() => {
+    const result: (Message | { _id: string; type: 'dateSeparator'; date: string })[] = [];
+    let previousDate: Date | null = null;
     
-    // Determine if we should show the avatar
-    const showAvatar = !item.isOwnMessage && isFirstMessageFromSender;
+    messages.forEach(message => {
+      const messageDate = new Date(message.createdAt);
+      
+      if (!previousDate || !isSameDay(messageDate, previousDate)) {
+        result.push({
+          _id: `date-${message.createdAt}`,
+          type: 'dateSeparator',
+          date: message.createdAt
+        });
+      }
+      
+      result.push(message);
+      previousDate = messageDate;
+    });
     
-    // Determine bubble style based on position in conversation
-    let bubbleStyle = '';
-    if (item.isOwnMessage) {
-      bubbleStyle = 'self-end bg-purple-600 text-white rounded-tl-2xl rounded-tr-2xl rounded-bl-2xl';
-      if (index > 0 && chatMessages[index - 1].isOwnMessage) {
-        bubbleStyle = 'self-end bg-purple-600 text-white rounded-tl-2xl rounded-bl-2xl';
+    return result;
+  }, [messages]);
+  
+  // Render a message or date separator
+  const renderItem = ({ item }: { item: Message | { _id: string; type: 'dateSeparator'; date: string } }) => {
+    if ('type' in item && item.type === 'dateSeparator') {
+      return <DateSeparator date={item.date} />;
+    }
+    
+    // Cast item to Message type and pass it to the existing renderMessageItem
+    return renderMessageItem({ item: item as Message });
+  };
+
+  // Render a message item
+  const renderMessageItem = ({ item }: { item: Message }) => {
+    const isCurrentUser = item.sender.postgresId === authState.user?.id;
+    
+    // Prioritize using participant data for avatar over message sender data
+    let messageAvatar;
+    
+    if (!isCurrentUser) {
+      // First try to find the participant by PostgresID
+      const participantAvatar = getParticipantAvatar(item.sender.postgresId);
+      
+      if (participantAvatar) {
+        messageAvatar = participantAvatar;
+        console.log(`Using participant avatar for message ${item._id.substring(0, 8)}`);
+      } else {
+        // Fallback to sender avatar or default
+        messageAvatar = getSenderAvatar(item.sender);
+        console.log(`Using sender avatar for message ${item._id.substring(0, 8)}`);
       }
     } else {
-      bubbleStyle = 'self-start bg-white text-gray-800 rounded-tl-2xl rounded-tr-2xl rounded-br-2xl';
-      if (index > 0 && !chatMessages[index - 1].isOwnMessage) {
-        bubbleStyle = 'self-start bg-white text-gray-800 rounded-tr-2xl rounded-br-2xl';
-      }
+      // For current user
+      messageAvatar = getSenderAvatar(item.sender);
     }
     
     return (
-      <View className={`px-3 ${!item.isOwnMessage && 'ml-2'} ${item.isOwnMessage && 'mr-2'}`}>
-        {/* Date separator if needed */}
-        {index === 0 && (
-          <View className="my-2 items-center">
-            <View className="bg-gray-200 px-3 py-1 rounded-full">
-              <Text className="text-gray-600 text-xs font-medium">Today</Text>
-            </View>
+      <View className={`mb-3 flex-row ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
+        {/* Avatar for other user's messages */}
+        {!isCurrentUser && (
+          <View className="mr-2 mb-1">
+            <Image 
+              source={messageAvatar} 
+              className="w-8 h-8 rounded-full"
+            />
           </View>
         )}
         
-        <View className={`flex-row items-end mb-1 ${item.isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-          {/* Avatar for incoming messages */}
-          {showAvatar ? (
-            <Image 
-              source={{ uri: getAvatar() }}
-              className="w-8 h-8 rounded-full mr-1 mb-1"
-            />
-          ) : (
-            !item.isOwnMessage && <View style={{ width: 32, marginRight: 4 }} />
+        <View
+          style={{
+            backgroundColor: isCurrentUser ? '#9333EA' : '#F3E8FF',
+            borderRadius: 16,
+            borderTopLeftRadius: isCurrentUser ? 16 : 2,
+            borderTopRightRadius: isCurrentUser ? 2 : 16,
+            padding: 12,
+            paddingBottom: 8,
+            shadowColor: '#000',
+            shadowOffset: {
+              width: 0,
+              height: 1,
+            },
+            shadowOpacity: 0.18,
+            shadowRadius: 1.0,
+            elevation: 1,
+            maxWidth: '80%'
+          }}
+        >
+          {/* Message text */}
+          {item.content.trim() !== '' && (
+            <Text
+              style={{
+                color: isCurrentUser ? '#fff' : '#4B5563',
+                fontSize: 16,
+              }}
+            >
+              {item.content}
+            </Text>
           )}
           
-          {/* Message bubble */}
-          <View 
-            className={`px-3 py-2 ${bubbleStyle}`}
+          {/* Message attachments */}
+          {item.attachments && item.attachments.length > 0 && (
+            <View className="mt-2">
+              {item.attachments.map((attachment, index) => {
+                // Enhanced debugging to see exactly what's coming from server
+                console.log(`Rendering attachment ${index} for message ${item._id}:`, {
+                  type: attachment.type,
+                  url: attachment.url || 'missing-url',
+                  originalUrl: attachment.originalUrl,
+                  hasUrl: !!attachment.url,
+                  message: item._id
+                });
+                
+                // Handle different attachment types
+                if (attachment.type === 'image') {
+                  // Use formatImageUrl to properly format the image URL
+                  const imageUri = (() => {
+                    // Check if we have a URL to work with
+                    if (!attachment.url) {
+                      console.log(`Missing URL for image attachment in message ${item._id}`);
+                      return null;
+                    }
+                    
+                    // Use formatImageUrl for all cases - it already handles http://, file://, and uploads paths
+                    // Note: Server-stored images will start with /messages/ after our update
+                    return formatImageUrl(attachment.url);
+                  })();
+                  
+                  // Log the processed image URI for debugging
+                  console.log(`Processed image URI for message ${item._id}:`, imageUri);
+                  
+                  return imageUri ? (
+                    <TouchableOpacity key={`${item._id}-attachment-${index}`} className="mt-1">
+                      <Image 
+                        source={{ uri: imageUri }}
+                        className="rounded-lg"
+                        style={{ width: 200, height: 150, resizeMode: 'cover' }}
+                        onError={(e) => console.error(`Failed to load image: ${e.nativeEvent.error}`)}
+                        onLoad={() => console.log(`Image loaded successfully for ${item._id}`)}
+                      />
+                    </TouchableOpacity>
+                  ) : (
+                    <View 
+                      key={`${item._id}-attachment-${index}`}
+                      className="bg-gray-200 rounded-lg mt-1 items-center justify-center"
+                      style={{ width: 200, height: 150 }}
+                    >
+                      <Feather name="image" size={32} color="#9333EA" />
+                      <Text className="text-purple-700 mt-2">Image not available</Text>
+                    </View>
+                  );
+                } else if (attachment.type === 'video') {
+                  return (
+                    <TouchableOpacity 
+                      key={`${item._id}-attachment-${index}`}
+                      className="flex-row items-center bg-black bg-opacity-10 p-2 rounded-lg mt-1"
+                    >
+                      <Feather name="video" size={18} color={isCurrentUser ? "#fff" : "#6B46C1"} />
+                      <Text 
+                        className={`ml-2 ${isCurrentUser ? "text-white" : "text-purple-900"} text-sm`}
+                        numberOfLines={1}
+                        ellipsizeMode="middle"
+                      >
+                        {attachment.name || "Video"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                } else if (attachment.type === 'audio') {
+                  return (
+                    <TouchableOpacity 
+                      key={`${item._id}-attachment-${index}`}
+                      className="flex-row items-center bg-black bg-opacity-10 p-2 rounded-lg mt-1"
+                    >
+                      <Feather name="music" size={18} color={isCurrentUser ? "#fff" : "#6B46C1"} />
+                      <Text 
+                        className={`ml-2 ${isCurrentUser ? "text-white" : "text-purple-900"} text-sm`}
+                        numberOfLines={1}
+                        ellipsizeMode="middle"
+                      >
+                        {attachment.name || "Audio"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                } else {
+                  // Files
+                  return (
+                    <TouchableOpacity 
+                      key={`${item._id}-attachment-${index}`}
+                      className="flex-row items-center bg-black bg-opacity-10 p-2 rounded-lg mt-1"
+                    >
+                      <Feather name="file" size={18} color={isCurrentUser ? "#fff" : "#6B46C1"} />
+                      <Text 
+                        className={`ml-2 ${isCurrentUser ? "text-white" : "text-purple-900"} text-sm`}
+                        numberOfLines={1}
+                        ellipsizeMode="middle"
+                      >
+                        {attachment.name || "File"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }
+              })}
+            </View>
+          )}
+          
+          {/* Timestamp and read status */}
+          <View
             style={{
-              maxWidth: '75%',
-              shadowColor: '#00000020',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.2,
-              shadowRadius: 1,
-              elevation: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              marginTop: 4,
             }}
           >
-            <Text className={`${item.isOwnMessage ? 'text-white' : 'text-gray-800'} text-base`}>
-              {item.text}
+            <Text
+              style={{
+                color: isCurrentUser ? 'rgba(255,255,255,0.7)' : '#9CA3AF',
+                fontSize: 11,
+                marginRight: 4,
+              }}
+            >
+              {formatMessageDate(item.createdAt)}
             </Text>
+            
+            {isCurrentUser && (
+              <Ionicons
+                name={item.status === 'read' ? 'checkmark-done' : 'checkmark'}
+                size={14}
+                color={item.status === 'read' ? '#10B981' : 'rgba(255,255,255,0.7)'}
+              />
+            )}
           </View>
-        </View>
-        
-        {/* Timestamp and read status */}
-        <View className={`flex-row items-center mb-3 ${item.isOwnMessage ? 'justify-end mr-2' : 'justify-start ml-10'}`}>
-          <Text className="text-xs text-gray-500 mr-1">{formatMessageDate(item.timestamp)}</Text>
-          {item.isOwnMessage && (
-            item.read ? (
-              <MaterialCommunityIcons name="check-all" size={14} color="#9333EA" />
-            ) : (
-              <MaterialCommunityIcons name="check" size={14} color="#9CA3AF" />
-            )
-          )}
         </View>
       </View>
     );
   };
 
-  // Render the message list header with user info
+  // Render header component for FlatList
   const renderListHeader = () => (
-    <View className="pt-2 pb-4">
-      <View className="items-center">
-        <Image 
-          source={{ uri: getAvatar() }}
-          className="w-16 h-16 rounded-full border-2 border-white"
-          style={{ 
-            shadowColor: '#000', 
-            shadowOffset: { width: 0, height: 2 }, 
-            shadowOpacity: 0.1, 
-            shadowRadius: 4 
-          }}
-        />
-        <View className="flex-row items-center mt-2">
-          <View className={`w-2.5 h-2.5 rounded-full ${currentChatId === '2' || currentChatId === '5' ? 'bg-green-500' : 'bg-gray-400'} mr-1.5`} />
-          <Text className="text-gray-600 text-sm">
-            {currentChatId === '2' || currentChatId === '5' ? 'Active now' : `Active ${lastActiveDuration}h ago`}
-          </Text>
-        </View>
+    <View style={{ padding: 16, alignItems: 'center' }}>
+      <View
+        style={{
+          backgroundColor: 'rgba(147, 51, 234, 0.12)',
+          padding: 8,
+          borderRadius: 12,
+          maxWidth: '80%',
+        }}
+      >
+        <Text style={{ color: '#6B46C1', textAlign: 'center', fontSize: 12 }}>
+          Your messages are private between you and {otherParticipant?.username || 'this user'}
+        </Text>
+        <Text style={{ color: '#6B46C1', textAlign: 'center', fontSize: 12, marginTop: 4 }}>
+          Be paw-sitive and respectful in your conversations! 🐾
+        </Text>
       </View>
     </View>
   );
 
-  // Create floating paws (decorative elements)
+  // Render floating paws in the background
   const renderFloatingPaws = () => {
     return pawsConfig.map(paw => (
       <FloatingPaw
@@ -445,77 +774,144 @@ const ChatDetail: React.FC = () => {
     ));
   };
 
+  // Render media attachment options
+  const renderAttachmentOptions = () => {
+    if (!showAttachmentOptions) return null;
+    
+    return (
+      <View className="bg-white p-4 rounded-lg border border-gray-200 absolute bottom-16 left-0 right-0 z-10 mx-4">
+        <View className="flex-row justify-between mb-4">
+          <Text className="text-purple-900 font-medium">Attach Media</Text>
+          <TouchableOpacity onPress={() => setShowAttachmentOptions(false)}>
+            <AntDesign name="close" size={20} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+        
+        <View className="flex-row justify-around">
+          <TouchableOpacity 
+            className="items-center"
+            onPress={handlePickImage}
+          >
+            <View className="w-12 h-12 bg-purple-100 rounded-full items-center justify-center mb-1">
+              <Feather name="image" size={22} color="#9333EA" />
+            </View>
+            <Text className="text-xs text-gray-600">Gallery</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            className="items-center"
+            onPress={handleTakePhoto}
+          >
+            <View className="w-12 h-12 bg-purple-100 rounded-full items-center justify-center mb-1">
+              <Feather name="camera" size={22} color="#9333EA" />
+            </View>
+            <Text className="text-xs text-gray-600">Camera</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            className="items-center"
+            onPress={handlePickDocument}
+          >
+            <View className="w-12 h-12 bg-purple-100 rounded-full items-center justify-center mb-1">
+              <Feather name="file" size={22} color="#9333EA" />
+            </View>
+            <Text className="text-xs text-gray-600">Document</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  // Render selected media preview
+  const renderSelectedMediaPreview = () => {
+    if (selectedMedia.length === 0) return null;
+    
+    return (
+      <ScrollView 
+        horizontal
+        className="py-2"
+        showsHorizontalScrollIndicator={false}
+      >
+        {selectedMedia.map((media, index) => {
+          const isImage = media.type === 'image';
+          const isVideo = media.type === 'video';
+          const isAudio = media.type === 'audio';
+          
+          // Log media for debugging
+          console.log(`Rendering preview for media ${index}:`, {
+            type: media.type,
+            url: media.url.substring(0, 30) + (media.url.length > 30 ? '...' : ''),
+            name: media.name,
+            size: Math.round(media.size / 1024) + 'KB'
+          });
+          
+          return (
+            <View key={`media-${index}`} className="mr-2 relative">
+              {isImage ? (
+                <Image 
+                  source={{ uri: media.url }} // Use the local URL directly for previews
+                  className="w-20 h-20 rounded-md"
+                  onError={(e) => {
+                    console.error(`Failed to load preview image: ${e.nativeEvent.error}`);
+                    console.error(`Failed URL: ${media.url.substring(0, 50)}...`);
+                  }}
+                  onLoad={() => console.log(`Preview image loaded successfully: ${index}`)}
+                />
+              ) : isVideo ? (
+                <View className="w-20 h-20 bg-purple-100 rounded-md items-center justify-center">
+                  <Feather name="video" size={24} color="#9333EA" />
+                  <Text className="text-xs text-purple-700 mt-1 px-1 text-center" numberOfLines={1}>
+                    {media.name || "Video"}
+                  </Text>
+                </View>
+              ) : isAudio ? (
+                <View className="w-20 h-20 bg-purple-100 rounded-md items-center justify-center">
+                  <Feather name="music" size={24} color="#9333EA" />
+                  <Text className="text-xs text-purple-700 mt-1 px-1 text-center" numberOfLines={1}>
+                    {media.name || "Audio"}
+                  </Text>
+                </View>
+              ) : (
+                <View className="w-20 h-20 bg-purple-100 rounded-md items-center justify-center">
+                  <Feather name="file" size={24} color="#9333EA" />
+                  <Text className="text-xs text-purple-700 mt-1 px-1 text-center" numberOfLines={1}>
+                    {media.name || "File"}
+                  </Text>
+                </View>
+              )}
+              
+              <TouchableOpacity 
+                className="absolute -top-2 -right-2 bg-red-500 rounded-full w-5 h-5 items-center justify-center"
+                onPress={() => removeSelectedMedia(index)}
+              >
+                <AntDesign name="close" size={12} color="white" />
+              </TouchableOpacity>
+            </View>
+          );
+        })}
+      </ScrollView>
+    );
+  };
+
   return (
-    <SafeAreaView className="flex-1">
+    <SafeAreaView className="flex-1 bg-blue-50">
       <StatusBar
         barStyle="light-content"
         backgroundColor="transparent"
         translucent
       />
       
-      {/* Background Gradient and Patterns */}
-      <View style={{ position: 'absolute', width: '100%', height: '100%' }}>
-        <LinearGradient
-          colors={['#f0f4ff', '#edf2fe', '#e6eeff']}
-          style={{ position: 'absolute', width: '100%', height: '100%' }}
-        />
-        
-        {/* Subtle Pattern Overlay */}
-        <View style={{ 
-          position: 'absolute', 
-          width: '100%', 
-          height: '100%', 
-          opacity: 0.05,
-          backgroundColor: '#9333EA',
-          transform: [{ rotate: '10deg' }]
-        }}>
-          {Array(6).fill(0).map((_, i) => (
-            <View 
-              key={`pattern-${i}`} 
-              style={{
-                position: 'absolute',
-                top: 100 + (i * 140),
-                left: i % 2 === 0 ? -20 : 'auto',
-                right: i % 2 === 1 ? -20 : 'auto',
-                width: SCREEN_WIDTH * 0.7,
-                height: 14,
-                borderRadius: 7,
-                backgroundColor: '#9333EA',
-                opacity: 0.3,
-              }}
-            />
-          ))}
-        </View>
-        
-        {/* Fixed Paw Decorations */}
-        <View style={{ position: 'absolute', top: '25%', left: '5%', transform: [{ rotate: '30deg' }], opacity: 0.07 }}>
-          <FontAwesome5 name="paw" size={60} color="#9333EA" />
-        </View>
-        <View style={{ position: 'absolute', top: '65%', right: '8%', transform: [{ rotate: '-20deg' }], opacity: 0.05 }}>
-          <FontAwesome5 name="paw" size={80} color="#9333EA" />
-        </View>
-      </View>
-      
-      {/* Decorative Floating Paws */}
+      {/* Animated floating paws in background */}
       {renderFloatingPaws()}
       
       {/* Header with gradient */}
       <LinearGradient
         colors={['#9333EA', '#A855F7', '#C084FC']}
-        className="w-full pt-10 pb-4"
+        className="w-full pt-12 pb-4"
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
-        {/* Decorative Header Paws */}
-        <View style={{ position: 'absolute', right: 20, top: 15, opacity: 0.3 }}>
-          <FontAwesome5 name="paw" size={45} color="#ffffff" />
-        </View>
-        <View style={{ position: 'absolute', left: 30, bottom: 15, opacity: 0.25 }}>
-          <FontAwesome5 name="paw" size={30} color="#ffffff" />
-        </View>
-        
-        <View className="flex-row items-center justify-between px-4 pt-2">
-          {/* Back Button */}
+        <View className="flex-row items-center px-4">
           <TouchableOpacity 
             className="bg-white rounded-full w-10 h-10 items-center justify-center" 
             onPress={handleGoBack}
@@ -530,126 +926,208 @@ const ChatDetail: React.FC = () => {
             <AntDesign name="arrowleft" size={22} color="#9333EA" />
           </TouchableOpacity>
           
-          {/* User Info in Header */}
-          <TouchableOpacity className="flex-row items-center">
-            <Image 
-              source={{ uri: getAvatar() }}
-              className="w-9 h-9 rounded-full border-2 border-white mr-2"
-            />
-            <View>
-              <Text className="text-white font-bold text-lg">
-                {chatName || 'Chat'}
-              </Text>
-              {(currentChatId === '2' || currentChatId === '5') && (
-                <Text className="text-white text-opacity-90 text-xs">Online</Text>
+          <View className="flex-row items-center flex-1 ml-3">
+            <View className="relative">
+              <Image
+                source={otherParticipant?.avatar ? { uri: otherParticipant.avatar } : { uri: `https://robohash.org/user?set=set4` }}
+                className="w-10 h-10 rounded-full"
+              />
+              {otherParticipant?.onlineStatus === 'online' && (
+                <View className="absolute bottom-0 right-0 bg-green-500 w-3 h-3 rounded-full border-2 border-white" />
               )}
             </View>
-          </TouchableOpacity>
+            
+            <View className="ml-3">
+              <View>
+                <Text className="text-white font-bold text-lg line-clamp-1">
+                  {otherParticipant?.username || chatName || 'Chat'}
+                </Text>
+                <View className="flex-row items-center">
+                  <View className={`w-2 h-2 rounded-full mr-1 ${otherParticipant?.onlineStatus === 'online' ? 'bg-green-400' : 'bg-gray-400'}`} />
+                  <Text className="text-white text-opacity-90 text-xs">
+                    {otherParticipant?.onlineStatus === 'online' 
+                      ? 'Online now' 
+                      : otherParticipant?.lastActive 
+                        ? `Last seen ${formatLastActive(otherParticipant.lastActive)}` 
+                        : 'Offline'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
           
-          {/* Call Button */}
-          <TouchableOpacity 
-            className="bg-white rounded-full w-10 h-10 items-center justify-center" 
-            style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.1,
-              shadowRadius: 3,
-              elevation: 3,
-            }}
-          >
-            <Feather name="more-horizontal" size={22} color="#9333EA" />
+          <TouchableOpacity className="w-10 h-10 items-center justify-center">
+            <MaterialCommunityIcons name="dots-vertical" size={24} color="white" />
           </TouchableOpacity>
         </View>
       </LinearGradient>
 
-      {/* Content Area with improved styling */}
-      <View className="flex-1">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          className="flex-1"
-          keyboardVerticalOffset={100}
-        >
-          {loading ? (
+      {/* Main chat area */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        className="flex-1"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        {/* Messages */}
+        <View className="flex-1">
+          {!chatState.isConnected ? (
             <View className="flex-1 items-center justify-center">
               <ActivityIndicator size="large" color="#9333EA" />
+              <Text className="text-gray-600 mt-4">Connecting to chat server...</Text>
+            </View>
+          ) : messages.length === 0 ? (
+            <View className="flex-1 items-center justify-center p-6">
+              <FontAwesome5 name="comment-dots" size={60} color="#C084FC" style={{ opacity: 0.7 }} />
+              <Text className="text-gray-700 text-lg font-medium mt-6 text-center">
+                No messages yet
+              </Text>
+              <Text className="text-gray-500 text-sm mt-2 text-center">
+                Say hello to {otherParticipant?.username || 'your new friend'} to start the conversation!
+              </Text>
             </View>
           ) : (
-            <>
-              <FlatList
-                ref={messageListRef}
-                data={chatMessages}
-                renderItem={renderMessageItem}
-                keyExtractor={item => item.id}
-                contentContainerStyle={{ 
-                  paddingVertical: 15, 
-                  flexGrow: 1,
-                }}
-                inverted={false}
-                ListHeaderComponent={renderListHeader}
-                ListFooterComponent={
-                  <View style={{ height: 10 }} />
-                }
-                style={{ backgroundColor: 'transparent' }}
+            <FlatList
+              ref={messageListRef}
+              data={processedMessages}
+              renderItem={renderItem}
+              keyExtractor={(item) => `${item._id}`}
+              contentContainerStyle={{ 
+                paddingVertical: 12,
+                paddingBottom: showEmoji ? 350 : 80
+              }}
+              ListHeaderComponent={renderListHeader()}
+              inverted={false}
+              onEndReachedThreshold={0.1}
+            />
+          )}
+          
+          {/* Typing indicator */}
+          {typingUsers.length > 0 && (
+            <View className="flex-row items-center px-4 py-2">
+              <View className="flex-row justify-center items-center bg-purple-100 px-4 py-2 rounded-full">
+                <View className="flex-row items-center mr-2">
+                  <View className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ marginRight: 2 }} />
+                  <View className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ marginRight: 2, animationDelay: '0.2s' }} />
+                  <View className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                </View>
+                <Text className="text-purple-700 text-sm font-medium">
+                  {otherParticipant?.username || 'User'} is typing...
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+        
+        {/* Attachment options overlay */}
+        {renderAttachmentOptions()}
+        
+        {/* Message input */}
+        <View className="bg-white border-t border-gray-200 px-4 py-3">
+          {/* Selected media preview */}
+          {renderSelectedMediaPreview()}
+          
+          <View className="flex-row items-center">
+            <TouchableOpacity 
+              className="pr-3" 
+              onPress={toggleEmojiPanel}
+            >
+              <MaterialCommunityIcons 
+                name={showEmoji ? "keyboard-outline" : "emoticon-outline"} 
+                size={24} 
+                color="#9333EA" 
+              />
+            </TouchableOpacity>
+            
+            <View className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex-row items-center">
+              <TextInput
+                className="flex-1 text-base text-gray-800"
+                placeholder="Type a message..."
+                placeholderTextColor="#9CA3AF"
+                value={messageText}
+                onChangeText={setMessageText}
+                multiline
+                maxLength={500}
               />
               
-              {/* Typing indicator */}
-              {isTyping && (
-                <View className="pl-5 pb-1">
-                  <Text className="text-gray-500 text-xs italic">You are typing...</Text>
-                </View>
-              )}
+              <TouchableOpacity 
+                className="ml-2"
+                onPress={() => {
+                  setShowEmoji(false);
+                  setShowAttachmentOptions(!showAttachmentOptions);
+                }}
+              >
+                <Feather name="paperclip" size={20} color="#9333EA" />
+              </TouchableOpacity>
               
-              {/* Message Input with enhanced styling */}
-              <View className="px-3 pb-4 pt-2 bg-white border-t border-gray-200" style={{
-                shadowColor: '#9333EA',
-                shadowOffset: { width: 0, height: -3 },
-                shadowOpacity: 0.05,
-                shadowRadius: 4,
-                elevation: 5,
-              }}>
-                <View className="flex-row items-center bg-gray-100 rounded-2xl px-3 py-2">
-                  <TouchableOpacity className="mr-2">
-                    <Feather name="smile" size={22} color="#9333EA" />
+              <TouchableOpacity 
+                className="ml-2"
+                onPress={handleTakePhoto}
+              >
+                <Feather name="camera" size={20} color="#9333EA" />
+              </TouchableOpacity>
+            </View>
+            
+            <TouchableOpacity 
+              className="bg-purple-600 w-10 h-10 rounded-full items-center justify-center ml-2"
+              onPress={handleSendMessage}
+              disabled={!messageText.trim() && selectedMedia.length === 0}
+              style={{
+                opacity: (messageText.trim() || selectedMedia.length > 0) ? 1 : 0.5
+              }}
+            >
+              <Feather name="send" size={18} color="white" />
+            </TouchableOpacity>
+          </View>
+          
+          {/* Simple Emoji Panel */}
+          {showEmoji && (
+            <View className="bg-white p-2 rounded-lg mt-2 border border-gray-200">
+              <Text className="text-xs text-gray-500 mb-2 px-2">Quick Emojis</Text>
+              <View className="flex-row flex-wrap">
+                {["😊", "👍", "❤️", "😂", "🙏", "🎉", "👏", "🐶", "🐱", "🐾"].map((emoji) => (
+                  <TouchableOpacity 
+                    key={emoji} 
+                    className="p-2 m-1 bg-gray-100 rounded-md"
+                    onPress={() => setMessageText(prev => prev + emoji)}
+                  >
+                    <Text className="text-xl">{emoji}</Text>
                   </TouchableOpacity>
-                  
-                  <TextInput
-                    className="flex-1 text-gray-800 min-h-[36px] max-h-[80px]"
-                    placeholder="Type a message..."
-                    value={messageText}
-                    onChangeText={setMessageText}
-                    multiline
-                    style={{ fontSize: 16 }}
-                    placeholderTextColor="#9CA3AF"
-                  />
-                  
-                  <View className="flex-row items-center">
-                    <TouchableOpacity className="mr-3 p-1">
-                      <Feather name="image" size={22} color="#9333EA" />
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      className={`${messageText.trim() ? 'bg-purple-600' : 'bg-gray-300'} rounded-full p-2 items-center justify-center`}
-                      onPress={handleSendMessage}
-                      disabled={!messageText.trim()}
-                      style={messageText.trim() ? {
-                        shadowColor: '#9333EA',
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: 0.3,
-                        shadowRadius: 2,
-                        elevation: 3,
-                      } : {}}
-                    >
-                      <Ionicons name="send" size={18} color="#ffffff" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                ))}
               </View>
-            </>
+              <View className="flex-row justify-between mt-2 px-2">
+                <Text className="text-xs text-gray-500">More options coming soon!</Text>
+                <TouchableOpacity onPress={toggleEmojiPanel}>
+                  <Text className="text-xs text-purple-600">Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
+};
+
+// Helper function to format last active time
+const formatLastActive = (lastActive: string) => {
+  if (!lastActive) return '';
+  
+  const lastActiveDate = new Date(lastActive);
+  const now = new Date();
+  const diffMs = now.getTime() - lastActiveDate.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  
+  return lastActiveDate.toLocaleDateString();
 };
 
 export default ChatDetail; 

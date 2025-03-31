@@ -36,12 +36,141 @@ const getMongoUserId = async (req, res, next) => {
     
     // Add MongoDB user ID to req object
     req.mongoUserId = mongoUser._id.toString();
+    // Also store PostgreSQL user for reference
+    req.pgUser = pgUser;
     console.log('Successfully mapped PostgreSQL ID to MongoDB ID:', req.mongoUserId);
     next();
   } catch (error) {
     console.error('Error mapping user IDs:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
+};
+
+/**
+ * Utility function to transform chat data for frontend consumption
+ */
+const transformChatForFrontend = async (chat, currentMongoUserId) => {
+  // Transform to plain object if it's a Mongoose document
+  const chatObj = chat.toObject ? chat.toObject() : { ...chat };
+  
+  // Transform participants to include PostgreSQL IDs and full user data
+  const transformedParticipants = await Promise.all(
+    chatObj.participants.map(async (participant) => {
+      try {
+        // Find MongoDB user first
+        const mongoUser = await MongoUser.findById(participant._id);
+        if (!mongoUser) {
+          console.log(`MongoDB user not found for ID: ${participant._id}`);
+          return participant;
+        }
+        
+        // Get PostgreSQL user details using email from MongoDB user
+        const pgUser = await User.findOne({
+          where: { email: mongoUser.email }
+        });
+        
+        if (!pgUser) {
+          console.log(`PostgreSQL user not found for email: ${mongoUser.email}`);
+          return {
+            ...participant,
+            postgresId: null,
+          };
+        }
+        
+        // Return enhanced participant with PostgreSQL data
+        return {
+          ...participant,
+          postgresId: pgUser.id,
+          username: pgUser.username || participant.username,
+          firstName: pgUser.firstName,
+          lastName: pgUser.lastName,
+          fullName: `${pgUser.firstName || ''} ${pgUser.lastName || ''}`.trim() || null,
+          avatar: pgUser.avatar || null,
+          bio: pgUser.bio || null
+        };
+      } catch (error) {
+        console.error('Error transforming participant:', error);
+        return participant;
+      }
+    })
+  );
+  
+  // Transform lastMessage to be more frontend-friendly
+  let transformedLastMessage = null;
+  if (chatObj.lastMessage) {
+    if (typeof chatObj.lastMessage === 'string') {
+      // If it's just an ID reference, get the actual message
+      const message = await Message.findById(chatObj.lastMessage)
+        .populate('sender', 'username avatar');
+      
+      if (message) {
+        transformedLastMessage = {
+          _id: message._id,
+          content: message.content,
+          sender: message.sender,
+          createdAt: message.createdAt
+        };
+      }
+    } else {
+      // It's already a populated message object
+      transformedLastMessage = {
+        _id: chatObj.lastMessage._id,
+        content: chatObj.lastMessage.content,
+        sender: chatObj.lastMessage.sender,
+        createdAt: chatObj.lastMessage.createdAt
+      };
+    }
+  }
+  
+  // Calculate unread count for current user
+  const unreadCount = chatObj.unreadCounts?.find(
+    count => count.user.toString() === currentMongoUserId
+  )?.count || 0;
+  
+  return {
+    ...chatObj,
+    participants: transformedParticipants,
+    lastMessage: transformedLastMessage,
+    unreadCount
+  };
+};
+
+/**
+ * Utility function to transform message data for frontend consumption
+ */
+const transformMessageForFrontend = async (message) => {
+  // Transform to plain object if it's a Mongoose document
+  const msgObj = message.toObject ? message.toObject() : { ...message };
+  
+  // Add PostgreSQL ID to sender if possible
+  if (msgObj.sender && msgObj.sender._id) {
+    try {
+      const mongoUser = await MongoUser.findById(msgObj.sender._id);
+      if (mongoUser) {
+        const pgUser = await User.findOne({
+          where: { email: mongoUser.email }
+        });
+        
+        if (pgUser) {
+          // Enhance sender with full PostgreSQL user data
+          msgObj.sender = {
+            ...msgObj.sender,
+            postgresId: pgUser.id,
+            username: pgUser.username || msgObj.sender.username,
+            firstName: pgUser.firstName,
+            lastName: pgUser.lastName,
+            fullName: `${pgUser.firstName || ''} ${pgUser.lastName || ''}`.trim() || null,
+            avatar: pgUser.avatar || null,
+            bio: pgUser.bio || null
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Error transforming message sender:', error);
+    }
+  }
+  
+  return msgObj;
 };
 
 /**
@@ -55,17 +184,22 @@ router.get('/', authenticate, getMongoUserId, async (req, res) => {
       participants: req.mongoUserId,
       deletedFor: { $ne: req.mongoUserId }
     })
-    .populate('participants', 'username avatar onlineStatus lastActive')
+    .populate('participants', 'username avatar onlineStatus lastActive email')
     .populate({
       path: 'lastMessage',
       populate: {
         path: 'sender',
-        select: 'username avatar'
+        select: 'username avatar email'
       }
     })
     .sort({ updatedAt: -1 });
     
-    res.json({ success: true, chats });
+    // Transform chats for frontend consumption
+    const transformedChats = await Promise.all(
+      chats.map(chat => transformChatForFrontend(chat, req.mongoUserId))
+    );
+    
+    res.json({ success: true, chats: transformedChats });
   } catch (error) {
     console.error('Error getting chats:', error);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -89,11 +223,42 @@ router.post('/', authenticate, getMongoUserId, async (req, res) => {
       });
     }
     
+    console.log('Getting MongoDB user for PostgreSQL participant ID:', participantId);
+    
+    // First get the PostgreSQL user to get email
+    const participantPgUser = await User.findByPk(participantId);
+    
+    if (!participantPgUser) {
+      console.error('PostgreSQL participant not found with ID:', participantId);
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Participant not found' 
+      });
+    }
+    
+    // Find MongoDB user by email
+    const participantMongoUser = await MongoUser.findOne({ email: participantPgUser.email });
+    
+    if (!participantMongoUser) {
+      console.error('MongoDB participant not found for email:', participantPgUser.email);
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Participant not found in chat system. They may need to login first.' 
+      });
+    }
+    
+    const participantMongoId = participantMongoUser._id.toString();
+    console.log('Successfully mapped participant PostgreSQL ID to MongoDB ID:', participantMongoId);
+    
     // For direct chats, check if one already exists
     if (type === 'direct') {
+      // Generate unique identifier for this participant pair
+      const uniqueId = [req.mongoUserId, participantMongoId].sort().join('_');
+      console.log('Generated unique pair identifier:', uniqueId);
+      
       const existingChat = await Chat.findOne({
         type: 'direct',
-        participants: { $all: [req.mongoUserId, participantId] }
+        uniquePairIdentifier: uniqueId
       })
       .populate('participants', 'username avatar onlineStatus lastActive');
       
@@ -107,10 +272,22 @@ router.post('/', authenticate, getMongoUserId, async (req, res) => {
       chatId: Date.now().toString(), // Simple ID generation
       type: type || 'direct',
       name: type === 'group' ? name : null,
-      participants: type === 'direct' ? [req.mongoUserId, participantId] : [req.mongoUserId, ...req.body.participants],
+      // Sort participant IDs for consistent order to prevent duplicate key issues
+      participants: type === 'direct' 
+        ? [req.mongoUserId, participantMongoId].sort() 
+        : [req.mongoUserId, ...req.body.participants].sort(),
+      // Also store PostgreSQL IDs for easy reference, maintaining same order as participants
+      postgresParticipantIds: type === 'direct' 
+        ? [req.user.id, participantId].sort() 
+        : [req.user.id, ...req.body.postgresParticipantIds].sort(),
       admins: type === 'group' ? [req.mongoUserId] : [],
       unreadCounts: []
     });
+    
+    // Set uniquePairIdentifier for direct chats to ensure uniqueness
+    if (type === 'direct') {
+      newChat.uniquePairIdentifier = [req.mongoUserId, participantMongoId].sort().join('_');
+    }
     
     // Initialize unread counts for all participants
     newChat.participants.forEach(participant => {
@@ -195,12 +372,12 @@ router.get('/:chatId/messages', authenticate, getMongoUserId, async (req, res) =
     }
     
     const messages = await Message.find(query)
-      .populate('sender', 'username avatar')
+      .populate('sender', 'username avatar email')
       .populate({
         path: 'replyTo',
         populate: {
           path: 'sender',
-          select: 'username avatar'
+          select: 'username avatar email'
         }
       })
       .sort({ createdAt: -1 })
@@ -212,7 +389,12 @@ router.get('/:chatId/messages', authenticate, getMongoUserId, async (req, res) =
       { $set: { 'unreadCounts.$.count': 0 } }
     );
     
-    res.json({ success: true, messages: messages.reverse() });
+    // Transform messages for frontend consumption
+    const transformedMessages = await Promise.all(
+      messages.map(message => transformMessageForFrontend(message))
+    );
+    
+    res.json({ success: true, messages: transformedMessages.reverse() });
   } catch (error) {
     console.error('Error getting messages:', error);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -275,16 +457,19 @@ router.post('/:chatId/messages', authenticate, getMongoUserId, async (req, res) 
     
     // Populate sender info for the response
     const populatedMessage = await Message.findById(newMessage._id)
-      .populate('sender', 'username avatar')
+      .populate('sender', 'username avatar email')
       .populate({
         path: 'replyTo',
         populate: {
           path: 'sender',
-          select: 'username avatar'
+          select: 'username avatar email'
         }
       });
     
-    res.status(201).json({ success: true, message: populatedMessage });
+    // Transform the message for frontend consumption
+    const transformedMessage = await transformMessageForFrontend(populatedMessage);
+    
+    res.status(201).json({ success: true, message: transformedMessage });
   } catch (error) {
     console.error('Error sending message:', error);
     res.status(500).json({ success: false, message: 'Server error' });

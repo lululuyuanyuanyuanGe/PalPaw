@@ -4,6 +4,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import path from 'path';
 import http from 'http';
+import mongoose from 'mongoose';
 
 import { testConnection } from './config/postgres.js'; // PostgreSQL connection
 import { connectMongoDB } from './config/mongoDB.js'; // MongoDB connection
@@ -39,6 +40,38 @@ const app = express();
 
     // Connect to MongoDB for chat functionality
     await connectMongoDB();
+
+    // After MongoDB connection is established
+    mongoose.connection.on('connected', async () => {
+      console.log('Connected to MongoDB database');
+      
+      // Check if we're in development mode
+      if (process.env.NODE_ENV !== 'production') {
+        try {
+          console.log('Development mode detected - checking database setup');
+          
+          // Check if chats collection exists and has documents
+          const collections = await mongoose.connection.db.listCollections({ name: 'chats' }).toArray();
+          
+          if (collections.length > 0) {
+            console.log('Dropping chats collection to rebuild with new schema...');
+            try {
+              // Drop the chats collection to ensure fresh schema
+              await mongoose.connection.db.dropCollection('chats');
+              console.log('Successfully dropped chats collection');
+            } catch (err) {
+              console.log('No chats collection to drop or error dropping:', err.message);
+            }
+          } else {
+            console.log('No chats collection found, will be created fresh');
+          }
+          
+          console.log('Database reset for development complete');
+        } catch (error) {
+          console.error('Error during development database setup:', error);
+        }
+      }
+    });
   } catch (error) {
     console.error('Database setup failed:', error);
   }
@@ -78,6 +111,11 @@ app.use((req, res, next) => {
 const uploadsPath = path.join(process.cwd(), 'uploads');
 console.log('Serving uploads from:', uploadsPath);
 app.use('/uploads', express.static(uploadsPath));
+
+// Serve static files from messages directory for chat media
+const messagesPath = path.join(process.cwd(), 'messages');
+console.log('Serving chat media from:', messagesPath);
+app.use('/messages', express.static(messagesPath));
 
 // Routes
 console.log('Registered routes:');

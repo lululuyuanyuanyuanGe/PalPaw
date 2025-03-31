@@ -431,10 +431,13 @@ const UserProfileScreen = () => {
                               {/* Message Button - Aesthetic Version */}
                               <TouchableOpacity 
                                 className="rounded-full px-3 py-2 mr-2 bg-purple-700 shadow-md border border-purple-400"
-                                onPress={() => router.push({
-                                  pathname: "/(root)/(chats)",
-                                  params: { userId: profileUser.id }
-                                })}
+                                onPress={() => {
+                                  // Navigate to chats screen with userId parameter
+                                  router.push({
+                                    pathname: "/(root)/(chats)",
+                                    params: { userId: profileUser.id }
+                                  });
+                                }}
                               >
                                 <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
                               </TouchableOpacity>

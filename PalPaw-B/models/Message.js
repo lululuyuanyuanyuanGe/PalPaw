@@ -9,11 +9,18 @@ const MessageSchema = new Schema({
     required: true
   },
   
-  // Message sender
+  // Message sender - MongoDB user reference
   sender: {
     type: Schema.Types.ObjectId,
     ref: 'MongoUser',
     required: true
+  },
+  
+  // PostgreSQL sender ID for cross-reference
+  senderPostgresId: {
+    type: String,
+    required: true,
+    index: true
   },
   
   // Text content
@@ -29,13 +36,14 @@ const MessageSchema = new Schema({
       enum: ['image', 'video', 'audio', 'file'],
     },
     url: String,
+    originalUrl: String,
     thumbnailUrl: String,
     name: String,
     size: Number,
     mimeType: String
   }],
   
-  // For tracking who has read the message
+  // For tracking who has read the message (MongoDB user IDs)
   readBy: [{
     type: Schema.Types.ObjectId,
     ref: 'MongoUser'
@@ -80,6 +88,7 @@ const MessageSchema = new Schema({
 // Create indexes for efficient queries
 MessageSchema.index({ chat: 1, createdAt: -1 });
 MessageSchema.index({ sender: 1 });
+MessageSchema.index({ senderPostgresId: 1 });
 MessageSchema.index({ readBy: 1 });
 
 const Message = mongoose.model('Message', MessageSchema);

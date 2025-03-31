@@ -2,6 +2,11 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { Chat, Message, MongoUser, User } from './models/index.js';
 
+// Import models to ensure schema definitions are loaded
+import './models/Chat.js';
+import './models/Message.js';
+import './models/MongoUser.js';
+
 /**
  * Sets up the Socket.io server for real-time chat
  * @param {Object} server - HTTP server instance
@@ -73,13 +78,8 @@ function setupSocketServer(server) {
           console.log('⚠️ SocketServer: MongoDB user not found, creating new user for:', pgUser.email);
           // Create MongoDB user if not exists
           mongoUser = new MongoUser({
-            username: pgUser.username,
+            postgresId: pgUser.id,
             email: pgUser.email,
-            password: 'SOCKET_AUTH_USER', // This won't be used for auth
-            firstName: pgUser.firstName || '',
-            lastName: pgUser.lastName || '',
-            avatar: pgUser.avatar || '',
-            bio: pgUser.bio || '',
             onlineStatus: 'offline',
             lastActive: new Date()
           });
@@ -188,6 +188,41 @@ function setupSocketServer(server) {
       console.error('🔍 SocketServer: Error stack:', error.stack);
     }
     
+    // Handle explicit chat room joining
+    socket.on('join_chat', async (data) => {
+      const { chatId } = data;
+      console.log(`📢 SocketServer: User ${userId} requesting to join room chat:${chatId}`);
+      
+      if (!chatId) {
+        console.error('❌ SocketServer: No chat ID provided for join_chat event');
+        return;
+      }
+      
+      try {
+        // Verify user is part of this chat
+        const chat = await Chat.findById(chatId);
+        if (!chat || !chat.participants.includes(userId)) {
+          console.error(`❌ SocketServer: User ${userId} is not authorized to join chat ${chatId}`);
+          socket.emit('error', { message: 'Not authorized to join this chat' });
+          return;
+        }
+        
+        const roomName = `chat:${chatId}`;
+        socket.join(roomName);
+        console.log(`✅ SocketServer: User ${userId} explicitly joined room ${roomName}`);
+        
+        // Emit a confirmation back to the client
+        socket.emit('joined_chat', { 
+          chatId, 
+          success: true,
+          message: `Successfully joined chat ${chatId}`
+        });
+      } catch (error) {
+        console.error(`❌ SocketServer: Error joining chat ${chatId}:`, error);
+        socket.emit('error', { message: 'Failed to join chat room' });
+      }
+    });
+    
     // Handle sending messages
     socket.on('send_message', async (data) => {
       console.log(`📨 SocketServer: Message received from ${userId} for chat ${data.chatId}`);
@@ -203,13 +238,98 @@ function setupSocketServer(server) {
           return;
         }
         
-        // Create new message
+        // Process attachments if any (save files to disk)
+        let processedAttachments = [];
+        if (attachments && attachments.length > 0) {
+          console.log(`🖼️ SocketServer: Processing ${attachments.length} attachments`);
+          
+          // Import required utils
+          const { saveBase64FileForChat, processLocalFileForChat, getChatMediaUrl } = await import('./utils/chatMediaUtils.js');
+          
+          // Process each attachment
+          for (const attachment of attachments) {
+            try {
+              console.log(`🔍 SocketServer: Processing attachment of type ${attachment.type}`);
+              
+              // Check if this is a file:// URI from mobile
+              if (attachment.url && (attachment.url.startsWith('file://') || 
+                                     attachment.url.startsWith('content://'))) {
+                // For mobile file URIs, client should provide the entire file content as base64 in a data field
+                if (attachment.data) {
+                  // File content provided in base64, save it
+                  console.log(`💾 SocketServer: Saving base64 file data from mobile URI`);
+                  const fileInfo = await saveBase64FileForChat(
+                    attachment.data, 
+                    chatId, 
+                    attachment.name || `file-${Date.now()}`, 
+                    attachment.mimeType || 'application/octet-stream'
+                  );
+                  
+                  // Add processed attachment with server URL
+                  processedAttachments.push({
+                    type: attachment.type,
+                    url: fileInfo.url,
+                    name: attachment.name || fileInfo.filename,
+                    size: fileInfo.size,
+                    mimeType: attachment.mimeType
+                  });
+                  
+                  console.log(`✅ SocketServer: File saved to ${fileInfo.url}`);
+                } else {
+                  console.warn(`⚠️ SocketServer: Mobile file URI provided without file data, using original URI: ${attachment.url.substring(0, 50)}...`);
+                  // Just pass through the attachment as-is, client will need to handle display
+                  processedAttachments.push(attachment);
+                }
+              } 
+              // Check if it's a base64 data URI
+              else if (attachment.data && attachment.data.startsWith('data:')) {
+                console.log(`💾 SocketServer: Saving base64 data URI`);
+                const fileInfo = await saveBase64FileForChat(
+                  attachment.data,
+                  chatId,
+                  attachment.name || `file-${Date.now()}`,
+                  attachment.mimeType || attachment.data.split(';')[0].split(':')[1]
+                );
+                
+                // Add processed attachment with server URL
+                processedAttachments.push({
+                  type: attachment.type,
+                  url: fileInfo.url,
+                  name: attachment.name || fileInfo.filename,
+                  size: fileInfo.size,
+                  mimeType: attachment.mimeType || attachment.data.split(';')[0].split(':')[1]
+                });
+                
+                console.log(`✅ SocketServer: File saved to ${fileInfo.url}`);
+              }
+              // If it's already a server URL, keep it as is
+              else if (attachment.url && (attachment.url.startsWith('/') || 
+                                        attachment.url.startsWith('http'))) {
+                console.log(`📝 SocketServer: Using existing URL: ${attachment.url}`);
+                processedAttachments.push(attachment);
+              }
+              // For other cases, use the attachment as-is
+              else {
+                console.log(`📝 SocketServer: Using attachment as-is: ${JSON.stringify(attachment)}`);
+                processedAttachments.push(attachment);
+              }
+            } catch (attachError) {
+              console.error(`❌ SocketServer: Error processing attachment:`, attachError);
+              // Continue with other attachments even if one fails
+            }
+          }
+          
+          console.log(`✅ SocketServer: Processed ${processedAttachments.length} attachments`);
+        }
+        
+        // Create new message with processed attachments
         console.log(`📝 SocketServer: Creating new message in chat ${chatId}`);
         const newMessage = new Message({
           chat: chatId,
           sender: userId,
+          senderPostgresId: socket.pgUserId,
           content,
-          attachments: attachments || [],
+          attachments: processedAttachments,
           replyTo,
           status: 'sent',
           readBy: [userId] // Sender has read their own message
@@ -235,7 +355,25 @@ function setupSocketServer(server) {
         // Populate sender info for the response
         console.log(`🔍 SocketServer: Populating sender info for message ${newMessage._id}`);
         const populatedMessage = await Message.findById(newMessage._id)
-          .populate('sender', 'username avatar');
+          .populate('sender', 'username avatar postgresId');
+        
+        // Ensure we have the PostgreSQL user data for avatar
+        const pgUser = await User.findByPk(socket.pgUserId);
+        if (pgUser && populatedMessage.sender) {
+          // Add PostgreSQL user data to the message before emitting
+          populatedMessage.sender.postgresId = socket.pgUserId;
+          populatedMessage.sender.username = pgUser.username || populatedMessage.sender.username;
+          populatedMessage.sender.avatar = pgUser.avatar || null;
+          populatedMessage.sender.firstName = pgUser.firstName || null;
+          populatedMessage.sender.lastName = pgUser.lastName || null; 
+          populatedMessage.sender.fullName = `${pgUser.firstName || ''} ${pgUser.lastName || ''}`.trim() || null;
+          
+          console.log('🖼️ SocketServer: PostgreSQL user info for avatar:', {
+            id: pgUser.id,
+            avatar: pgUser.avatar,
+            username: pgUser.username
+          });
+        }
         
         // Emit to all users in the chat room
         console.log(`📡 SocketServer: Broadcasting message to room chat:${chatId}`);

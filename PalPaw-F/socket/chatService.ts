@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 
 // Define types for message and events
 interface Message {
@@ -7,8 +8,13 @@ interface Message {
   chat: string;
   sender: {
     _id: string;
+    postgresId?: string;
     username: string;
     avatar?: string;
+    firstName?: string;
+    lastName?: string;
+    fullName?: string;
+    bio?: string;
   };
   content: string;
   attachments?: any[];
@@ -16,6 +22,16 @@ interface Message {
   readBy: string[];
   status: 'sent' | 'delivered' | 'read';
   replyTo?: string;
+}
+
+// Define MediaAttachment type
+interface MediaAttachment {
+  type: string;
+  url: string;
+  name?: string;
+  size: number;
+  mimeType: string;
+  data?: string; // Base64 data
 }
 
 interface UserStatusData {
@@ -42,6 +58,72 @@ interface Listeners {
   onUserStatusChange?: (userId: string, status: string) => void;
   [key: string]: ((...args: any[]) => void) | undefined;
 }
+
+/**
+ * Converts a file:// URI to base64 encoded data
+ * @param fileUri Local file URI to convert
+ */
+const fileToBase64 = async (fileUri: string): Promise<string | null> => {
+  try {
+    // Only process file:// URIs, which are local files
+    if (!fileUri.startsWith('file://')) {
+      console.log('ChatService: Not a file URI, skipping base64 conversion');
+      return null;
+    }
+
+    // Read the file as base64
+    console.log(`ChatService: Reading file as base64: ${fileUri}`);
+    const base64 = await FileSystem.readAsStringAsync(fileUri, {
+      encoding: FileSystem.EncodingType.Base64
+    });
+
+    // Return base64 data
+    return base64;
+  } catch (error) {
+    console.error('Error converting file to base64:', error);
+    return null;
+  }
+};
+
+/**
+ * Prepares attachments for sending to server by adding base64 data for local files
+ * @param attachments Array of media attachments
+ */
+const prepareAttachmentsForSending = async (attachments: MediaAttachment[]): Promise<MediaAttachment[]> => {
+  if (!attachments || attachments.length === 0) {
+    return [];
+  }
+
+  console.log(`ChatService: Preparing ${attachments.length} attachments for sending`);
+  
+  const preparedAttachments = await Promise.all(
+    attachments.map(async (attachment) => {
+      // Skip if not a local file or already has base64 data
+      if (!attachment.url.startsWith('file://') || attachment.data) {
+        return attachment;
+      }
+
+      try {
+        const base64Data = await fileToBase64(attachment.url);
+        if (base64Data) {
+          // Return a new object with all existing properties plus the base64 data
+          return {
+            ...attachment,
+            data: base64Data
+          };
+        }
+      } catch (error) {
+        console.error(`ChatService: Error processing attachment ${attachment.url}:`, error);
+      }
+
+      // If conversion fails, return the original attachment
+      return attachment;
+    })
+  );
+
+  console.log(`ChatService: Finished preparing attachments, ${preparedAttachments.length} prepared`);
+  return preparedAttachments;
+};
 
 class ChatService {
   private socket: Socket | null = null;
@@ -204,7 +286,12 @@ class ChatService {
     this.socket?.on('new_message', (message) => {
       console.log('📨 ChatService: Received new message:', { 
         chatId: message.chat,
-        senderId: message.sender?._id || message.sender,
+        messageId: message._id,
+        senderId: message.sender?._id || 'unknown',
+        senderUsername: message.sender?.username || 'unknown',
+        senderPostgresId: message.sender?.postgresId || 'unknown',
+        hasAvatar: !!message.sender?.avatar,
+        avatarUrl: message.sender?.avatar?.substring(0, 30) + (message.sender?.avatar?.length > 30 ? '...' : ''),
         content: message.content.substring(0, 20) + (message.content.length > 20 ? '...' : '')
       });
       
@@ -217,9 +304,38 @@ class ChatService {
       this.statusListeners.forEach(listener => listener(data));
     });
     
+    // Handle typing indicators
+    this.socket?.on('typing', (data) => {
+      console.log('✏️ ChatService: User typing:', data);
+      if (this.listeners.onTyping) {
+        this.listeners.onTyping(data.userId, data.chatId);
+      }
+    });
+    
+    // Handle stop typing
+    this.socket?.on('stop_typing', (data) => {
+      console.log('✏️ ChatService: User stopped typing:', data);
+      if (this.listeners.onStopTyping) {
+        this.listeners.onStopTyping(data.userId, data.chatId);
+      }
+    });
+    
+    // Handle messages read
+    this.socket?.on('messages_read', (data) => {
+      console.log('👁️ ChatService: Messages marked as read:', data);
+      if (this.listeners.onMessagesRead) {
+        this.listeners.onMessagesRead(data.userId, data.chatId, data.messageId);
+      }
+    });
+    
     // Handle server errors
     this.socket?.on('error', (error) => {
       console.error('❌ ChatService: Server error:', error);
+    });
+    
+    // Handle joined chat confirmation
+    this.socket?.on('joined_chat', (data) => {
+      console.log('🔗 ChatService: Joined chat confirmation:', data);
     });
     
     // Disconnection
@@ -239,7 +355,7 @@ class ChatService {
   /**
    * Send a message to a chat
    */
-  public sendMessage(chatId: string, content: string, attachments: any[] = [], replyTo?: string): void {
+  public async sendMessage(chatId: string, content: string, attachments: MediaAttachment[] = [], replyTo?: string): Promise<void> {
     console.log('📤 ChatService: Sending message to chat:', chatId);
     
     if (!this.socket?.connected) {
@@ -248,20 +364,47 @@ class ChatService {
       return;
     }
     
-    const messageData = {
-      chatId,
-      content,
-      attachments,
-      replyTo
-    };
-    
-    this.socket.emit('send_message', messageData, (response: any) => {
-      if (response && response.error) {
-        console.error('❌ ChatService: Error sending message:', response.error);
-      } else {
-        console.log('✅ ChatService: Message sent successfully');
-      }
-    });
+    try {
+      // Log what the client is sending
+      console.log(`ChatService: Attachments before processing:`, attachments.map(a => ({
+        type: a.type,
+        url: a.url.substring(0, 30) + (a.url.length > 30 ? '...' : ''),
+        name: a.name,
+        size: a.size,
+        mimeType: a.mimeType,
+        hasData: !!a.data
+      })));
+      
+      // Process attachments to include base64 data for local files
+      const processedAttachments = await prepareAttachmentsForSending(attachments);
+      
+      console.log(`ChatService: Attachments after processing:`, processedAttachments.map(a => ({
+        type: a.type,
+        url: a.url.substring(0, 30) + (a.url.length > 30 ? '...' : ''),
+        name: a.name,
+        size: a.size,
+        mimeType: a.mimeType,
+        hasData: !!a.data,
+        dataLength: a.data ? `${a.data.length} chars` : 'none'
+      })));
+      
+      const messageData = {
+        chatId,
+        content,
+        attachments: processedAttachments,
+        replyTo
+      };
+      
+      this.socket.emit('send_message', messageData, (response: any) => {
+        if (response && response.error) {
+          console.error('❌ ChatService: Error sending message:', response.error);
+        } else {
+          console.log('✅ ChatService: Message sent successfully');
+        }
+      });
+    } catch (error) {
+      console.error('❌ ChatService: Error preparing attachments:', error);
+    }
   }
   
   /**
@@ -356,7 +499,14 @@ class ChatService {
       return;
     }
     
-    this.socket.emit('typing', { chatId, isTyping });
+    // Use the correct event name as expected by the server
+    if (isTyping) {
+      this.socket.emit('typing', { chatId });
+      console.log(`📤 ChatService: Emitted typing event for chat ${chatId}`);
+    } else {
+      this.socket.emit('stop_typing', { chatId });
+      console.log(`📤 ChatService: Emitted stop_typing event for chat ${chatId}`);
+    }
   }
   
   /**
