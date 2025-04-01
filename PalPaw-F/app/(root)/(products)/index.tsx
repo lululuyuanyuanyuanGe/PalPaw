@@ -279,7 +279,7 @@ const ProductDetail = () => {
     }
   };
   
-  // Updated handler with more debugging
+  // Updated handler with proper error handling and message loading
   const handleContactSeller = async () => {
     if (!authState.isAuthenticated) {
       Alert.alert("Authentication Required", "Please login to contact sellers");
@@ -293,36 +293,46 @@ const ProductDetail = () => {
     
     try {
       // Show loading indicator
-      setLoading(false);
+      setLoading(true);
       
       console.log("Starting chat with seller:", product.userId);
-      console.log("Current auth state:", JSON.stringify({
-        isAuthenticated: authState.isAuthenticated,
-        userId: authState.user?.id
+      console.log("Seller data:", JSON.stringify({
+        username: product.sellerData.username,
+        avatar: product.sellerData.avatar,
+        id: product.userId
       }));
       
       // Create or get existing chat with the seller
       const chatId = await createChat(product.userId);
       console.log("Chat creation result:", chatId);
       
-      if (chatId) {
-        // Load messages for this chat
+      if (!chatId) {
+        throw new Error("Failed to create or retrieve chat ID");
+      }
+      
+      // Load messages for this chat - ensure this completes before navigation
+      try {
         console.log("Loading messages for chat:", chatId);
         await loadMessages(chatId);
-        
-        // Navigate to chat detail screen
-        console.log("Navigating to chat:", chatId);
-        router.push({
-          pathname: "/(root)/(chats)/chat/[id]",
-          params: { 
-            id: chatId, 
-            chatName: product.sellerData.username 
-          }
-        });
-      } else {
-        console.error("Failed to get valid chatId:", chatId);
-        Alert.alert("Error", "Could not start chat with seller");
+      } catch (msgError) {
+        console.error("Error loading messages, but continuing with navigation:", msgError);
+        // We'll continue even if messages don't load, as we can reload them in the chat screen
       }
+      
+      // Ensure we have the correct username and avatar
+      const sellerUsername = product.sellerData?.username || 'Seller';
+      const sellerAvatar = formatImageUrl(product.sellerData?.avatar);
+      
+      // Navigate to chat detail screen
+      console.log("Navigating to chat:", chatId, "with seller:", sellerUsername);
+      router.push({
+        pathname: "/(root)/(chats)/chat/[id]",
+        params: { 
+          id: chatId, 
+          chatName: sellerUsername,
+          avatar: sellerAvatar // Pass avatar URL as a param
+        }
+      });
     } catch (error) {
       console.error('Error starting chat:', error);
       Alert.alert("Error", "Failed to initiate chat with seller");
@@ -522,12 +532,15 @@ const ProductDetail = () => {
               </View>
             </TouchableOpacity>
             
-            <TouchableOpacity 
-              className="bg-purple-600 px-4 py-2 rounded-full"
-              onPress={handleContactSeller}
-            >
-              <Text className="text-white font-rubik-medium">Contact</Text>
-            </TouchableOpacity>
+            {/* Only show contact button if not the user's own product */}
+            {(!authState.isAuthenticated || product.userId !== authState.user?.id) && (
+              <TouchableOpacity 
+                className="bg-purple-600 px-4 py-2 rounded-full"
+                onPress={handleContactSeller}
+              >
+                <Text className="text-white font-rubik-medium">Contact</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 

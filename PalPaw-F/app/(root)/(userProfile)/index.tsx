@@ -8,7 +8,8 @@ import {
   StatusBar,
   SafeAreaView,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  Alert
 } from "react-native";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -24,7 +25,7 @@ import {
   ProfileTab
 } from "../(tabs)/(profile)/types";
 import { RenderItem } from '../(tabs)/(profile)/ProfileRenderer';
-import { useAuth, usePosts, useProducts, useUser } from "@/context";
+import { useAuth, usePosts, useProducts, useUser, useChat } from "@/context";
 import { formatImageUrl } from "@/utils/mediaUtils";
 import { ProductItem as ContextProductItem } from "@/context/ProductsContext";
 import { FontAwesome5 } from "@expo/vector-icons";
@@ -52,6 +53,7 @@ const UserProfileScreen = () => {
   
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [followLoading, setFollowLoading] = useState<boolean>(false);
+  const [messageLoading, setMessageLoading] = useState<boolean>(false);
   
   // Add a state to track initial data loading and prevent repeated fetches
   const [initialLoadComplete, setInitialLoadComplete] = useState<boolean>(false);
@@ -63,6 +65,9 @@ const UserProfileScreen = () => {
   
   // Use AuthContext for authentication status
   const { state: authState } = useAuth();
+  
+  // Use ChatContext for messaging
+  const { createChat, loadMessages } = useChat();
   
   // Use UserContext for other user data
   const {
@@ -313,6 +318,68 @@ const UserProfileScreen = () => {
     setShowFollowingModal(true);
   };
   
+  // Handle messaging the user - similar to handleContactSeller in product detail page
+  const handleContactUser = async () => {
+    if (!authState.isAuthenticated) {
+      Alert.alert("Authentication Required", "Please login to contact users");
+      return;
+    }
+    
+    if (!userState.otherUserProfile) {
+      Alert.alert("Error", "User information is not available");
+      return;
+    }
+    
+    try {
+      // Show loading indicator
+      setMessageLoading(true);
+      
+      console.log("Starting chat with user:", userId);
+      console.log("User data:", JSON.stringify({
+        username: userState.otherUserProfile.username,
+        avatar: userState.otherUserProfile.avatar,
+        id: userId
+      }));
+      
+      // Create or get existing chat with the user
+      const chatId = await createChat(userId);
+      console.log("Chat creation result:", chatId);
+      
+      if (!chatId) {
+        throw new Error("Failed to create or retrieve chat ID");
+      }
+      
+      // Load messages for this chat - ensure this completes before navigation
+      try {
+        console.log("Loading messages for chat:", chatId);
+        await loadMessages(chatId);
+      } catch (msgError) {
+        console.error("Error loading messages, but continuing with navigation:", msgError);
+        // We'll continue even if messages don't load, as we can reload them in the chat screen
+      }
+      
+      // Ensure we have the correct username and avatar
+      const username = userState.otherUserProfile.username || 'User';
+      const avatar = formatImageUrl(userState.otherUserProfile.avatar);
+      
+      // Navigate to chat detail screen
+      console.log("Navigating to chat:", chatId, "with user:", username);
+      router.push({
+        pathname: "/(root)/(chats)/chat/[id]",
+        params: { 
+          id: chatId, 
+          chatName: username,
+          avatar: avatar // Pass avatar URL as a param
+        }
+      });
+    } catch (error) {
+      console.error('Error starting chat:', error);
+      Alert.alert("Error", "Failed to initiate chat with user");
+    } finally {
+      setMessageLoading(false);
+    }
+  };
+  
   // Show loading state if profile is not loaded yet
   if (!userState.otherUserProfile && !refreshing) {
     return (
@@ -431,15 +498,14 @@ const UserProfileScreen = () => {
                               {/* Message Button - Aesthetic Version */}
                               <TouchableOpacity 
                                 className="rounded-full px-3 py-2 mr-2 bg-purple-700 shadow-md border border-purple-400"
-                                onPress={() => {
-                                  // Navigate to chats screen with userId parameter
-                                  router.push({
-                                    pathname: "/(root)/(chats)",
-                                    params: { userId: profileUser.id }
-                                  });
-                                }}
+                                onPress={handleContactUser}
+                                disabled={messageLoading}
                               >
-                                <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
+                                {messageLoading ? (
+                                  <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                  <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
+                                )}
                               </TouchableOpacity>
                               
                               {/* Follow/Unfollow button */}

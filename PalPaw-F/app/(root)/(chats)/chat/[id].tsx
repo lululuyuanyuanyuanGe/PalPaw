@@ -217,7 +217,7 @@ const VideoPreviewContext = createContext<{
 
 const ChatDetail: React.FC = () => {
   const router = useRouter();
-  const { id, chatName } = useLocalSearchParams();
+  const { id, chatName, avatar } = useLocalSearchParams();
   const { state: authState } = useAuth();
   const { state: chatState, sendMessage, markAsRead, setTyping, loadMessages, joinChatRoom } = useChat();
   
@@ -250,15 +250,24 @@ const ChatDetail: React.FC = () => {
   const otherParticipant = activeChat?.participants && Array.isArray(activeChat.participants) ? 
     activeChat.participants.find(p => p?.postgresId !== authState.user?.id) : undefined;
   
+  // Fallback participant info from navigation params if not available in the active chat
+  const fallbackParticipantAvatar = avatar ? { uri: formatImageUrl(avatar as string) } : null;
+  
   // For debugging
   useEffect(() => {
     console.log("ChatState:", JSON.stringify({
       isConnected: chatState?.isConnected,
       chatsArray: Array.isArray(chatState?.chats),
       chatsLength: chatState?.chats?.length,
-      messagesForChat: Boolean(chatState?.messages?.[currentChatId])
+      messagesForChat: Boolean(chatState?.messages?.[currentChatId]),
+      navigationParams: {
+        id: currentChatId,
+        chatName,
+        hasAvatar: !!avatar,
+        avatarUrl: avatar ? (avatar as string).substring(0, 30) + '...' : 'none'
+      }
     }));
-  }, [chatState]);
+  }, [chatState, currentChatId, chatName, avatar]);
   
   // Generate floating paws configuration on mount
   useEffect(() => {
@@ -1051,7 +1060,13 @@ const ChatDetail: React.FC = () => {
             <View className="flex-row items-center flex-1 ml-3">
               <View className="relative">
                 <Image
-                  source={otherParticipant?.avatar ? { uri: otherParticipant.avatar } : { uri: `https://robohash.org/user?set=set4` }}
+                  source={
+                    otherParticipant?.avatar 
+                      ? { uri: otherParticipant.avatar } 
+                      : fallbackParticipantAvatar 
+                        ? fallbackParticipantAvatar 
+                        : { uri: `https://robohash.org/${chatName || 'user'}?set=set4` }
+                  }
                   className="w-10 h-10 rounded-full"
                 />
                 {otherParticipant?.onlineStatus === 'online' && (
