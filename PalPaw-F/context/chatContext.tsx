@@ -68,7 +68,7 @@ export interface ChatState {
 
 interface ChatContextType {
   state: ChatState;
-  sendMessage: (chatId: string, content: string, attachments?: any[]) => void;
+  sendMessage: (chatId: string, content: string, attachments?: any[], replyTo?: string) => void;
   markAsRead: (chatId: string, messageId: string) => void;
   setTyping: (chatId: string, isTyping: boolean) => void;
   loadMessages: (chatId: string) => Promise<void>;
@@ -254,16 +254,6 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Find the chat that this message belongs to
     const chat = state.chats.find(c => c._id === message.chat);
     
-    if (chat) {
-      // Log all participants for debugging
-      console.log(`Chat ${chat._id} participants:`, chat.participants.map(p => ({
-        _id: p._id,
-        postgresId: p.postgresId,
-        username: p.username,
-        hasAvatar: !!p.avatar
-      })));
-    }
-    
     // Find the message sender in the chat participants using either MongoDB ID or Postgres ID
     let matchingParticipant = undefined;
     if (chat) {
@@ -291,102 +281,126 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Enhance the sender information with data from matching participant
     const enhancedSender = {
       _id: message.sender._id,
-      postgresId: message.sender.postgresId || message.senderPostgresId || message.sender._id,
-      username: message.sender.username || (matchingParticipant?.username) || 'User',
-      avatar: formatImageUrl(message.sender.avatar || (matchingParticipant?.avatar)),
-      firstName: message.sender.firstName || (matchingParticipant?.firstName) || '',
-      lastName: message.sender.lastName || (matchingParticipant?.lastName) || '',
-      fullName: message.sender.username || (matchingParticipant?.username) || 'User',
-      bio: message.sender.bio || (matchingParticipant?.bio) || '',
+      postgresId: matchingParticipant?.postgresId || message.sender.postgresId || message.sender._id,
+      username: matchingParticipant?.username || message.sender.username || 'User',
+      avatar: formatImageUrl(matchingParticipant?.avatar || message.sender.avatar),
+      firstName: matchingParticipant?.firstName || message.sender.firstName || '',
+      lastName: matchingParticipant?.lastName || message.sender.lastName || '',
+      fullName: matchingParticipant?.fullName || message.sender.fullName || `${matchingParticipant?.firstName || ''} ${matchingParticipant?.lastName || ''}`.trim() || matchingParticipant?.username || 'User',
+      bio: matchingParticipant?.bio || message.sender.bio || ''
     };
 
     // First transform the message to match our frontend structure
     const transformedMessage: Message = {
       ...message,
-      sender: enhancedSender
+      sender: enhancedSender,
+      attachments: message.attachments || []
     };
 
+    // Log the message being processed
+    console.log(`handleNewMessage: Processing message ID ${transformedMessage._id} (temp: ${transformedMessage._id.startsWith('temp-')}) for chat ${transformedMessage.chat}`);
+    console.log(`handleNewMessage: Sender details - mongoId: ${transformedMessage.sender._id}, pgId: ${transformedMessage.sender.postgresId}`);
+
     setState(prev => {
-      // Get existing messages for this chat
       const existingMessages = prev.messages[transformedMessage.chat] || [];
-      
-      // Check if this is a server-confirmed message for a temporary one we already have
-      const isDuplicate = existingMessages.some(existing => {
-        // If it's the same message ID, it's definitely a duplicate
-        if (existing._id === transformedMessage._id && !existing._id.startsWith('temp-')) {
-          return true;
-        }
+      let isReplacement = false;
+
+      // Fix: Check for temporary messages by comparing content and sender ID
+      // instead of relying on tempId
+      if (transformedMessage._id && !transformedMessage._id.startsWith('temp-')) {
+        // This is a server-confirmed message, look for temp message to replace
+        const tempMessage = existingMessages.find(existing => 
+          existing._id.startsWith('temp-') && 
+          existing.content === transformedMessage.content &&
+          (existing.sender.postgresId === transformedMessage.sender.postgresId ||
+           existing.sender._id === transformedMessage.sender._id)
+        );
         
-        // Check if it's a confirmed version of a temporary message
-        if (existing._id.startsWith('temp-')) {
-          // Check if content matches
-          const contentMatches = existing.content === transformedMessage.content;
-          
-          // Check if the sender is the same
-          const senderMatches = (
-            existing.sender.postgresId === transformedMessage.sender.postgresId ||
-            existing.sender._id === transformedMessage.sender._id
-          );
-          
-          // Check if timestamps are close (within 10 seconds)
-          const existingTime = new Date(existing.createdAt).getTime();
-          const newTime = new Date(transformedMessage.createdAt).getTime();
-          const timeWithinRange = Math.abs(existingTime - newTime) < 10000; // 10 seconds
-          
-          return contentMatches && senderMatches && timeWithinRange;
+        if (tempMessage) {
+          isReplacement = true;
+          console.log(`Replacement check: Found matching temporary message ${tempMessage._id} to replace with confirmed message ${transformedMessage._id}`);
         }
-        
-        return false;
-      });
-      
-      console.log(`Message ${transformedMessage._id} isDuplicate:`, isDuplicate);
-      
-      // If it's a duplicate, replace the temporary message with the confirmed one
-      let chatMessages = [];
-      if (isDuplicate) {
+      }
+
+      // Check for exact ID duplicates (if not a replacement)
+      const isDuplicate = !isReplacement && existingMessages.some(existing =>
+          existing._id === transformedMessage._id && !existing._id.startsWith('temp-')
+      );
+      if (!isReplacement && isDuplicate) {
+           console.log(`Duplicate check: Confirmed message ${transformedMessage._id} already exists by ID.`);
+      }
+
+
+      console.log(`Message ${transformedMessage._id} - isDuplicate (already exists by ID): ${isDuplicate}, isReplacement (will replace temp): ${isReplacement}`);
+
+      let chatMessages = existingMessages;
+
+      if (isReplacement) {
+        // Replace the temporary message with the confirmed one
         chatMessages = existingMessages.map(existing => {
-          // If this is the temporary message that matches our criteria, replace it
-          if (
-            existing._id.startsWith('temp-') && 
-            existing.content === transformedMessage.content && 
-            (existing.sender.postgresId === transformedMessage.sender.postgresId || 
-             existing.sender._id === transformedMessage.sender._id)
-          ) {
-            console.log(`Replacing temporary message ${existing._id} with confirmed message ${transformedMessage._id}`);
+          if (existing._id.startsWith('temp-') && 
+              existing.content === transformedMessage.content &&
+              (existing.sender.postgresId === transformedMessage.sender.postgresId ||
+               existing.sender._id === transformedMessage.sender._id)) {
             return transformedMessage;
           }
           return existing;
         });
-      } else {
-        // Not a duplicate, append the new message
+        console.log(`Replacing temporary message with confirmed message ${transformedMessage._id}`);
+      } else if (!existingMessages.some(msg => msg._id === transformedMessage._id)) {
+        // Not a duplicate, append new message
         chatMessages = [...existingMessages, transformedMessage];
         console.log(`Added new message ${transformedMessage._id} to chat ${transformedMessage.chat}`);
+      } else {
+        // Exact duplicate, do nothing
+        console.log(`Message ${transformedMessage._id} is an exact duplicate, not modifying message list.`);
       }
-      
-      // Update chats with the new message
+
+      // Ensure no *actual* duplicates exist by ID after map/append operations (safety net)
+      const finalChatMessages = chatMessages.filter((msg, index, self) =>
+         index === self.findIndex((m) => m._id === msg._id)
+      );
+      if (finalChatMessages.length !== chatMessages.length) {
+         console.warn("Duplicate messages detected and removed after processing.");
+      }
+
+
+      // Update the chats array (list of conversations)
       const updatedChats = prev.chats.map(chat => {
         if (chat._id === transformedMessage.chat) {
+          // Find the actual latest message in the potentially updated array
+          const latestMessageInChat = finalChatMessages.length > 0
+            ? finalChatMessages.reduce((latest, current) => new Date(current.createdAt) > new Date(latest.createdAt) ? current : latest)
+            : null;
+
           return {
             ...chat,
-            lastMessage: { 
-              content: transformedMessage.content,
-              timestamp: transformedMessage.createdAt
-            },
-            updatedAt: transformedMessage.createdAt,
-            unreadCount: prev.activeChat === transformedMessage.chat ? 0 : chat.unreadCount + 1
+            // Update lastMessage based on the actual latest message
+            lastMessage: latestMessageInChat ? {
+              content: latestMessageInChat.content,
+              timestamp: latestMessageInChat.createdAt
+            } : chat.lastMessage, // Keep old if chat becomes empty
+            updatedAt: latestMessageInChat ? latestMessageInChat.createdAt : chat.updatedAt,
+            // Increment unread count only if the message is truly new (not a replacement)
+            // and the chat is not currently active
+            unreadCount: (prev.activeChat === transformedMessage.chat || isReplacement) ? 0 : chat.unreadCount + 1
           };
         }
         return chat;
       });
-      
-      // Sort chats by most recent message
-      const sortedChats = [...updatedChats].sort((a, b) => 
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+
+      // Sort chats by the timestamp of their actual last message or update time
+      const sortedChats = [...updatedChats].sort((a, b) =>
+        new Date(b.lastMessage?.timestamp || b.updatedAt).getTime() - new Date(a.lastMessage?.timestamp || a.updatedAt).getTime()
       );
-      
+
+      // Return the new state
       return {
         ...prev,
-        messages: { ...prev.messages, [transformedMessage.chat]: chatMessages },
+        messages: {
+          ...prev.messages,
+          [transformedMessage.chat]: finalChatMessages // Use the filtered array
+        },
         chats: sortedChats
       };
     });
@@ -469,51 +483,63 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   // Send a message
-  const sendMessage = (chatId: string, content: string, attachments: any[] = []) => {
-    // Send via socket
-    chatService.sendMessage(chatId, content, attachments);
-    
-    // Get current user ID - use the correct property name from AuthContext's User interface
-    const currentUserId = authState.user?.id || 'me';
-    
-    // Make sure avatar URL is correctly formatted
-    const formattedAvatar = formatImageUrl(authState.user?.avatar);
-    
-    // Log avatar info for debugging
-    console.log('Sending message with user avatar:', {
-      hasAvatar: !!authState.user?.avatar,
-      avatarValue: authState.user?.avatar?.substring(0, 30),
-      formattedAvatar: formattedAvatar?.substring(0, 30),
-      userId: currentUserId
-    });
-    
-    // Optimistically add to UI (will be replaced when server confirms)
-    const tempId = `temp-${Date.now()}`;
+  const sendMessage = (chatId: string, content: string, attachments?: any[], replyTo?: string) => {
+    if (!authState.isAuthenticated || !authState.user) {
+      console.error('Cannot send message: user not authenticated');
+      return;
+    }
+
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     const tempMessage: Message = {
       _id: tempId,
       chat: chatId,
       sender: {
-        _id: currentUserId, // Using the PostgreSQL id as MongoDB id for now
-        postgresId: authState.user?.id || 'me',
-        username: authState.user?.username || 'me', 
-        avatar: formattedAvatar,
-        firstName: authState.user?.firstName || '',
-        lastName: authState.user?.lastName || '',
-        fullName: authState.user?.username || 
-          (authState.user?.firstName && authState.user?.lastName
-            ? `${authState.user.firstName} ${authState.user.lastName}`.trim()
-            : authState.user?.firstName || authState.user?.lastName || 'me'),
+        _id: authState.user.id,
+        postgresId: authState.user.id,
+        username: authState.user.username,
+        avatar: formatImageUrl(authState.user.avatar),
+        firstName: authState.user.firstName || '',
+        lastName: authState.user.lastName || '',
+        fullName: authState.user.firstName && authState.user.lastName 
+          ? `${authState.user.firstName} ${authState.user.lastName}`.trim() 
+          : authState.user.username,
         bio: '',
       },
-      content,
-      attachments: attachments || [],
+      content: content,
+      attachments: attachments?.map(att => ({
+        type: att.type,
+        url: att.url,
+        name: att.name,
+        size: att.size,
+        mimeType: att.mimeType,
+      })) || [],
       createdAt: new Date().toISOString(),
-      readBy: [currentUserId],
-      status: 'sent'
+      readBy: [authState.user.id],
+      status: 'sent',
+      replyTo: replyTo,
     };
-    
-    // Add to state
+
+    // Log the temp message
+    console.log(`sendMessage: Created tempMessage`, {
+      _id: tempMessage._id,
+      chat: tempMessage.chat,
+      content: tempMessage.content,
+      createdAt: tempMessage.createdAt,
+      sender_id: tempMessage.sender._id,
+      sender_postgresId: tempMessage.sender.postgresId,
+      sender_username: tempMessage.sender.username,
+      attachments_count: tempMessage.attachments?.length || 0,
+      first_attachment_url: tempMessage.attachments?.[0]?.url
+    });
+
+    // Optimistically update UI
     handleNewMessage(tempMessage);
+
+    // Send message via service - Pass tempId along
+    chatService.sendMessage(chatId, content, attachments, replyTo);
+
+    // Clear typing status after sending
+    setTyping(chatId, false);
   };
 
   // Mark message as read

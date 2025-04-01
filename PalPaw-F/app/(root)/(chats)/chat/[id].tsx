@@ -632,8 +632,13 @@ const ChatDetail: React.FC = () => {
                       return null;
                     }
                     
-                    // Use formatImageUrl for all cases - it already handles http://, file://, and uploads paths
-                    // Note: Server-stored images will start with /messages/ after our update
+                    // Fix for file:// paths to prevent double slashes
+                    if (attachment.url.startsWith('file://')) {
+                      // Normalize the path to ensure no double slashes
+                      return attachment.url.replace(/file:\/\/\/+/g, 'file:///');
+                    }
+                    
+                    // Use formatImageUrl for server-stored images
                     return formatImageUrl(attachment.url);
                   })();
                   

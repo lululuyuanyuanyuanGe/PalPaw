@@ -71,9 +71,13 @@ const fileToBase64 = async (fileUri: string): Promise<string | null> => {
       return null;
     }
 
+    // Normalize the file URI to prevent double slashes
+    const normalizedUri = fileUri.replace(/file:\/\/\/+/g, 'file:///');
+    console.log(`ChatService: Normalized URI: ${normalizedUri.substring(0, 30)}...`);
+    
     // Read the file as base64
-    console.log(`ChatService: Reading file as base64: ${fileUri}`);
-    const base64 = await FileSystem.readAsStringAsync(fileUri, {
+    console.log(`ChatService: Reading file as base64: ${normalizedUri.substring(0, 30)}...`);
+    const base64 = await FileSystem.readAsStringAsync(normalizedUri, {
       encoding: FileSystem.EncodingType.Base64
     });
 
