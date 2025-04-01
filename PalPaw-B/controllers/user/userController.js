@@ -490,3 +490,104 @@ export const getCurrentUserProfile = async (req, res) => {
     });
   }
 };
+
+/**
+ * Reset/Change user password
+ * Requires authentication, email, current password, and new password
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Object} Response with success status or error
+ */
+export const resetPassword = async (req, res) => {
+  try {
+    // Get current user ID from authenticated user
+    const userId = req.user.id;
+    
+    // Get required fields from request body
+    const { email, currentPassword, newPassword } = req.body;
+    
+    // Validate inputs
+    if (!email || !currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, current password, and new password are all required'
+      });
+    }
+    
+    // Validate password length (must match model validation which is 6-100 chars)
+    if (newPassword.length < 6 || newPassword.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be between 6 and 100 characters long'
+      });
+    }
+    
+    // Find the user by ID
+    const user = await User.findByPk(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Verify that the provided email matches the user's email
+    if (user.email !== email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email does not match the account'
+      });
+    }
+    
+    // Check if the current password is correct
+    const isPasswordValid = await user.comparePassword(currentPassword);
+    
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+    
+    // If current and new passwords are the same, no need to update
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be different from current password'
+      });
+    }
+    
+    // Update the password
+    // The password will be automatically hashed by the beforeUpdate hook in the User model
+    await user.update({ password: newPassword });
+    
+    // Return success response
+    res.status(200).json({
+      success: true,
+      message: 'Password updated successfully'
+    });
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    
+    // Handle Sequelize validation errors
+    if (error.name === 'SequelizeValidationError') {
+      const validationErrors = error.errors.map(err => ({
+        field: err.path,
+        message: err.message
+      }));
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: validationErrors
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred while resetting the password',
+      error: error.message
+    });
+  }
+};

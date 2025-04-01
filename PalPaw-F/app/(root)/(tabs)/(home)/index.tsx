@@ -367,7 +367,7 @@ const HomeScreen = () => {
                         : 'text-white'
                     }`}
                   >
-                    Followed
+                    Friends
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity 

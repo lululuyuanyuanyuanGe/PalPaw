@@ -6,7 +6,8 @@ import {
   followUser,
   unfollowUser,
   updateUserProfile,
-  getCurrentUserProfile
+  getCurrentUserProfile,
+  resetPassword
 } from '../controllers/user/userController.js';
 import { optionalAuthenticate, authenticate } from '../middlewares/authMiddleware.js';
 
@@ -28,5 +29,6 @@ router.post('/:id/unfollow', authenticate, unfollowUser);
 
 // Profile updates
 router.put('/profile/update', authenticate, updateUserProfile);
+router.post('/reset-password', authenticate, resetPassword);
 
 export default router;

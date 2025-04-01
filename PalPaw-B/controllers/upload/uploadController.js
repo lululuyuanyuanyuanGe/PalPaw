@@ -328,12 +328,26 @@ export const getRandomPosts = async (req, res) => {
       });
     }
     
-    // Get all public posts with their authors
+    // Get current user ID if authenticated
+    const currentUserId = req.user?.id;
+    
+    // Define where condition to exclude current user's posts
+    const whereCondition = { 
+      visibility: 'public',
+      isDeleted: false
+    };
+    
+    // If user is authenticated, exclude their posts
+    if (currentUserId) {
+      whereCondition.userId = {
+        [Op.ne]: currentUserId // Not equal to current user's ID
+      };
+      console.log(`Excluding posts from current user (ID: ${currentUserId})`);
+    }
+    
+    // Get all public posts with their authors, excluding current user's posts
     const allPosts = await Post.findAll({
-      where: { 
-        visibility: 'public',
-        isDeleted: false
-      },
+      where: whereCondition,
       include: [
         {
           model: User,
@@ -354,7 +368,7 @@ export const getRandomPosts = async (req, res) => {
       ]
     });
     
-    console.log(`Found ${allPosts.length} total posts to choose from`);
+    console.log(`Found ${allPosts.length} total posts to choose from (excluding current user's posts)`)
     
     // Filter out test posts or placeholder data
     const validPosts = allPosts.filter(post => {
@@ -411,57 +425,30 @@ export const getRandomPosts = async (req, res) => {
       console.log(`Added ${postsToUse.length - validPosts.length} additional posts to reach desired count`);
     }
     
-    // If still not enough posts, generate placeholder posts
+    // If we don't have enough posts, that's okay - no placeholders needed
     if (postsToUse.length < count) {
-      console.log(`Still only have ${postsToUse.length} posts, generating placeholders to reach ${count}`);
-      
-      // Create some placeholder posts
-      for (let i = postsToUse.length; i < count; i++) {
-        const placeholderId = `placeholder-${i}-${Date.now()}`;
-        postsToUse.push({
-          id: placeholderId,
-          title: "Explore PalPaw",
-          content: "Create your own posts to see them here!",
-          media: [{ 
-            url: `https://source.unsplash.com/random/800x600?pet,animal&sig=${placeholderId}`,
-            type: 'image'
-          }],
-          createdAt: new Date(),
-          likes: Math.floor(Math.random() * 20),
-          authorData: {
-            id: "system",
-            username: "PalPaw",
-            avatar: "https://robohash.org/system?set=set4"
-          },
-          comments: []
-        });
-      }
+      console.log(`Only have ${postsToUse.length} posts available, returning all of them without placeholders`);
     }
     
-    // Shuffle and select 'count' posts
+    // Shuffle and select all available posts (up to count)
     const shuffledPosts = shuffleArray([...postsToUse]);
-    const randomPosts = shuffledPosts.slice(0, count);
+    const selectedPosts = shuffledPosts.slice(0, Math.min(count, shuffledPosts.length));
     
     // Transform posts to ensure proper data structure
-    const formattedPosts = randomPosts.map(post => {
-      // Check if it's a regular post or a placeholder post
-      if (post.toJSON) {
-        const postJSON = post.toJSON();
-        
-        // Ensure author data is in the expected format
-        if (postJSON.author) {
-          postJSON.authorData = {
-            id: postJSON.author.id,
-            username: postJSON.author.username || 'User',
-            avatar: postJSON.author.avatar || `https://robohash.org/${postJSON.author.id}?set=set4`
-          };
-        }
-        
-        return postJSON;
-      } else {
-        // It's already a placeholder post
-        return post;
+    const formattedPosts = selectedPosts.map(post => {
+      // It should always be a regular post at this point
+      const postJSON = post.toJSON();
+      
+      // Ensure author data is in the expected format
+      if (postJSON.author) {
+        postJSON.authorData = {
+          id: postJSON.author.id,
+          username: postJSON.author.username || 'User',
+          avatar: postJSON.author.avatar || `https://robohash.org/${postJSON.author.id}?set=set4`
+        };
       }
+      
+      return postJSON;
     });
     
     console.log(`Returning exactly ${formattedPosts.length} posts`);

@@ -259,7 +259,7 @@ const SearchDrawer = (props: any) => {
             )}
             onPress={() => {
               props.navigation.closeDrawer();
-              router.push('/');
+              router.push('/(root)/(auth)/selectionPage');
             }}
             style={{ paddingVertical: 10 }}
           />
