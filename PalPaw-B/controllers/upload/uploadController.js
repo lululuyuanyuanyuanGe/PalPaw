@@ -10,11 +10,22 @@ import { promisify } from 'util';
 import Comment from '../../models/Comment.js';
 import { Op } from 'sequelize';
 import Follow from '../../models/Follow.js';
+import Message from '../../models/Message.js';
 
 // Configure multer storage
 const storage = multer.diskStorage({
   destination: function(req, file, cb) {
-    // Get the user ID from the authenticated request
+    // Check if this is a chat media upload
+    if (req.path === '/media') {
+      // For chat media uploads, use a temporary directory
+      const tempDir = path.join(process.cwd(), 'temp');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      return cb(null, tempDir);
+    }
+    
+    // For post/product uploads, use the user-specific directory
     const userId = req.user?.id;
     
     if (!userId) {
@@ -1188,6 +1199,143 @@ export const getFriendsPosts = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch friends posts',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Uploads a media file for chat messages and stores it in the appropriate chat directory
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const uploadChatMedia = async (req, res) => {
+  try {
+    console.log('uploadChatMedia called');
+    
+    // Check if the file exists
+    if (!req.file) {
+      console.error('No file received in the request');
+      return res.status(400).json({
+        success: false,
+        message: 'No media file uploaded.'
+      });
+    }
+
+    // Get chat ID from query params or body
+    const chatId = req.query.chatId || req.body.chatId;
+    
+    if (!chatId) {
+      console.error('Chat ID not provided');
+      return res.status(400).json({
+        success: false,
+        message: 'Chat ID is required for storing media.'
+      });
+    }
+    
+    // Get user ID from authenticated request
+    const userId = req.user.id;
+    
+    // Log file information
+    console.log('Processing chat media file:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      filename: req.file.filename
+    });
+    
+    // Create messages directory if it doesn't exist
+    const messagesDir = path.join(process.cwd(), 'messages');
+    if (!fs.existsSync(messagesDir)) {
+      fs.mkdirSync(messagesDir, { recursive: true });
+    }
+    
+    // Create chat-specific directory if it doesn't exist
+    const chatDir = path.join(messagesDir, chatId);
+    if (!fs.existsSync(chatDir)) {
+      fs.mkdirSync(chatDir, { recursive: true });
+    }
+    
+    // Create thumbnails directory if needed for videos
+    const isVideo = req.file.mimetype.startsWith('video/');
+    let thumbnailUrl = null;
+    
+    if (isVideo) {
+      const thumbnailDir = path.join(chatDir, 'thumbnails');
+      if (!fs.existsSync(thumbnailDir)) {
+        fs.mkdirSync(thumbnailDir, { recursive: true });
+      }
+      
+      // Generate unique thumbnail filename
+      const thumbnailFilename = `thumbnail_${uuidv4()}.jpg`;
+      const thumbnailPath = path.join(thumbnailDir, thumbnailFilename);
+      
+      try {
+        // Generate thumbnail for video at 1 second
+        await generateVideoThumbnail(req.file.path, thumbnailPath, 1, '320x240');
+        thumbnailUrl = `/messages/${chatId}/thumbnails/${thumbnailFilename}`;
+        console.log(`Created thumbnail at ${thumbnailPath} for video ${req.file.filename}`);
+      } catch (thumbnailError) {
+        console.error('Error generating thumbnail:', thumbnailError);
+        // Continue without thumbnail if generation fails
+      }
+    }
+    
+    // Move the file to the chat directory
+    const fileExtension = path.extname(req.file.originalname);
+    const newFilename = `${uuidv4()}${fileExtension}`;
+    const newFilePath = path.join(chatDir, newFilename);
+    
+    // Use fs.promises for async file operations
+    const fsPromises = fs.promises;
+    
+    // Read the uploaded file
+    const fileData = await fsPromises.readFile(req.file.path);
+    
+    // Write to new location
+    await fsPromises.writeFile(newFilePath, fileData);
+    
+    // Delete the temporary file
+    await fsPromises.unlink(req.file.path);
+    
+    // Determine media type
+    let mediaType = 'file';
+    if (req.file.mimetype.startsWith('image/')) {
+      mediaType = 'image';
+    } else if (req.file.mimetype.startsWith('video/')) {
+      mediaType = 'video';
+    } else if (req.file.mimetype.startsWith('audio/')) {
+      mediaType = 'audio';
+    }
+    
+    // Create the relative URL for the file
+    const fileUrl = `/messages/${chatId}/${newFilename}`;
+    
+    // Prepare response data
+    const mediaData = {
+      path: fileUrl,
+      type: mediaType,
+      name: req.file.originalname,
+      size: req.file.size,
+      mimeType: req.file.mimetype
+    };
+    
+    // Add thumbnail URL if it exists
+    if (thumbnailUrl) {
+      mediaData.thumbnail = thumbnailUrl;
+    }
+    
+    // Return success response with file data
+    return res.status(200).json({
+      success: true,
+      message: 'File uploaded successfully',
+      ...mediaData
+    });
+  } catch (error) {
+    console.error('Error in uploadChatMedia:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error uploading chat media file',
       error: error.message
     });
   }

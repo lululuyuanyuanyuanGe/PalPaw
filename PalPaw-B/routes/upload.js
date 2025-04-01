@@ -11,7 +11,8 @@ import {
   deletePost,
   deleteProduct,
   updateUserProfile,
-  avatarUpload
+  avatarUpload,
+  uploadChatMedia
 } from '../controllers/upload/uploadController.js';
 import { authenticate } from '../middlewares/authMiddleware.js';
 import { createProduct } from '../controllers/products/productController.js';
@@ -101,5 +102,12 @@ router.delete('/product/:productId', authenticate, deleteProduct);
  * @access Private
  */
 router.put('/profile', authenticate, avatarUpload.single('avatar'), updateUserProfile);
+
+/**
+ * @route POST /api/upload/media
+ * @desc Upload media file for chat messages
+ * @access Private
+ */
+router.post('/media', authenticate, upload.single('media'), handlePostMulterError, uploadChatMedia);
 
 export default router;

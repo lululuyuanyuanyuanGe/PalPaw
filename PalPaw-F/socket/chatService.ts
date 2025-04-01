@@ -1,6 +1,9 @@
 import { io, Socket } from 'socket.io-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
+import api from '../utils/apiClient';
+import { uploadMediaFile } from '../utils/mediaUtils';
+import { Alert } from 'react-native';
 
 // Define types for message and events
 interface Message {
@@ -58,6 +61,9 @@ interface Listeners {
   onUserStatusChange?: (userId: string, status: string) => void;
   [key: string]: ((...args: any[]) => void) | undefined;
 }
+
+// File size threshold for socket.io (0.9MB)
+const FILE_SIZE_THRESHOLD = 500 * 1024; // 900KB in bytes
 
 /**
  * Converts a file:// URI to base64 encoded data
@@ -379,8 +385,18 @@ class ChatService {
         hasData: !!a.data
       })));
       
-      // Process attachments to include base64 data for local files
-      const processedAttachments = await prepareAttachmentsForSending(attachments);
+      // Check for large files that need to be uploaded via HTTP
+      const largeAttachments = attachments.filter(a => a.size > FILE_SIZE_THRESHOLD);
+      const standardAttachments = attachments.filter(a => a.size <= FILE_SIZE_THRESHOLD);
+      
+      // Upload large files via HTTP first
+      const processedAttachments = [...await this.handleLargeAttachments(largeAttachments, chatId)];
+      
+      // Process standard attachments through socket
+      if (standardAttachments.length > 0) {
+        const standardProcessed = await prepareAttachmentsForSending(standardAttachments);
+        processedAttachments.push(...standardProcessed);
+      }
       
       console.log(`ChatService: Attachments after processing:`, processedAttachments.map(a => ({
         type: a.type,
@@ -409,6 +425,65 @@ class ChatService {
     } catch (error) {
       console.error('❌ ChatService: Error preparing attachments:', error);
     }
+  }
+  
+  /**
+   * Handle large media attachments by uploading them via HTTP
+   * @param attachments Array of large media attachments
+   * @param chatId The ID of the chat the attachments are for
+   * @returns Updated attachments with server URLs
+   */
+  private async handleLargeAttachments(attachments: MediaAttachment[], chatId: string): Promise<MediaAttachment[]> {
+    if (attachments.length === 0) return [];
+    
+    console.log(`ChatService: Processing ${attachments.length} large attachments via HTTP upload`);
+    
+    const results = await Promise.all(
+      attachments.map(async (attachment) => {
+        try {
+          // Only process local files
+          if (!attachment.url.startsWith('file://')) {
+            return attachment;
+          }
+          
+          console.log(`ChatService: Uploading large file (${Math.round(attachment.size/1024)}KB): ${attachment.name}`);
+          
+          // Upload via HTTP using the mediaUtils uploadMediaFile function
+          const uploadResult = await uploadMediaFile({
+            uri: attachment.url,
+            type: attachment.mimeType,
+            name: attachment.name || `file-${Date.now()}`
+          }, chatId);
+          
+          console.log('ChatService: HTTP upload successful, server path:', uploadResult.path);
+          
+          // Return attachment with server URL instead of local file
+          return {
+            ...attachment,
+            url: uploadResult.path,
+            data: undefined, // Remove base64 data since we uploaded the file
+            originalUrl: attachment.url, // Keep original URL for reference
+            thumbnailUrl: uploadResult.thumbnail // Include thumbnail URL for videos if available
+          };
+        } catch (error) {
+          console.error(`ChatService: Error uploading file ${attachment.name}:`, error);
+          
+          // Show an alert to the user
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          Alert.alert(
+            "Upload Failed",
+            `There was an error uploading your file: ${errorMessage}`,
+            [{ text: "OK" }]
+          );
+          
+          // Return original attachment if upload fails
+          return attachment;
+        }
+      })
+    );
+    
+    console.log(`ChatService: Finished processing large attachments, ${results.length} processed`);
+    return results;
   }
   
   /**

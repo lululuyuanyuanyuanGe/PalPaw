@@ -158,6 +158,43 @@ export const authService = {
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('userData');
   },
+  
+  // Upload large media files via HTTP instead of socket.io
+  uploadMediaFile: async (file: { uri: string, type: string, name: string }) => {
+    try {
+      const formData = new FormData();
+      
+      // Append file with proper mime type
+      formData.append('media', {
+        uri: file.uri,
+        type: file.type,
+        name: file.name,
+      } as any);
+      
+      const token = await AsyncStorage.getItem('token');
+      
+      // Use fetch directly for FormData instead of axios
+      const response = await fetch(`${BASE_URL}/upload/media`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        body: formData,
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to upload media');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error uploading media file:', error);
+      throw error;
+    }
+  },
 };
 
 // Posts service

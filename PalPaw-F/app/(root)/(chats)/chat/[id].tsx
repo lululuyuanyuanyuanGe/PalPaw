@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext, createContext } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,9 @@ import {
   Animated,
   Dimensions,
   Modal,
-  ScrollView
+  ScrollView,
+  Alert,
+  Linking
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather, MaterialCommunityIcons, FontAwesome5, AntDesign, Ionicons, Entypo } from '@expo/vector-icons';
@@ -25,8 +27,32 @@ import { useAuth } from '@/context';
 import { useChat } from '@/context/chatContext';
 import type { Message, Participant } from '@/context/chatContext';
 import { formatImageUrl } from '@/utils/mediaUtils';
+import * as FileSystem from 'expo-file-system';
+import { Video, ResizeMode } from 'expo-av';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Helper function to format last active time
+const formatLastActive = (lastActive: string) => {
+  if (!lastActive) return '';
+  
+  const lastActiveDate = new Date(lastActive);
+  const now = new Date();
+  const diffMs = now.getTime() - lastActiveDate.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  
+  return lastActiveDate.toLocaleDateString();
+};
 
 // Decorative floating paw component
 const FloatingPaw = ({ size, color, duration, delay, startPosition }: { 
@@ -145,6 +171,50 @@ const isSameDay = (date1: Date, date2: Date) => {
   );
 };
 
+// Video message component as a separate component to avoid hook errors
+const VideoMessage = ({ videoUri }: { videoUri: string }) => {
+  const videoRef = useRef(null);
+  const [videoStatus, setVideoStatus] = useState({});
+  
+  // Get the ChatDetail component instance context
+  const { openVideoPreview } = React.useContext(VideoPreviewContext);
+  
+  return (
+    <View className="relative rounded-lg overflow-hidden">
+      <Video
+        ref={videoRef}
+        source={{ uri: videoUri }}
+        style={{ width: 200, height: 150, borderRadius: 8 }}
+        resizeMode={ResizeMode.CONTAIN}
+        useNativeControls={false}
+        isLooping={false}
+        onPlaybackStatusUpdate={status => setVideoStatus(() => status)}
+        posterSource={{ uri: 'https://via.placeholder.com/200x150/6B46C1/FFFFFF?text=Video' }}
+        usePoster={true}
+      />
+      
+      {/* Play button overlay */}
+      <TouchableOpacity 
+        className="absolute inset-0 items-center justify-center"
+        onPress={() => openVideoPreview(videoUri)}
+      >
+        {!(videoStatus as any).isPlaying && (
+          <View className="w-12 h-12 rounded-full bg-black bg-opacity-40 items-center justify-center">
+            <Feather name="play" size={24} color="#ffffff" />
+          </View>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// Create a context for video preview functionality
+const VideoPreviewContext = createContext<{
+  openVideoPreview: (videoUrl: string) => void;
+}>({
+  openVideoPreview: () => {},
+});
+
 const ChatDetail: React.FC = () => {
   const router = useRouter();
   const { id, chatName } = useLocalSearchParams();
@@ -166,6 +236,9 @@ const ChatDetail: React.FC = () => {
   }>>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showImagePreview, setShowImagePreview] = useState(false);
+  const [previewVideo, setPreviewVideo] = useState<string | null>(null);
+  const [showVideoPreview, setShowVideoPreview] = useState(false);
+  const videoModalRef = useRef(null);
   
   // Add robust null checks with default values
   const messages = chatState?.messages && currentChatId && chatState.messages[currentChatId] ? 
@@ -414,32 +487,71 @@ const ChatDetail: React.FC = () => {
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: false,
         quality: 0.8,
-        allowsMultipleSelection: true,
-        selectionLimit: 2,
+        allowsMultipleSelection: false, // Only one video at a time
+        videoMaxDuration: 60, // Limit to 60 seconds
       });
       
       if (!result.canceled && result.assets.length > 0) {
-        // Log the video assets
-        console.log('Video picker returned assets:', result.assets.map(a => ({
-          uri: a.uri.substring(0, 30) + (a.uri.length > 30 ? '...' : ''),
-          fileSize: a.fileSize,
-          fileName: a.uri.split('/').pop()
-        })));
+        const videoUri = result.assets[0].uri;
         
-        const newMedia = result.assets.map(asset => {
-          const videoUri = asset.uri;
-          
-          return {
+        // Get file info to check size
+        const fileInfo = await FileSystem.getInfoAsync(videoUri);
+        const fileSize = fileInfo.exists ? (fileInfo as any).size || 0 : result.assets[0].fileSize || 0;
+        
+        // Check for very large files (>25MB)
+        if (fileSize > 25 * 1024 * 1024) {
+          Alert.alert(
+            "File Too Large",
+            "Videos must be smaller than 25MB. Please select a smaller video.",
+            [{ text: "OK" }]
+          );
+          return;
+        }
+        
+        // Warn about large files that will be uploaded via HTTP
+        // The threshold in chatService is 900KB, so we'll warn at 1MB for simplicity
+        if (fileSize > 1 * 1024 * 1024) {
+          Alert.alert(
+            "Large Video",
+            `This video is ${(fileSize / (1024 * 1024)).toFixed(1)}MB and may take longer to send.`,
+            [
+              { 
+                text: "Cancel",
+                style: "cancel" 
+              },
+              { 
+                text: "Send Anyway",
+                onPress: () => {
+                  // Create the media object
+                  const newMedia = {
+                    type: 'video' as const,
+                    url: videoUri,
+                    name: videoUri.split('/').pop() || `video-${Date.now()}.mp4`,
+                    mimeType: 'video/mp4',
+                    size: fileSize
+                  };
+                  
+                  console.log(`Selected large video: ${(fileSize / (1024 * 1024)).toFixed(1)}MB`);
+                  setSelectedMedia([...selectedMedia, newMedia]);
+                  setShowAttachmentOptions(false);
+                }
+              }
+            ]
+          );
+        } else {
+          // Standard size video, add directly
+          const newMedia = {
             type: 'video' as const,
             url: videoUri,
-            name: asset.uri.split('/').pop() || `video-${Date.now()}.mp4`,
+            name: videoUri.split('/').pop() || `video-${Date.now()}.mp4`,
             mimeType: 'video/mp4',
-            size: asset.fileSize || 0
+            size: fileSize
           };
-        });
-        
-        setSelectedMedia([...selectedMedia, ...newMedia]);
-        setShowAttachmentOptions(false);
+          
+          console.log(`Selected video: ${(fileSize / (1024)).toFixed(1)}KB`);
+          setSelectedMedia([...selectedMedia, newMedia]);
+          setShowAttachmentOptions(false);
+        }
       }
     } catch (error) {
       console.error('Error picking video:', error);
@@ -566,6 +678,12 @@ const ChatDetail: React.FC = () => {
       messageAvatar = getSenderAvatar(item.sender);
     }
     
+    // Check if message contains only video and no text
+    const hasOnlyVideo = item.content.trim() === '' && 
+                        item.attachments && 
+                        item.attachments.length === 1 && 
+                        item.attachments[0].type === 'video';
+    
     return (
       <View className={`mb-3 flex-row ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
         {/* Avatar for other user's messages */}
@@ -584,8 +702,8 @@ const ChatDetail: React.FC = () => {
             borderRadius: 16,
             borderTopLeftRadius: isCurrentUser ? 16 : 2,
             borderTopRightRadius: isCurrentUser ? 2 : 16,
-            padding: 12,
-            paddingBottom: 8,
+            padding: hasOnlyVideo ? 0 : 12, // No padding for video-only messages
+            paddingBottom: hasOnlyVideo ? 0 : 8,
             shadowColor: '#000',
             shadowOffset: {
               width: 0,
@@ -594,10 +712,11 @@ const ChatDetail: React.FC = () => {
             shadowOpacity: 0.18,
             shadowRadius: 1.0,
             elevation: 1,
-            maxWidth: '80%'
+            maxWidth: '80%',
+            overflow: hasOnlyVideo ? 'hidden' : 'visible'
           }}
         >
-          {/* Message text */}
+          {/* Message text - only show if there is content */}
           {item.content.trim() !== '' && (
             <Text
               style={{
@@ -611,7 +730,7 @@ const ChatDetail: React.FC = () => {
           
           {/* Message attachments */}
           {item.attachments && item.attachments.length > 0 && (
-            <View className="mt-2">
+            <View className={hasOnlyVideo ? "" : "mt-2"}>
               {item.attachments.map((attachment, index) => {
                 // Enhanced debugging to see exactly what's coming from server
                 console.log(`Rendering attachment ${index} for message ${item._id}:`, {
@@ -671,20 +790,27 @@ const ChatDetail: React.FC = () => {
                     </View>
                   );
                 } else if (attachment.type === 'video') {
-                  return (
-                    <TouchableOpacity 
+                  // Video handling
+                  const videoUri = (() => {
+                    // If it's a local file URI, use it directly
+                    if (attachment.url.startsWith('file://')) {
+                      return attachment.url;
+                    }
+                    // Otherwise format as remote URL
+                    return formatImageUrl(attachment.url);
+                  })();
+                  
+                  return videoUri ? (
+                    <VideoMessage key={`${item._id}-attachment-${index}`} videoUri={videoUri} />
+                  ) : (
+                    <View 
                       key={`${item._id}-attachment-${index}`}
-                      className="flex-row items-center bg-black bg-opacity-10 p-2 rounded-lg mt-1"
+                      className="bg-gray-200 rounded-lg mt-1 items-center justify-center"
+                      style={{ width: 200, height: 150 }}
                     >
-                      <Feather name="video" size={18} color={isCurrentUser ? "#fff" : "#6B46C1"} />
-                      <Text 
-                        className={`ml-2 ${isCurrentUser ? "text-white" : "text-purple-900"} text-sm`}
-                        numberOfLines={1}
-                        ellipsizeMode="middle"
-                      >
-                        {attachment.name || "Video"}
-                      </Text>
-                    </TouchableOpacity>
+                      <Feather name="video" size={32} color="#9333EA" />
+                      <Text className="text-purple-700 mt-2">Video not available</Text>
+                    </View>
                   );
                 }
                 // Remove audio and file attachment types as they're no longer needed
@@ -700,11 +826,17 @@ const ChatDetail: React.FC = () => {
               alignItems: 'center',
               justifyContent: 'flex-end',
               marginTop: 4,
+              padding: hasOnlyVideo ? 4 : 0,
+              backgroundColor: hasOnlyVideo ? 'rgba(0,0,0,0.3)' : 'transparent',
+              position: hasOnlyVideo ? 'absolute' : 'relative',
+              bottom: hasOnlyVideo ? 0 : undefined,
+              right: hasOnlyVideo ? 0 : undefined,
+              left: hasOnlyVideo ? 0 : undefined,
             }}
           >
             <Text
               style={{
-                color: isCurrentUser ? 'rgba(255,255,255,0.7)' : '#9CA3AF',
+                color: isCurrentUser || hasOnlyVideo ? 'rgba(255,255,255,0.7)' : '#9CA3AF',
                 fontSize: 11,
                 marginRight: 4,
               }}
@@ -813,55 +945,46 @@ const ChatDetail: React.FC = () => {
     if (selectedMedia.length === 0) return null;
     
     return (
-      <ScrollView 
-        horizontal
-        className="py-2"
-        showsHorizontalScrollIndicator={false}
-      >
-        {selectedMedia.map((media, index) => {
-          const isImage = media.type === 'image';
-          const isVideo = media.type === 'video';
-          
-          // Log media for debugging
-          console.log(`Rendering preview for media ${index}:`, {
-            type: media.type,
-            url: media.url.substring(0, 30) + (media.url.length > 30 ? '...' : ''),
-            name: media.name,
-            size: Math.round(media.size / 1024) + 'KB'
-          });
-          
-          return (
-            <View key={`media-${index}`} className="mr-2 relative">
-              {isImage ? (
-                <View className="w-20 h-20 rounded-md overflow-hidden">
-                  <Image 
-                    source={{ uri: media.url }} 
-                    className="w-20 h-20"
-                    resizeMode="cover"
-                    onError={(e) => {
-                      console.log(`Error loading image preview: ${e.nativeEvent.error}`);
-                    }}
-                  />
-                </View>
-              ) : isVideo ? (
-                <View className="w-20 h-20 bg-purple-100 rounded-md items-center justify-center">
-                  <Feather name="video" size={24} color="#9333EA" />
-                  <Text className="text-xs text-purple-700 mt-1 px-1 text-center" numberOfLines={1}>
-                    {media.name || "Video"}
-                  </Text>
+      <View className="mt-3 mb-2">
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 10 }}
+        >
+          {selectedMedia.map((media, index) => (
+            <View key={`media-${index}`} className="mr-3 relative">
+              {media.type === 'image' ? (
+                <Image 
+                  source={{ uri: media.url }} 
+                  className="w-24 h-24 rounded-lg" 
+                  resizeMode="cover"
+                />
+              ) : media.type === 'video' ? (
+                <View className="w-24 h-24 rounded-lg bg-gray-800 justify-center items-center overflow-hidden">
+                  <View className="absolute inset-0 bg-black bg-opacity-40" />
+                  <Feather name="video" size={24} color="#FFF" />
+                  
+                  {/* File size indicator */}
+                  <View className="absolute bottom-1 right-1 bg-purple-600 rounded-full px-1">
+                    <Text className="text-white text-xs">
+                      {media.size > 1024 * 1024 
+                        ? `${(media.size / (1024 * 1024)).toFixed(1)}MB` 
+                        : `${(media.size / 1024).toFixed(0)}KB`}
+                    </Text>
+                  </View>
                 </View>
               ) : null}
               
-              <TouchableOpacity 
+              <TouchableOpacity
                 className="absolute -top-2 -right-2 bg-red-500 rounded-full w-5 h-5 items-center justify-center"
                 onPress={() => removeSelectedMedia(index)}
               >
-                <AntDesign name="close" size={12} color="white" />
+                <Feather name="x" size={12} color="#fff" />
               </TouchableOpacity>
             </View>
-          );
-        })}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      </View>
     );
   };
 
@@ -871,240 +994,275 @@ const ChatDetail: React.FC = () => {
     setShowImagePreview(true);
   };
 
+  // Add this function to handle opening the video preview
+  const openVideoPreview = (videoUrl: string) => {
+    setPreviewVideo(videoUrl);
+    setShowVideoPreview(true);
+  };
+
   return (
-    <SafeAreaView className="flex-1 bg-blue-50">
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor="transparent"
-        translucent
-      />
-      
-      {/* Animated floating paws in background */}
-      {renderFloatingPaws()}
-      
-      {/* Header with gradient */}
-      <LinearGradient
-        colors={['#9333EA', '#A855F7', '#C084FC']}
-        className="w-full pt-12 pb-4"
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <View className="flex-row items-center px-4">
-          <TouchableOpacity 
-            className="bg-white rounded-full w-10 h-10 items-center justify-center" 
-            onPress={handleGoBack}
-            style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.1,
-              shadowRadius: 3,
-              elevation: 3,
-            }}
-          >
-            <AntDesign name="arrowleft" size={22} color="#9333EA" />
-          </TouchableOpacity>
-          
-          <View className="flex-row items-center flex-1 ml-3">
-            <View className="relative">
-              <Image
-                source={otherParticipant?.avatar ? { uri: otherParticipant.avatar } : { uri: `https://robohash.org/user?set=set4` }}
-                className="w-10 h-10 rounded-full"
-              />
-              {otherParticipant?.onlineStatus === 'online' && (
-                <View className="absolute bottom-0 right-0 bg-green-500 w-3 h-3 rounded-full border-2 border-white" />
-              )}
+    <VideoPreviewContext.Provider value={{ openVideoPreview }}>
+      <SafeAreaView className="flex-1 bg-blue-50">
+        <StatusBar
+          barStyle="light-content"
+          backgroundColor="transparent"
+          translucent
+        />
+        
+        {/* Animated floating paws in background */}
+        {renderFloatingPaws()}
+        
+        {/* Header with gradient */}
+        <LinearGradient
+          colors={['#9333EA', '#A855F7', '#C084FC']}
+          className="w-full pt-12 pb-4"
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <View className="flex-row items-center px-4">
+            <TouchableOpacity 
+              className="bg-white rounded-full w-10 h-10 items-center justify-center" 
+              onPress={handleGoBack}
+              style={{
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 3,
+                elevation: 3,
+              }}
+            >
+              <AntDesign name="arrowleft" size={22} color="#9333EA" />
+            </TouchableOpacity>
+            
+            <View className="flex-row items-center flex-1 ml-3">
+              <View className="relative">
+                <Image
+                  source={otherParticipant?.avatar ? { uri: otherParticipant.avatar } : { uri: `https://robohash.org/user?set=set4` }}
+                  className="w-10 h-10 rounded-full"
+                />
+                {otherParticipant?.onlineStatus === 'online' && (
+                  <View className="absolute bottom-0 right-0 bg-green-500 w-3 h-3 rounded-full border-2 border-white" />
+                )}
+              </View>
+              
+              <View className="ml-3">
+                <View>
+                  <Text className="text-white font-bold text-lg line-clamp-1">
+                    {otherParticipant?.username || chatName || 'Chat'}
+                  </Text>
+                  <View className="flex-row items-center">
+                    <View className={`w-2 h-2 rounded-full mr-1 ${otherParticipant?.onlineStatus === 'online' ? 'bg-green-400' : 'bg-gray-400'}`} />
+                    <Text className="text-white text-opacity-90 text-xs">
+                      {otherParticipant?.onlineStatus === 'online' 
+                        ? 'Online now' 
+                        : otherParticipant?.lastActive 
+                          ? `Last seen ${formatLastActive(otherParticipant.lastActive)}` 
+                          : 'Offline'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
             </View>
             
-            <View className="ml-3">
-              <View>
-                <Text className="text-white font-bold text-lg line-clamp-1">
-                  {otherParticipant?.username || chatName || 'Chat'}
+            <TouchableOpacity className="w-10 h-10 items-center justify-center">
+              <MaterialCommunityIcons name="dots-vertical" size={24} color="white" />
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+
+        {/* Main chat area */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          className="flex-1"
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        >
+          {/* Messages */}
+          <View className="flex-1">
+            {!chatState.isConnected ? (
+              <View className="flex-1 items-center justify-center">
+                <ActivityIndicator size="large" color="#9333EA" />
+                <Text className="text-gray-600 mt-4">Connecting to chat server...</Text>
+              </View>
+            ) : messages.length === 0 ? (
+              <View className="flex-1 items-center justify-center p-6">
+                <FontAwesome5 name="comment-dots" size={60} color="#C084FC" style={{ opacity: 0.7 }} />
+                <Text className="text-gray-700 text-lg font-medium mt-6 text-center">
+                  No messages yet
                 </Text>
-                <View className="flex-row items-center">
-                  <View className={`w-2 h-2 rounded-full mr-1 ${otherParticipant?.onlineStatus === 'online' ? 'bg-green-400' : 'bg-gray-400'}`} />
-                  <Text className="text-white text-opacity-90 text-xs">
-                    {otherParticipant?.onlineStatus === 'online' 
-                      ? 'Online now' 
-                      : otherParticipant?.lastActive 
-                        ? `Last seen ${formatLastActive(otherParticipant.lastActive)}` 
-                        : 'Offline'}
+                <Text className="text-gray-500 text-sm mt-2 text-center">
+                  Say hello to {otherParticipant?.username || 'your new friend'} to start the conversation!
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                ref={messageListRef}
+                data={processedMessages}
+                renderItem={renderItem}
+                keyExtractor={(item) => `${item._id}`}
+                contentContainerStyle={{ 
+                  paddingVertical: 12,
+                  paddingBottom: 40
+                }}
+                ListHeaderComponent={renderListHeader()}
+                inverted={false}
+                onEndReachedThreshold={0.1}
+              />
+            )}
+            
+            {/* Typing indicator */}
+            {typingUsers.length > 0 && (
+              <View className="flex-row items-center px-4 py-2">
+                <View className="flex-row justify-center items-center bg-purple-100 px-4 py-2 rounded-full">
+                  <View className="flex-row items-center mr-2">
+                    <View className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ marginRight: 2 }} />
+                    <View className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ marginRight: 2, animationDelay: '0.2s' }} />
+                    <View className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                  </View>
+                  <Text className="text-purple-700 text-sm font-medium">
+                    {otherParticipant?.username || 'User'} is typing...
                   </Text>
                 </View>
               </View>
-            </View>
+            )}
           </View>
           
-          <TouchableOpacity className="w-10 h-10 items-center justify-center">
-            <MaterialCommunityIcons name="dots-vertical" size={24} color="white" />
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
-
-      {/* Main chat area */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
-        {/* Messages */}
-        <View className="flex-1">
-          {!chatState.isConnected ? (
-            <View className="flex-1 items-center justify-center">
-              <ActivityIndicator size="large" color="#9333EA" />
-              <Text className="text-gray-600 mt-4">Connecting to chat server...</Text>
-            </View>
-          ) : messages.length === 0 ? (
-            <View className="flex-1 items-center justify-center p-6">
-              <FontAwesome5 name="comment-dots" size={60} color="#C084FC" style={{ opacity: 0.7 }} />
-              <Text className="text-gray-700 text-lg font-medium mt-6 text-center">
-                No messages yet
-              </Text>
-              <Text className="text-gray-500 text-sm mt-2 text-center">
-                Say hello to {otherParticipant?.username || 'your new friend'} to start the conversation!
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              ref={messageListRef}
-              data={processedMessages}
-              renderItem={renderItem}
-              keyExtractor={(item) => `${item._id}`}
-              contentContainerStyle={{ 
-                paddingVertical: 12,
-                paddingBottom: 40
-              }}
-              ListHeaderComponent={renderListHeader()}
-              inverted={false}
-              onEndReachedThreshold={0.1}
-            />
-          )}
+          {/* Attachment options overlay */}
+          {renderAttachmentOptions()}
           
-          {/* Typing indicator */}
-          {typingUsers.length > 0 && (
-            <View className="flex-row items-center px-4 py-2">
-              <View className="flex-row justify-center items-center bg-purple-100 px-4 py-2 rounded-full">
-                <View className="flex-row items-center mr-2">
-                  <View className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ marginRight: 2 }} />
-                  <View className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ marginRight: 2, animationDelay: '0.2s' }} />
-                  <View className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
-                </View>
-                <Text className="text-purple-700 text-sm font-medium">
-                  {otherParticipant?.username || 'User'} is typing...
-                </Text>
+          {/* Move the input area up by using absolute positioning */}
+          <View 
+            className="bg-white border-t border-gray-200 px-4 py-3"
+            style={{
+              position: 'absolute',
+              bottom: Platform.OS === 'ios' ? 30 : 20, // Move up by setting a higher bottom value
+              left: 0,
+              right: 0,
+              zIndex: 10
+            }}
+          >
+            {/* Selected media preview */}
+            {renderSelectedMediaPreview()}
+            
+            <View className="flex-row items-center">
+              {/* Input field and buttons - no changes needed here */}
+              <View className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex-row items-center">
+                <TextInput
+                  className="flex-1 text-base text-gray-800"
+                  placeholder="Type a message..."
+                  placeholderTextColor="#9CA3AF"
+                  value={messageText}
+                  onChangeText={setMessageText}
+                  multiline
+                  maxLength={500}
+                />
+                
+                <TouchableOpacity 
+                  className="ml-2"
+                  onPress={() => {
+                    setShowAttachmentOptions(!showAttachmentOptions);
+                  }}
+                >
+                  <Feather name="paperclip" size={20} color="#9333EA" />
+                </TouchableOpacity>
               </View>
-            </View>
-          )}
-        </View>
-        
-        {/* Attachment options overlay */}
-        {renderAttachmentOptions()}
-        
-        {/* Move the input area up by using absolute positioning */}
-        <View 
-          className="bg-white border-t border-gray-200 px-4 py-3"
-          style={{
-            position: 'absolute',
-            bottom: Platform.OS === 'ios' ? 30 : 20, // Move up by setting a higher bottom value
-            left: 0,
-            right: 0,
-            zIndex: 10
-          }}
-        >
-          {/* Selected media preview */}
-          {renderSelectedMediaPreview()}
-          
-          <View className="flex-row items-center">
-            {/* Input field and buttons - no changes needed here */}
-            <View className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex-row items-center">
-              <TextInput
-                className="flex-1 text-base text-gray-800"
-                placeholder="Type a message..."
-                placeholderTextColor="#9CA3AF"
-                value={messageText}
-                onChangeText={setMessageText}
-                multiline
-                maxLength={500}
-              />
               
               <TouchableOpacity 
-                className="ml-2"
-                onPress={() => {
-                  setShowAttachmentOptions(!showAttachmentOptions);
+                className="bg-purple-600 w-10 h-10 rounded-full items-center justify-center ml-2"
+                onPress={handleSendMessage}
+                disabled={!messageText.trim() && selectedMedia.length === 0}
+                style={{
+                  opacity: (messageText.trim() || selectedMedia.length > 0) ? 1 : 0.5
                 }}
               >
-                <Feather name="paperclip" size={20} color="#9333EA" />
+                <Feather name="send" size={18} color="white" />
               </TouchableOpacity>
             </View>
-            
-            <TouchableOpacity 
-              className="bg-purple-600 w-10 h-10 rounded-full items-center justify-center ml-2"
-              onPress={handleSendMessage}
-              disabled={!messageText.trim() && selectedMedia.length === 0}
-              style={{
-                opacity: (messageText.trim() || selectedMedia.length > 0) ? 1 : 0.5
-              }}
-            >
-              <Feather name="send" size={18} color="white" />
-            </TouchableOpacity>
           </View>
-        </View>
-        
-        {/* Add a spacer at the bottom to prevent FlatList content from being hidden behind the input */}
-        <View style={{ height: 80 }} />
-      </KeyboardAvoidingView>
-
-      {/* Image Preview Modal */}
-      <Modal
-        visible={showImagePreview}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowImagePreview(false)}
-      >
-        <View className="flex-1 bg-black/80 justify-center items-center">
-          <TouchableOpacity 
-            className="absolute top-12 right-5 z-10 bg-black/50 rounded-full p-2"
-            onPress={() => setShowImagePreview(false)}
-          >
-            <Ionicons name="close" size={24} color="white" />
-          </TouchableOpacity>
           
-          {previewImage && (
-            <View className="w-full h-full justify-center items-center px-2">
-              <Image
-                source={{ uri: previewImage }}
-                style={{ width: '100%', height: '80%' }}
-                resizeMode="contain"
-              />
+          {/* Add a spacer at the bottom to prevent FlatList content from being hidden behind the input */}
+          <View style={{ height: 80 }} />
+        </KeyboardAvoidingView>
+
+        {/* Image Preview Modal */}
+        <Modal
+          visible={showImagePreview}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowImagePreview(false)}
+        >
+          <View className="flex-1 bg-black/80 justify-center items-center">
+            <TouchableOpacity 
+              className="absolute top-12 right-5 z-10 bg-black/50 rounded-full p-2"
+              onPress={() => setShowImagePreview(false)}
+            >
+              <Ionicons name="close" size={24} color="white" />
+            </TouchableOpacity>
+            
+            {previewImage && (
+              <View className="w-full h-full justify-center items-center px-2">
+                <Image
+                  source={{ uri: previewImage }}
+                  style={{ width: '100%', height: '80%' }}
+                  resizeMode="contain"
+                />
+              </View>
+            )}
+            
+            {/* Optional: Add pinch to zoom functionality later */}
+          </View>
+        </Modal>
+
+        {/* Video Preview Modal */}
+        <Modal
+          visible={showVideoPreview}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowVideoPreview(false)}
+        >
+          <View className="flex-1 bg-black/90 justify-center items-center">
+            <TouchableOpacity 
+              className="absolute top-12 right-5 z-10 bg-black/50 rounded-full p-2"
+              onPress={() => setShowVideoPreview(false)}
+            >
+              <Ionicons name="close" size={24} color="white" />
+            </TouchableOpacity>
+            
+            {previewVideo && (
+              <View className="w-full h-full justify-center items-center px-2">
+                <Video
+                  ref={videoModalRef}
+                  source={{ uri: previewVideo }}
+                  style={{ width: '100%', height: '80%' }}
+                  resizeMode={ResizeMode.CONTAIN}
+                  useNativeControls={true}
+                  isLooping={false}
+                  shouldPlay={true}
+                  onPlaybackStatusUpdate={(status: any) => {
+                    if (status && 'didJustFinish' in status && status.didJustFinish) {
+                      console.log('Video finished playing');
+                    }
+                  }}
+                />
+              </View>
+            )}
+            
+            <View className="absolute bottom-10 left-0 right-0 flex-row justify-center">
+              <TouchableOpacity 
+                className="bg-white/20 rounded-full p-3 mx-2"
+                onPress={() => {
+                  if (videoModalRef.current) {
+                    (videoModalRef.current as any).presentFullscreenPlayer();
+                  }
+                }}
+              >
+                <Feather name="maximize" size={22} color="white" />
+              </TouchableOpacity>
             </View>
-          )}
-          
-          {/* Optional: Add pinch to zoom functionality later */}
-        </View>
-      </Modal>
-    </SafeAreaView>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    </VideoPreviewContext.Provider>
   );
-};
-
-// Helper function to format last active time
-const formatLastActive = (lastActive: string) => {
-  if (!lastActive) return '';
-  
-  const lastActiveDate = new Date(lastActive);
-  const now = new Date();
-  const diffMs = now.getTime() - lastActiveDate.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return 'yesterday';
-  if (diffDays < 7) return `${diffDays}d ago`;
-  
-  return lastActiveDate.toLocaleDateString();
 };
 
 export default ChatDetail; 

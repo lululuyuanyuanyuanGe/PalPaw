@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { generateVideoThumbnail } from './videoThumbnail.js';
 
 /**
  * Save a base64 encoded file to the appropriate chat media directory
@@ -12,6 +13,8 @@ import { v4 as uuidv4 } from 'uuid';
  */
 export const saveBase64FileForChat = async (base64Data, chatId, filename, mimeType) => {
   try {
+    console.log(`ChatMediaUtils: Saving ${mimeType} file for chat ${chatId}`);
+    
     // Make sure the messages directory exists
     const messagesDir = path.join(process.cwd(), 'messages');
     if (!fs.existsSync(messagesDir)) {
@@ -41,6 +44,7 @@ export const saveBase64FileForChat = async (base64Data, chatId, filename, mimeTy
         'image/png': '.png',
         'image/gif': '.gif',
         'video/mp4': '.mp4',
+        'video/quicktime': '.mov',
         'audio/mpeg': '.mp3',
         'audio/mp3': '.mp3',
         'application/pdf': '.pdf'
@@ -62,12 +66,45 @@ export const saveBase64FileForChat = async (base64Data, chatId, filename, mimeTy
     // Generate URL path for the file
     const fileUrl = `/messages/${chatId}/${uniqueFilename}`;
 
-    return {
+    // For videos, generate a thumbnail
+    let thumbnailUrl = null;
+    if (mimeType && mimeType.startsWith('video/')) {
+      try {
+        // Create thumbnails directory if needed
+        const thumbnailDir = path.join(chatDir, 'thumbnails');
+        if (!fs.existsSync(thumbnailDir)) {
+          fs.mkdirSync(thumbnailDir, { recursive: true });
+        }
+        
+        // Generate thumbnail filename
+        const thumbnailFilename = `thumbnail_${uuidv4()}.jpg`;
+        const thumbnailPath = path.join(thumbnailDir, thumbnailFilename);
+        
+        // Generate thumbnail from video (at 1 second)
+        await generateVideoThumbnail(filePath, thumbnailPath, 1, '320x240');
+        
+        // Set thumbnail URL for response
+        thumbnailUrl = `/messages/${chatId}/thumbnails/${thumbnailFilename}`;
+        console.log(`ChatMediaUtils: Generated thumbnail at ${thumbnailUrl}`);
+      } catch (thumbnailError) {
+        console.error('Error generating video thumbnail:', thumbnailError);
+        // Continue without thumbnail if generation fails
+      }
+    }
+
+    const result = {
       url: fileUrl,
       path: filePath,
       size: fileSize,
       filename: uniqueFilename
     };
+
+    // Add thumbnail URL if available
+    if (thumbnailUrl) {
+      result.thumbnailUrl = thumbnailUrl;
+    }
+
+    return result;
   } catch (error) {
     console.error('Error saving chat media file:', error);
     throw error;
@@ -99,6 +136,51 @@ export const processLocalFileForChat = async (attachment) => {
     mimeType: mimeType,
     type: type
   };
+};
+
+/**
+ * Process a file sent from the client and return the information needed for the message
+ * @param {Object} attachment - The attachment object from the client
+ * @returns {Promise<Object>} - Object containing the processed file information
+ */
+export const processAttachment = async (attachment, chatId) => {
+  try {
+    console.log(`ChatMediaUtils: Processing attachment: ${attachment.type}, size: ${attachment.size || 'unknown'}`);
+    
+    // If it has a data field with base64 content, save it
+    if (attachment.data) {
+      console.log(`ChatMediaUtils: Attachment has base64 data, saving to disk`);
+      const savedFile = await saveBase64FileForChat(
+        attachment.data,
+        chatId,
+        attachment.name || `file-${Date.now()}`,
+        attachment.mimeType || 'application/octet-stream'
+      );
+      
+      // Format for the message
+      return {
+        type: attachment.type,
+        url: savedFile.url,
+        thumbnailUrl: savedFile.thumbnailUrl,
+        name: attachment.name || savedFile.filename,
+        size: savedFile.size,
+        mimeType: attachment.mimeType
+      };
+    }
+    
+    // If it's already a server URL, just return it
+    if (attachment.url && (attachment.url.startsWith('/') || 
+                           attachment.url.startsWith('http'))) {
+      console.log(`ChatMediaUtils: Attachment has server URL: ${attachment.url}`);
+      return attachment;
+    }
+    
+    // For other cases just pass through the attachment
+    return attachment;
+  } catch (error) {
+    console.error('Error processing attachment:', error);
+    return attachment; // Return original on error
+  }
 };
 
 /**

@@ -1,5 +1,6 @@
 // Constants
 const API_BASE_URL = 'http://192.168.2.11:5001';
+import api from './apiClient';
 
 /**
  * Formats an image URL to ensure it's an absolute path
@@ -164,6 +165,45 @@ export const processMediaFiles = (mediaArray: any[]): MediaProcessingResult => {
   }
   
   return { imageUrl, mediaType, mediaUrl, thumbnailUri };
+};
+
+/**
+ * Uploads a media file to the server via HTTP
+ * @param file Object containing uri, type, and name of the file
+ * @param chatId Optional chat ID for associating the file with a specific chat
+ * @returns Promise with the server response data
+ */
+export const uploadMediaFile = async (file: { uri: string, type: string, name: string }, chatId?: string) => {
+  try {
+    console.log('Uploading media file via HTTP:', file.name);
+    
+    const formData = new FormData();
+    
+    // Append file with proper mime type
+    formData.append('media', {
+      uri: file.uri,
+      type: file.type,
+      name: file.name,
+    } as any);
+    
+    // Add chat ID if provided
+    if (chatId) {
+      formData.append('chatId', chatId);
+    }
+    
+    // Make the API call using axios instance from apiClient
+    const response = await api.post('/upload/media', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    
+    console.log('Media upload successful:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error uploading media file:', error);
+    throw error;
+  }
 };
 
 /**
