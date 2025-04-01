@@ -732,15 +732,6 @@ const ChatDetail: React.FC = () => {
           {item.attachments && item.attachments.length > 0 && (
             <View className={hasOnlyVideo ? "" : "mt-2"}>
               {item.attachments.map((attachment, index) => {
-                // Enhanced debugging to see exactly what's coming from server
-                console.log(`Rendering attachment ${index} for message ${item._id}:`, {
-                  type: attachment.type,
-                  url: attachment.url || 'missing-url',
-                  originalUrl: attachment.originalUrl,
-                  hasUrl: !!attachment.url,
-                  message: item._id
-                });
-                
                 // Handle different attachment types
                 if (attachment.type === 'image') {
                   // Use formatImageUrl to properly format the image URL
@@ -960,12 +951,31 @@ const ChatDetail: React.FC = () => {
                   resizeMode="cover"
                 />
               ) : media.type === 'video' ? (
-                <View className="w-24 h-24 rounded-lg bg-gray-800 justify-center items-center overflow-hidden">
-                  <View className="absolute inset-0 bg-black bg-opacity-40" />
-                  <Feather name="video" size={24} color="#FFF" />
+                <View className="w-24 h-24 rounded-lg overflow-hidden relative">
+                  {/* Use exact same structure as in createPosts.tsx */}
+                  <View className="w-full h-full items-center justify-center bg-black">
+                    <View className="w-full h-full">
+                      <Image 
+                        source={{ uri: media.url }} 
+                        className="w-full h-full"
+                        resizeMode="cover"
+                      />
+                    </View>
+                    {/* Play button overlay */}
+                    <View className="absolute inset-0 items-center justify-center bg-black/30">
+                      <View className="bg-black/50 rounded-full w-8 h-8 items-center justify-center">
+                        <Feather name="play" size={16} color="white" />
+                      </View>
+                    </View>
+                    {/* Video indicator */}
+                    <View className="absolute top-1 left-1 bg-black/60 px-2 py-0.5 rounded-full flex-row items-center">
+                      <Ionicons name="videocam" size={10} color="white" />
+                      <Text className="text-white text-xs ml-0.5">Video</Text>
+                    </View>
+                  </View>
                   
                   {/* File size indicator */}
-                  <View className="absolute bottom-1 right-1 bg-purple-600 rounded-full px-1">
+                  <View className="absolute bottom-1 right-1 bg-purple-600 rounded-full px-1 z-10">
                     <Text className="text-white text-xs">
                       {media.size > 1024 * 1024 
                         ? `${(media.size / (1024 * 1024)).toFixed(1)}MB` 
