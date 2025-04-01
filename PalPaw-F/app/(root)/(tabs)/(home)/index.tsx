@@ -22,6 +22,7 @@ import Constants from 'expo-constants';
 import { usePosts, useUser } from '@/context';
 import { PostItem } from '../(profile)/types';
 import { formatImageUrl } from '@/utils/mediaUtils';
+import { FontAwesome5 } from '@expo/vector-icons';
 
 // Get screen dimensions for responsive sizing and account for pixel density
 const { width: screenWidth } = Dimensions.get('window');
@@ -317,17 +318,17 @@ const HomeScreen = () => {
       <SafeAreaView className="flex-1 bg-purple-500" style={{ paddingTop: Constants.statusBarHeight }}>
         <View className="flex-1">
           {/* Fixed Header - Always stays at the top */}
-          <View className="bg-purple-500 px-4 py-2 shadow-md z-10">
-            <View className="flex-row justify-between items-center">
-              <View className="flex-row items-center">
-                <DrawerToggleButton tintColor="#fff" />
-                <Text className="text-white text-xl font-bold ml-2">PalPaw</Text>
+          <View className="bg-purple-500 px-4 py-3 shadow-md z-10">
+            <View className="flex-row items-center">
+              <DrawerToggleButton tintColor="#fff" />
+              <View className="flex-1 ml-3">
+                <Text className="text-white text-2xl font-bold">PalPaw</Text>
+                <Text className="text-purple-200 text-xs">Share your pet moments</Text>
               </View>
-              <TouchableOpacity onPress={() => router.push("/searchPosts")}>
-                <View className="h-10 w-10 bg-white rounded-full items-center justify-center">
-                  <Feather name="search" size={20} color="#A855F7" />
-                </View>
-              </TouchableOpacity>
+              {/* Decorative paw icon */}
+              <View className="opacity-50">
+                <FontAwesome5 name="paw" size={20} color="#fff" />
+              </View>
             </View>
           </View>
           
@@ -407,47 +408,43 @@ const HomeScreen = () => {
                   <ActivityIndicator size="large" color="#9333EA" />
                   <Text className="text-purple-600 mt-4 font-medium">Loading posts...</Text>
                 </View>
+              ) : postsToDisplay.length === 0 && activeTab === 'follow' ? (
+                <View className="items-center justify-center py-16">
+                  <View className="bg-purple-100 p-6 rounded-full mb-4">
+                    <Ionicons name="people" size={60} color="#9333EA" />
+                  </View>
+                  <Text className="text-gray-800 text-xl font-bold text-center mb-2">
+                    Connect with friends
+                  </Text>
+                  <Text className="text-gray-500 text-center mb-6 px-8">
+                    Follow other pet owners to see their adorable posts in your feed!
+                  </Text>
+                  <TouchableOpacity 
+                    onPress={() => setActiveTab('explore')}
+                    className="bg-purple-500 px-6 py-3 rounded-full flex-row items-center"
+                  >
+                    <Feather name="compass" size={18} color="#fff" />
+                    <Text className="text-white font-medium ml-2">Explore trending posts</Text>
+                  </TouchableOpacity>
+                </View>
               ) : postsToDisplay.length === 0 ? (
                 <View className="items-center justify-center py-16">
-                  {activeTab === 'follow' ? (
-                    <>
-                      <View className="bg-purple-100 p-6 rounded-full mb-4">
-                        <Ionicons name="people" size={60} color="#9333EA" />
-                      </View>
-                      <Text className="text-gray-800 text-xl font-bold text-center mb-2">
-                        Connect with friends
-                      </Text>
-                      <Text className="text-gray-500 text-center mb-6 px-8">
-                        Follow other pet owners to see their adorable posts in your feed!
-                      </Text>
-                      <TouchableOpacity 
-                        onPress={() => router.push("/searchPosts")}
-                        className="bg-purple-500 px-6 py-3 rounded-full flex-row items-center"
-                      >
-                        <Feather name="search" size={18} color="#fff" />
-                        <Text className="text-white font-medium ml-2">Find people to follow</Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : (
-                    <>
-                      <View className="bg-pink-100 p-6 rounded-full mb-4">
-                        <Ionicons name="paw" size={60} color="#EC4899" />
-                      </View>
-                      <Text className="text-gray-800 text-xl font-bold text-center mb-2">
-                        No posts yet
-                      </Text>
-                      <Text className="text-gray-500 text-center mb-6 px-8">
-                        We're looking for the perfect content to show you. Check back soon!
-                      </Text>
-                      <TouchableOpacity 
-                        onPress={handleRefresh}
-                        className="bg-pink-500 px-6 py-3 rounded-full flex-row items-center"
-                      >
-                        <Feather name="refresh-cw" size={18} color="#fff" />
-                        <Text className="text-white font-medium ml-2">Refresh</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
+                  <View className="bg-pink-100 p-6 rounded-full mb-4">
+                    <Ionicons name="paw" size={60} color="#EC4899" />
+                  </View>
+                  <Text className="text-gray-800 text-xl font-bold text-center mb-2">
+                    No posts yet
+                  </Text>
+                  <Text className="text-gray-500 text-center mb-6 px-8">
+                    We're looking for the perfect content to show you. Check back soon!
+                  </Text>
+                  <TouchableOpacity 
+                    onPress={handleRefresh}
+                    className="bg-pink-500 px-6 py-3 rounded-full flex-row items-center"
+                  >
+                    <Feather name="refresh-cw" size={18} color="#fff" />
+                    <Text className="text-white font-medium ml-2">Refresh</Text>
+                  </TouchableOpacity>
                 </View>
               ) : (
                 <>
