@@ -321,9 +321,24 @@ export const unfollowUser = async (req, res) => {
     // Delete the follow relationship
     await followRelationship.destroy();
     
+    // Fetch the updated following list to return to client
+    const following = await Follow.findAll({
+      where: { followerId: currentUserId, status: 'accepted' },
+      attributes: ['followingId']
+    });
+    
+    // Get following count
+    const followingCount = following.length;
+    
+    // Extract just the IDs
+    const followingIds = following.map(follow => follow.followingId);
+    
+    // Return success with updated following information
     res.status(200).json({
       success: true,
-      message: 'User unfollowed successfully'
+      message: 'User unfollowed successfully',
+      following: followingIds,
+      followingCount
     });
   } catch (error) {
     console.error('Error unfollowing user:', error);

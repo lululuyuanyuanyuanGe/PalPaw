@@ -1125,84 +1125,75 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   // Function to fetch posts from friends (followers and following)
   const fetchFriendsPosts = async (): Promise<void> => {
     dispatch({ type: 'FETCH_POSTS_REQUEST' });
+    
     try {
       console.log("Fetching posts from friends (followers and following)...");
       
       // Get auth token
       const token = await AsyncStorage.getItem('token');
-      
       if (!token) {
-        throw new Error('No auth token found');
+        console.log('No auth token found');
+        dispatch({ type: 'FETCH_FRIENDS_POSTS_FAILURE', payload: 'No auth token found' });
+        return;
       }
       
-      // Make API call to fetch friends' posts (max 6 posts from backend)
+      // Make API call to fetch friends' posts
+      console.log("Making API call to fetch friends' posts");
       const response = await api.get('/pg/posts/friends', {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      console.log("Friends posts API response:", response.status, response.statusText);
+      console.log("Raw API response:", JSON.stringify(response.data));
       
       let posts = [];
       
       if (Array.isArray(response.data)) {
         posts = response.data;
-        console.log("Response data is an array");
       } else if (response.data.posts && Array.isArray(response.data.posts)) {
         posts = response.data.posts;
-        console.log("Response data has posts array");
       } else if (response.data.success) {
-        // Handle the case where success is true but posts might be in a different format
-        console.log("Response indicates success, data format:", typeof response.data);
         if (response.data.posts) {
           posts = response.data.posts;
         }
       }
       
-      console.log(`Received ${posts.length} friends' posts`);
+      console.log(`Received ${posts.length} posts from API`);
       
       // Process posts and fetch comments if needed
-      const enhancedPosts = await Promise.all(posts.map(async (post: any) => {
-        // Fetch comments if not included or empty
-        if (!post.comments || post.comments.length === 0) {
-          try {
-            post.comments = await fetchAndFormatComments(post.id);
-          } catch (commentsError) {
-            console.warn(`Failed to fetch comments for post ${post.id}:`, commentsError);
-            post.comments = [];
+      if (posts.length > 0) {
+        console.log("Processing posts and fetching comments...");
+        const enhancedPosts = await Promise.all(posts.map(async (post: any) => {
+          // Fetch comments if not included or empty
+          if (!post.comments || post.comments.length === 0) {
+            try {
+              post.comments = await fetchAndFormatComments(post.id);
+            } catch (commentsError) {
+              console.warn(`Failed to fetch comments for post ${post.id}:`, commentsError);
+              post.comments = [];
+            }
           }
-        }
-        return post;
-      }));
-      
-      // Standardize the posts format
-      const standardizedPosts = enhancedPosts.map((post: any) => standardizePostFormat(post));
-      
-      console.log(`After standardization: ${standardizedPosts.length} friends' posts`);
-      
-      // Update state with friends' posts
-      dispatch({ type: 'FETCH_FRIENDS_POSTS_SUCCESS', payload: standardizedPosts });
+          return post;
+        }));
+        
+        // Standardize the posts format
+        const standardizedPosts = enhancedPosts.map((post: any) => standardizePostFormat(post));
+        
+        console.log(`Successfully processed ${standardizedPosts.length} friends' posts`);
+        
+        // Update state with posts
+        dispatch({ type: 'FETCH_FRIENDS_POSTS_SUCCESS', payload: standardizedPosts });
+      } else {
+        // API returned no posts, set empty array
+        console.log("API returned no friends' posts");
+        dispatch({ type: 'FETCH_FRIENDS_POSTS_SUCCESS', payload: [] });
+      }
     } catch (error) {
       console.error('Error fetching friends posts:', error);
-      
-      // Fallback to feed posts if friends posts fetch fails
-      try {
-        console.log("Falling back to feed posts as friends posts");
-        
-        // Use feed posts as fallback
-        await fetchFeedPosts();
-        
-        // Treat feed posts as friends posts
-        dispatch({ 
-          type: 'FETCH_FRIENDS_POSTS_SUCCESS', 
-          payload: state.feedPosts 
-        });
-      } catch (fallbackError) {
-        console.error('Error with fallback for friends posts:', fallbackError);
-        dispatch({
-          type: 'FETCH_FRIENDS_POSTS_FAILURE',
-          payload: 'Failed to fetch friends posts'
-        });
-      }
+      // Update state with error
+      dispatch({
+        type: 'FETCH_FRIENDS_POSTS_FAILURE',
+        payload: 'Failed to fetch friends posts'
+      });
     }
   };
 

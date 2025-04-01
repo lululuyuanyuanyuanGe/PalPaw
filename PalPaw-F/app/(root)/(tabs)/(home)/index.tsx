@@ -19,7 +19,7 @@ import { DrawerToggleButton } from '@react-navigation/drawer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
-import { usePosts } from '@/context';
+import { usePosts, useUser } from '@/context';
 import { PostItem } from '../(profile)/types';
 import { formatImageUrl } from '@/utils/mediaUtils';
 
@@ -181,6 +181,9 @@ const HomeScreen = () => {
     setCurrentPost
   } = usePosts();
   
+  // Get user context
+  const { state: userState } = useUser();
+  
   // Helper function to check if refresh is needed (5 minute threshold)
   const shouldRefresh = (tab: 'explore' | 'follow'): boolean => {
     const lastRefreshTime = lastRefreshTimeRef.current[tab];
@@ -232,8 +235,18 @@ const HomeScreen = () => {
       return;
     }
     
+    console.log(`Loading posts for ${activeTab} tab with forceRefresh=${forceRefresh}`);
     setIsLoading(true);
     setLoadError(null);
+    
+    // Set a timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      if (isLoading) {
+        console.log('Loading timeout reached, forcing loading state to end');
+        setIsLoading(false);
+        setLoadError('Loading timed out. Please try again.');
+      }
+    }, 10000); // 10 second timeout
     
     try {
       if (activeTab === 'explore') {
@@ -241,22 +254,19 @@ const HomeScreen = () => {
         // Update last refresh time
         updateLastRefreshTime('explore');
       } else {
-        try {
-          await fetchFriendsPosts();
-          // Update last refresh time
-          updateLastRefreshTime('follow');
-        } catch (friendsError) {
-          console.error('Error fetching friends posts:', friendsError);
-          setLoadError('Could not load friends posts. Showing recommended posts instead.');
-          // Fall back to feed posts if friends posts fails
-          await fetchFeedPosts();
-        }
+        // Simply fetch friends posts without checking following list
+        await fetchFriendsPosts();
+        updateLastRefreshTime('follow');
       }
     } catch (error) {
       console.error('Error loading posts:', error);
       setLoadError('Could not load posts. Please try again later.');
     } finally {
+      // Clear the timeout to prevent it from firing after success
+      clearTimeout(loadingTimeout);
+      // Ensure loading state is always turned off at the end
       setIsLoading(false);
+      console.log(`Posts loading completed for ${activeTab} tab`);
     }
   };
   
@@ -398,13 +408,46 @@ const HomeScreen = () => {
                   <Text className="text-purple-600 mt-4 font-medium">Loading posts...</Text>
                 </View>
               ) : postsToDisplay.length === 0 ? (
-                <View className="items-center justify-center py-20">
-                  <MaterialCommunityIcons name="post-outline" size={60} color="#D1D5DB" />
-                  <Text className="text-gray-500 mt-4 text-center">
-                    {activeTab === 'follow' 
-                      ? "Follow people to see their posts here!" 
-                      : "No posts found. Check back later!"}
-                  </Text>
+                <View className="items-center justify-center py-16">
+                  {activeTab === 'follow' ? (
+                    <>
+                      <View className="bg-purple-100 p-6 rounded-full mb-4">
+                        <Ionicons name="people" size={60} color="#9333EA" />
+                      </View>
+                      <Text className="text-gray-800 text-xl font-bold text-center mb-2">
+                        Connect with friends
+                      </Text>
+                      <Text className="text-gray-500 text-center mb-6 px-8">
+                        Follow other pet owners to see their adorable posts in your feed!
+                      </Text>
+                      <TouchableOpacity 
+                        onPress={() => router.push("/searchPosts")}
+                        className="bg-purple-500 px-6 py-3 rounded-full flex-row items-center"
+                      >
+                        <Feather name="search" size={18} color="#fff" />
+                        <Text className="text-white font-medium ml-2">Find people to follow</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <View className="bg-pink-100 p-6 rounded-full mb-4">
+                        <Ionicons name="paw" size={60} color="#EC4899" />
+                      </View>
+                      <Text className="text-gray-800 text-xl font-bold text-center mb-2">
+                        No posts yet
+                      </Text>
+                      <Text className="text-gray-500 text-center mb-6 px-8">
+                        We're looking for the perfect content to show you. Check back soon!
+                      </Text>
+                      <TouchableOpacity 
+                        onPress={handleRefresh}
+                        className="bg-pink-500 px-6 py-3 rounded-full flex-row items-center"
+                      >
+                        <Feather name="refresh-cw" size={18} color="#fff" />
+                        <Text className="text-white font-medium ml-2">Refresh</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
                 </View>
               ) : (
                 <>
