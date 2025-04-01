@@ -888,7 +888,11 @@ const ChatDetail: React.FC = () => {
     if (!showAttachmentOptions) return null;
     
     return (
-      <View className="bg-white p-4 rounded-lg border border-gray-200 absolute bottom-16 left-0 right-0 z-10 mx-4">
+      <View className="bg-white p-4 rounded-lg border border-gray-200 absolute left-0 right-0 z-30 mx-4"
+        style={{
+          bottom: Platform.OS === 'ios' ? 130 : 120, // Positioned higher to avoid overlap
+        }}
+      >
         <View className="flex-row justify-between mb-4">
           <Text className="text-purple-900 font-medium">Attach Media</Text>
           <TouchableOpacity onPress={() => setShowAttachmentOptions(false)}>
@@ -936,11 +940,11 @@ const ChatDetail: React.FC = () => {
     if (selectedMedia.length === 0) return null;
     
     return (
-      <View className="mt-3 mb-2">
+      <View className="px-2">
         <ScrollView 
           horizontal 
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 10 }}
+          contentContainerStyle={{ paddingVertical: 10 }}
         >
           {selectedMedia.map((media, index) => (
             <View key={`media-${index}`} className="mr-3 relative">
@@ -1139,22 +1143,30 @@ const ChatDetail: React.FC = () => {
           {/* Attachment options overlay */}
           {renderAttachmentOptions()}
           
+          {/* Selected media preview - Moved outside and above the input container */}
+          <View style={{
+            position: 'absolute',
+            bottom: Platform.OS === 'ios' ? 90 : 80,
+            left: 0,
+            right: 0,
+            zIndex: 20
+          }}>
+            {renderSelectedMediaPreview()}
+          </View>
+          
           {/* Move the input area up by using absolute positioning */}
           <View 
             className="bg-white border-t border-gray-200 px-4 py-3"
             style={{
               position: 'absolute',
-              bottom: Platform.OS === 'ios' ? 30 : 20, // Move up by setting a higher bottom value
+              bottom: Platform.OS === 'ios' ? 30 : 20,
               left: 0,
               right: 0,
               zIndex: 10
             }}
           >
-            {/* Selected media preview */}
-            {renderSelectedMediaPreview()}
-            
             <View className="flex-row items-center">
-              {/* Input field and buttons - no changes needed here */}
+              {/* Input field and buttons */}
               <View className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex-row items-center">
                 <TextInput
                   className="flex-1 text-base text-gray-800"
