@@ -52,10 +52,43 @@ const Card = ({ post, onPress, index }: { post: PostItem, onPress: (post: PostIt
   const aspectRatio = getAspectRatio();
   const imageHeight = cardWidth / aspectRatio;
   
-  // Select the main image to display
-  const imageUrl = post.media && post.media.length > 0
-    ? formatImageUrl(post.media[0].url)
-    : `https://robohash.org/${post.id}?set=set4`;
+  // Process media properly to handle both images and videos
+  // Select the main image to display, handling videos appropriately
+  const getMediaUrl = () => {
+    if (!post.media || post.media.length === 0) {
+      return `https://robohash.org/${post.id}?set=set4`;
+    }
+    
+    const firstMedia = post.media[0];
+    
+    // Check if it's a video
+    const isVideo = 
+      (typeof firstMedia === 'object' && firstMedia.type === 'video') ||
+      (typeof firstMedia === 'string' && firstMedia.match(/\.(mp4|mov|avi|wmv)$/i));
+      
+    // If it's a video, use the thumbnail if available
+    if (isVideo && typeof firstMedia === 'object') {
+      // Use thumbnail if available, otherwise use a video placeholder
+      if (firstMedia.thumbnail) {
+        return formatImageUrl(firstMedia.thumbnail);
+      } else {
+        return 'https://via.placeholder.com/300x200/000000/FFFFFF?text=Video';
+      }
+    }
+    
+    // Otherwise just use the regular formatImageUrl
+    return formatImageUrl(
+      typeof firstMedia === 'object' ? firstMedia.url : firstMedia
+    );
+  };
+  
+  const imageUrl = getMediaUrl();
+  
+  // Determine if this is a video for displaying an indicator
+  const isVideo = post.media && post.media.length > 0 && (
+    (typeof post.media[0] === 'object' && post.media[0].type === 'video') ||
+    (typeof post.media[0] === 'string' && post.media[0].match(/\.(mp4|mov|avi|wmv)$/i))
+  );
   
   return (
     <TouchableOpacity 
@@ -83,6 +116,14 @@ const Card = ({ post, onPress, index }: { post: PostItem, onPress: (post: PostIt
             <Text className="ml-1 text-xs font-medium text-purple-800">{post.likes || 0}</Text>
           </View>
         </View>
+        
+        {/* Video indicator badge */}
+        {isVideo && (
+          <View className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded-full flex-row items-center">
+            <Ionicons name="videocam" size={12} color="white" />
+            <Text className="text-white text-xs ml-1">Video</Text>
+          </View>
+        )}
       </View>
       <View className="p-3">
         <Text className="font-medium text-gray-800 text-sm" numberOfLines={2}>

@@ -126,9 +126,20 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // Transform lastMessage format 
           let transformedLastMessage;
           if (chat.lastMessage) {
+            // Check if content is empty but there are attachments - this indicates a media message
+            const hasAttachments = chat.lastMessage.attachments && 
+                                    Array.isArray(chat.lastMessage.attachments) && 
+                                    chat.lastMessage.attachments.length > 0;
+            const contentIsEmpty = !chat.lastMessage.content || chat.lastMessage.content.trim() === '';
+            
             transformedLastMessage = {
-              content: chat.lastMessage.content || '',
-              timestamp: chat.lastMessage.createdAt || chat.updatedAt
+              // Use a placeholder for content if it's empty but has attachments
+              content: contentIsEmpty && hasAttachments ? "[Media]" : (chat.lastMessage.content || ''),
+              timestamp: chat.lastMessage.createdAt || chat.updatedAt,
+              hasAttachments: hasAttachments || false,
+              attachmentType: hasAttachments && chat.lastMessage.attachments && chat.lastMessage.attachments.length > 0
+                ? chat.lastMessage.attachments[0].type 
+                : undefined
             };
           }
           
@@ -158,9 +169,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             lastMessage: transformedLastMessage,
             participants: transformedParticipants,
             unreadCount: chat.unreadCounts?.find((count: any) => 
-              count?.user?.toString() === chat.participants.find((p: any) => 
-                p._id !== authState.user?.id
-              )?._id
+              count?.user?.toString() === authState.user?.id
             )?.count || 0
           };
         });
@@ -373,17 +382,36 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             ? finalChatMessages.reduce((latest, current) => new Date(current.createdAt) > new Date(latest.createdAt) ? current : latest)
             : null;
 
+          // Only increment unread count if:
+          // 1. Message is from someone else (not the current user)
+          // 2. User is not currently viewing this chat
+          // 3. It's not a replacement message
+          const isFromCurrentUser = transformedMessage.sender.postgresId === authState.user?.id;
+          const shouldIncrementUnread = !isFromCurrentUser && prev.activeChat !== transformedMessage.chat && !isReplacement;
+
+          // Check if latest message has attachments but empty content
+          const hasAttachments = latestMessageInChat && 
+                                  latestMessageInChat.attachments && 
+                                  Array.isArray(latestMessageInChat.attachments) && 
+                                  latestMessageInChat.attachments.length > 0;
+          const contentIsEmpty = latestMessageInChat && 
+                                  (!latestMessageInChat.content || latestMessageInChat.content.trim() === '');
+
           return {
             ...chat,
             // Update lastMessage based on the actual latest message
             lastMessage: latestMessageInChat ? {
-              content: latestMessageInChat.content,
-              timestamp: latestMessageInChat.createdAt
+              // Use placeholder for content if it's empty but has attachments
+              content: contentIsEmpty && hasAttachments ? "[Media]" : (latestMessageInChat.content || ''),
+              timestamp: latestMessageInChat.createdAt,
+              hasAttachments: hasAttachments || false,
+              attachmentType: hasAttachments && latestMessageInChat.attachments && latestMessageInChat.attachments.length > 0 
+                ? latestMessageInChat.attachments[0].type 
+                : undefined
             } : chat.lastMessage, // Keep old if chat becomes empty
             updatedAt: latestMessageInChat ? latestMessageInChat.createdAt : chat.updatedAt,
-            // Increment unread count only if the message is truly new (not a replacement)
-            // and the chat is not currently active
-            unreadCount: (prev.activeChat === transformedMessage.chat || isReplacement) ? 0 : chat.unreadCount + 1
+            // Only increment if all conditions are met
+            unreadCount: shouldIncrementUnread ? chat.unreadCount + 1 : (prev.activeChat === transformedMessage.chat ? 0 : chat.unreadCount)
           };
         }
         return chat;
@@ -578,11 +606,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         error: null
       }));
       
-      // Check if we already have messages for this chat
-      if (state.messages[chatId] && state.messages[chatId].length > 0) {
-        setState(prev => ({ ...prev, isLoadingMessages: false }));
-        return; // Already loaded
-      }
+      // Remove the check that prevents loading messages if they already exist
+      // Always fetch messages from the API to ensure we have complete history
       
       const response = await api.get(`/chats/${chatId}/messages`);
       
@@ -609,11 +634,35 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           };
         });
         
-        setState(prev => ({
-          ...prev,
-          messages: { ...prev.messages, [chatId]: transformedMessages },
-          isLoadingMessages: false
-        }));
+        setState(prev => {
+          // Get any existing real-time messages that might be in state
+          const existingMessages = prev.messages[chatId] || [];
+          
+          // Create a Map for quick message lookup by ID
+          const messageMap = new Map<string, Message>();
+          
+          // First add all messages from API to ensure we have the complete history
+          transformedMessages.forEach((msg: Message) => messageMap.set(msg._id, msg));
+          
+          // Then add any real-time messages that aren't duplicates
+          existingMessages.forEach((msg: Message) => {
+            if (!messageMap.has(msg._id) && !msg._id.startsWith('temp-')) {
+              messageMap.set(msg._id, msg);
+            }
+          });
+          
+          // Convert map back to array and sort by timestamp
+          const mergedMessages = Array.from(messageMap.values())
+            .sort((a: Message, b: Message) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          
+          console.log(`loadMessages: Merged ${transformedMessages.length} API messages with ${existingMessages.length} existing messages, resulting in ${mergedMessages.length} total messages for chat ${chatId}`);
+          
+          return {
+            ...prev,
+            messages: { ...prev.messages, [chatId]: mergedMessages },
+            isLoadingMessages: false
+          };
+        });
         
         // Mark the latest message as read
         if (transformedMessages.length > 0) {

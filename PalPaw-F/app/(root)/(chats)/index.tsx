@@ -48,7 +48,7 @@ const Chats: React.FC = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{ userId?: string }>();
   const { state: authState } = useAuth();
-  const { state: chatState, loadMessages, refreshChats, createChat } = useChat();
+  const { state: chatState, loadMessages, refreshChats, createChat, markAsRead } = useChat();
   const [refreshing, setRefreshing] = React.useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -101,6 +101,22 @@ const Chats: React.FC = () => {
   const handleOpenChat = (chatId: string, chatName: string) => {
     // Load messages for this chat
     loadMessages(chatId);
+    
+    // Find the chat in state
+    const chat = chatState.chats.find(c => c._id === chatId);
+    
+    // Mark messages as read if there are unread messages
+    if (chat && chat.unreadCount > 0) {
+      // Find the latest message to mark as read
+      const messages = chatState.messages[chatId] || [];
+      if (messages.length > 0) {
+        const latestMessage = messages.reduce(
+          (latest, current) => new Date(current.createdAt) > new Date(latest.createdAt) ? current : latest,
+          messages[0]
+        );
+        markAsRead(chatId, latestMessage._id);
+      }
+    }
     
     router.push({
       pathname: "/(root)/(chats)/chat/[id]",
@@ -196,7 +212,15 @@ const Chats: React.FC = () => {
             
             <View className="flex-row justify-between items-center mt-1">
               <Text className="text-gray-600 text-sm" numberOfLines={1}>
-                {item.lastMessage?.content || 'No messages yet'}
+                {item.lastMessage?.hasAttachments 
+                  ? `📎 ${item.lastMessage.attachmentType === 'image' 
+                      ? 'Photo' 
+                      : item.lastMessage.attachmentType === 'video' 
+                        ? 'Video' 
+                        : 'Attachment'}`
+                  : (item.lastMessage?.content && item.lastMessage.content !== "[Media]" 
+                    ? item.lastMessage.content 
+                    : 'No messages yet')}
               </Text>
               
               {item.unreadCount > 0 && (
